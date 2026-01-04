@@ -50,18 +50,14 @@ export function ScanTab() {
   };
 
   return (
-    <div className="pb-32 px-6 pt-8 min-h-screen flex flex-col">
+    <div className="pb-32 px-6 pt-8 min-h-screen flex flex-col max-w-7xl mx-auto">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-        className="flex items-center justify-between mb-8"
+        className="mb-8"
       >
         <h1 className="text-3xl font-bold text-white">Scan Receipt</h1>
-        <div className="text-xl font-bold tracking-tight">
-          <span className="text-white">receipt</span>
-          <span className="text-teal-400">It</span>
-        </div>
       </motion.div>
 
       <div className="flex-1 flex items-center justify-center">

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LoadingScreen } from './components/landing/LoadingScreen';
+import { TopNav } from './components/app/TopNav';
 import { BottomNav } from './components/app/BottomNav';
 import { WalletTab, Receipt } from './components/app/WalletTab';
 import { AliasTab } from './components/app/AliasTab';
@@ -51,67 +52,71 @@ function App() {
             transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
             className="min-h-screen"
           >
-            <AnimatePresence mode="wait">
-              {activeTab === 'wallet' && (
-                <motion.div
-                  key="wallet"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <WalletTab onReceiptClick={setSelectedReceipt} />
-                </motion.div>
-              )}
+            <TopNav activeTab={activeTab} onTabChange={setActiveTab} />
 
-              {activeTab === 'alias' && (
-                <motion.div
-                  key="alias"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <AliasTab />
-                </motion.div>
-              )}
+            <div className="pt-20">
+              <AnimatePresence mode="wait">
+                {activeTab === 'wallet' && (
+                  <motion.div
+                    key="wallet"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <WalletTab onReceiptClick={setSelectedReceipt} />
+                  </motion.div>
+                )}
 
-              {activeTab === 'scan' && (
-                <motion.div
-                  key="scan"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <ScanTab />
-                </motion.div>
-              )}
+                {activeTab === 'alias' && (
+                  <motion.div
+                    key="alias"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <AliasTab />
+                  </motion.div>
+                )}
 
-              {activeTab === 'insights' && (
-                <motion.div
-                  key="insights"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <InsightsTab />
-                </motion.div>
-              )}
+                {activeTab === 'scan' && (
+                  <motion.div
+                    key="scan"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <ScanTab />
+                  </motion.div>
+                )}
 
-              {activeTab === 'settings' && (
-                <motion.div
-                  key="settings"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <SettingsTab />
-                </motion.div>
-              )}
-            </AnimatePresence>
+                {activeTab === 'insights' && (
+                  <motion.div
+                    key="insights"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <InsightsTab />
+                  </motion.div>
+                )}
+
+                {activeTab === 'settings' && (
+                  <motion.div
+                    key="settings"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <SettingsTab />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
             <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
             <ReceiptModal receipt={selectedReceipt} onClose={() => setSelectedReceipt(null)} />

@@ -185,18 +185,14 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
   const warrantyReceipts = receipts.filter(r => r.hasWarranty);
 
   return (
-    <div className="pb-32 px-6 pt-8">
+    <div className="pb-32 px-6 pt-8 max-w-7xl mx-auto">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
-        <div className="flex items-center justify-between mb-8">
+        <div className="mb-8">
           <h1 className="text-3xl font-bold text-white">Wallet</h1>
-          <div className="text-xl font-bold tracking-tight">
-            <span className="text-white">receipt</span>
-            <span className="text-teal-400">It</span>
-          </div>
         </div>
 
         <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
