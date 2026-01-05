@@ -1,22 +1,55 @@
 import { motion } from 'framer-motion';
 import { Copy, Check, Shield, Mail, Lock } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 
 export function AliasTab() {
+  const { user } = useAuth();
   const [copied, setCopied] = useState(false);
-  const alias = 'steve@receiptIt.app';
+  const [alias, setAlias] = useState('');
+  const [stats, setStats] = useState([
+    { label: 'Receipts Captured', value: '0', icon: Mail },
+    { label: 'Spam Blocked', value: '0', icon: Lock },
+    { label: 'Warranties Tracked', value: '0', icon: Shield },
+  ]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchProfile = async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error fetching profile:', error);
+        setLoading(false);
+        return;
+      }
+
+      if (data) {
+        setAlias(data.email_alias);
+        setStats([
+          { label: 'Receipts Captured', value: data.receipts_captured.toString(), icon: Mail },
+          { label: 'Spam Blocked', value: data.spam_blocked.toLocaleString(), icon: Lock },
+          { label: 'Warranties Tracked', value: data.warranties_tracked.toString(), icon: Shield },
+        ]);
+      }
+      setLoading(false);
+    };
+
+    fetchProfile();
+  }, [user]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(alias);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-
-  const stats = [
-    { label: 'Receipts Captured', value: '247', icon: Mail },
-    { label: 'Spam Blocked', value: '1,823', icon: Lock },
-    { label: 'Warranties Tracked', value: '12', icon: Shield },
-  ];
 
   return (
     <div className="pb-32 px-6 pt-8 max-w-7xl mx-auto">

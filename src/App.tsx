@@ -9,19 +9,32 @@ import { ScanTab } from './components/app/ScanTab';
 import { ReceiptModal } from './components/app/ReceiptModal';
 import { InsightsTab } from './components/app/InsightsTab';
 import { SettingsTab } from './components/app/SettingsTab';
+import { AuthForm } from './components/auth/AuthForm';
+import { useAuth } from './contexts/AuthContext';
 
 function App() {
+  const { user, loading: authLoading } = useAuth();
   const [showApp, setShowApp] = useState(false);
   const [activeTab, setActiveTab] = useState('wallet');
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowApp(true);
-    }, 2000);
+    if (!authLoading && user) {
+      const timer = setTimeout(() => {
+        setShowApp(true);
+      }, 2000);
 
-    return () => clearTimeout(timer);
-  }, []);
+      return () => clearTimeout(timer);
+    }
+  }, [authLoading, user]);
+
+  if (authLoading) {
+    return <LoadingScreen />;
+  }
+
+  if (!user) {
+    return <AuthForm />;
+  }
 
   return (
     <div className="min-h-screen bg-black text-white font-mono overflow-x-hidden">

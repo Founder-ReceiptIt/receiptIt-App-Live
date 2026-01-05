@@ -13,9 +13,15 @@ import {
   ChevronRight,
   Check
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 
 export function SettingsTab() {
+  const { user, signOut } = useAuth();
+  const [alias, setAlias] = useState('');
+  const [receiptsCount, setReceiptsCount] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState({
     receiptCaptured: true,
     warrantyExpiring: true,
@@ -28,11 +34,35 @@ export function SettingsTab() {
     analyticsSharing: false,
   });
 
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchUserData = async () => {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('email_alias, receipts_captured')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (profile) {
+        setAlias(profile.email_alias);
+        setReceiptsCount(profile.receipts_captured);
+      }
+      setLoading(false);
+    };
+
+    fetchUserData();
+  }, [user]);
+
   const handleExport = (format: 'csv' | 'xero') => {
     const message = format === 'csv'
       ? 'Downloading CSV export...'
       : 'Preparing Xero-compatible export...';
     alert(message);
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
   };
 
   const settingsSections = [
@@ -142,7 +172,7 @@ export function SettingsTab() {
               <Shield className="w-8 h-8 text-teal-400" strokeWidth={1.5} />
             </div>
             <div className="flex-1">
-              <h3 className="text-xl font-bold text-white mb-1">steve@receiptIt.app</h3>
+              <h3 className="text-xl font-bold text-white mb-1">{alias || 'Loading...'}</h3>
               <p className="text-gray-400 text-sm mb-3">Your privacy-protected alias</p>
               <div className="flex items-center gap-2">
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md text-green-400 bg-green-400/10 border-green-400/30">
@@ -150,7 +180,7 @@ export function SettingsTab() {
                   Active
                 </div>
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md text-gray-400 bg-white/5 border-white/10">
-                  247 receipts captured
+                  {receiptsCount} receipts captured
                 </div>
               </div>
             </div>
@@ -258,7 +288,10 @@ export function SettingsTab() {
             <button className="w-full text-left px-4 py-3 rounded-lg hover:bg-white/5 transition-colors text-gray-400 hover:text-white">
               Help & Support
             </button>
-            <button className="w-full text-left px-4 py-3 rounded-lg hover:bg-white/5 transition-colors text-red-400 hover:text-red-300">
+            <button
+              onClick={handleSignOut}
+              className="w-full text-left px-4 py-3 rounded-lg hover:bg-white/5 transition-colors text-red-400 hover:text-red-300"
+            >
               Sign Out
             </button>
           </div>

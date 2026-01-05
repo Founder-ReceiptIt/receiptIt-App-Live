@@ -34,7 +34,7 @@ export function TopNav({ activeTab, onTabChange }: TopNavProps) {
           {/* Logo - Left Side */}
           <motion.div
             whileHover={{ scale: 1.05 }}
-            className="text-2xl font-bold tracking-tight cursor-pointer"
+            className="text-2xl font-bold font-mono tracking-tight cursor-pointer"
             onClick={() => onTabChange('wallet')}
           >
             <span className="text-white">receipt</span>

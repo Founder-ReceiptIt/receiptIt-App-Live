@@ -2,7 +2,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Store, Shield } from 'lucide-react';
 import { LucideIcon } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { db, auth, collection, query, orderBy, onSnapshot, signInAnonymously } from '../../lib/firebase';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface WalletTabProps {
   onReceiptClick: (receipt: Receipt) => void;
@@ -60,105 +61,77 @@ export interface Receipt {
 }
 
 export function WalletTab({ onReceiptClick }: WalletTabProps) {
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<'all' | 'work' | 'personal'>('all');
-  const [firebaseReceipts, setFirebaseReceipts] = useState<Receipt[]>([]);
-  const [showFakeApple, setShowFakeApple] = useState(false);
-
-  const fakeAppleReceipt: Receipt = {
-    id: 'fake-apple-demo',
-    merchant: 'Apple Store',
-    merchantIcon: Laptop,
-    amount: 2199.00,
-    subtotal: 1832.50,
-    vat: 366.50,
-    vatRate: 20,
-    currency: '£',
-    date: new Date().toISOString().split('T')[0],
-    tag: 'Tech',
-    tagColor: 'text-blue-400 bg-blue-400/10 border-blue-400/30',
-    hasWarranty: true,
-    warrantyMonths: 24,
-    referenceNumber: 'APL-2025-0115-7X9K',
-    emailAlias: 'steve@receiptIt.app',
-    items: [
-      { name: 'MacBook Pro 14" M3', quantity: 1, price: 1999.00 },
-      { name: 'AppleCare+ Protection', quantity: 1, price: 200.00 }
-    ],
-    paymentMethod: 'Visa •••• 4242',
-    location: 'Apple Regent Street, London',
-    folder: 'personal'
-  };
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    signInAnonymously(auth).catch((error) => {
-      console.error('Firebase auth error:', error);
-    });
-  }, []);
+    if (!user) return;
 
-  useEffect(() => {
-    const receiptsRef = collection(db, 'receipts');
-    const q = query(receiptsRef, orderBy('date', 'desc'));
+    const fetchReceipts = async () => {
+      const { data, error } = await supabase
+        .from('receipts')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('date', { ascending: false });
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const receiptsData: Receipt[] = snapshot.docs.map((doc) => {
-        const data = doc.data();
+      if (error) {
+        console.error('Error fetching receipts:', error);
+        setLoading(false);
+        return;
+      }
 
-        const parseAmount = (value: any): number => {
-          if (typeof value === 'number') return value;
-          if (typeof value === 'string') {
-            const cleaned = value.replace(/[£$€,\s]/g, '');
-            const parsed = parseFloat(cleaned);
-            return isNaN(parsed) ? 0 : parsed;
-          }
-          return 0;
-        };
+      const formattedReceipts: Receipt[] = (data || []).map((row) => ({
+        id: row.id,
+        merchant: row.merchant,
+        merchantIcon: getMerchantIcon(row.merchant, row.tag),
+        amount: parseFloat(row.amount),
+        subtotal: parseFloat(row.subtotal),
+        vat: parseFloat(row.vat),
+        vatRate: parseFloat(row.vat_rate),
+        currency: row.currency,
+        date: row.date,
+        tag: row.tag,
+        tagColor: getTagColor(row.tag),
+        hasWarranty: row.has_warranty,
+        warrantyMonths: row.warranty_months,
+        referenceNumber: row.reference_number,
+        emailAlias: row.email_alias,
+        items: row.items || [],
+        paymentMethod: row.payment_method,
+        location: row.location,
+        folder: row.folder,
+      }));
 
-        const amount = parseAmount(data.amount || data.total || data.price || 0);
-        const subtotal = parseAmount(data.subtotal || data.sub_total || (amount - (data.vat || 0)));
-        const vat = parseAmount(data.vat || data.tax || (amount - subtotal));
+      setReceipts(formattedReceipts);
+      setLoading(false);
+    };
 
-        return {
-          id: doc.id,
-          merchant: data.merchant || data.store || data.vendor || 'Unknown',
-          merchantIcon: getMerchantIcon(data.merchant || data.store || '', data.tag || data.category || ''),
-          amount,
-          subtotal,
-          vat,
-          vatRate: data.vatRate || data.tax_rate || 20,
-          currency: data.currency || '£',
-          date: data.date || data.timestamp || data.createdAt || new Date().toISOString(),
-          tag: data.tag || data.category || 'Other',
-          tagColor: getTagColor(data.tag || data.category || 'Other'),
-          hasWarranty: data.hasWarranty || data.warranty || false,
-          warrantyMonths: data.warrantyMonths || data.warranty_months || (data.hasWarranty ? 12 : undefined),
-          referenceNumber: data.referenceNumber || data.reference || data.receipt_id || doc.id.substring(0, 16).toUpperCase(),
-          emailAlias: data.emailAlias || data.email || 'steve@receiptIt.app',
-          items: data.items || data.line_items || [],
-          paymentMethod: data.paymentMethod || data.payment_type || data.payment,
-          location: data.location || data.store_location,
-          folder: data.folder || 'personal',
-        };
-      });
+    fetchReceipts();
 
-      setFirebaseReceipts(receiptsData);
-    });
+    const channel = supabase
+      .channel('receipts-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'receipts',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          fetchReceipts();
+        }
+      )
+      .subscribe();
 
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowFakeApple(true);
-    }, 4000);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  const receipts: Receipt[] = showFakeApple
-    ? [fakeAppleReceipt, ...firebaseReceipts]
-    : firebaseReceipts;
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   const totalSpent = receipts.reduce((sum, receipt) => sum + receipt.amount, 0);
   const budget = {
