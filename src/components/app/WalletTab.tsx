@@ -67,6 +67,26 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
   const [selectedFolder, setSelectedFolder] = useState<'all' | 'work' | 'personal'>('all');
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [loading, setLoading] = useState(true);
+  const [username, setUsername] = useState('');
+
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchProfile = async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (!error && data) {
+        const fullName = user.user_metadata?.full_name || '';
+        setUsername(fullName);
+      }
+    };
+
+    fetchProfile();
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -165,7 +185,9 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white">Wallet</h1>
+          <h1 className="text-3xl font-bold text-white">
+            Welcome back{username && `, ${username}`}
+          </h1>
         </div>
 
         <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">

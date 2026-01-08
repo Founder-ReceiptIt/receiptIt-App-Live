@@ -83,7 +83,7 @@ export function AliasTab() {
                   scale: [1, 1.02, 1],
                 }}
                 transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                className="text-3xl font-bold text-teal-400 mb-2"
+                className="text-3xl font-bold font-mono text-teal-400 mb-2"
               >
                 {alias}
               </motion.div>
