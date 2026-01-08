@@ -224,7 +224,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             <div className={`text-xs font-semibold ${
               selectedFolder === 'all' ? 'text-teal-400' : 'text-gray-400'
             }`}>
-              All Receipts TEST
+              All Receipts
             </div>
           </motion.button>
 
