@@ -18,8 +18,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
 export function SettingsTab() {
-  const { user, signOut } = useAuth();
-  const [alias, setAlias] = useState('');
+  const { user, username, emailAlias, signOut } = useAuth();
   const [receiptsCount, setReceiptsCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState({
@@ -40,12 +39,11 @@ export function SettingsTab() {
     const fetchUserData = async () => {
       const { data: profile } = await supabase
         .from('profiles')
-        .select('email_alias, receipts_captured')
+        .select('receipts_captured')
         .eq('user_id', user.id)
         .maybeSingle();
 
       if (profile) {
-        setAlias(profile.email_alias);
         setReceiptsCount(profile.receipts_captured);
       }
       setLoading(false);
@@ -172,15 +170,22 @@ export function SettingsTab() {
               <Shield className="w-8 h-8 text-teal-400" strokeWidth={1.5} />
             </div>
             <div className="flex-1">
-              <h3 className="text-xl font-bold text-white mb-1">{alias || 'Loading...'}</h3>
+              <h3 className="text-xl font-bold text-white mb-1">
+                {loading ? 'Loading...' : emailAlias || 'Not set'}
+              </h3>
               <p className="text-gray-400 text-sm mb-3">Your privacy-protected alias</p>
-              <div className="flex items-center gap-2">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md text-green-400 bg-green-400/10 border-green-400/30">
-                  <Check className="w-3 h-3" />
-                  Active
+              <div className="flex flex-col gap-2">
+                <div className="text-sm text-gray-400">
+                  Username: <span className="text-white font-semibold">{username || 'Not set'}</span>
                 </div>
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md text-gray-400 bg-white/5 border-white/10">
-                  {receiptsCount} receipts captured
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md text-green-400 bg-green-400/10 border-green-400/30">
+                    <Check className="w-3 h-3" />
+                    Active
+                  </div>
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md text-gray-400 bg-white/5 border-white/10">
+                    {receiptsCount} receipts captured
+                  </div>
                 </div>
               </div>
             </div>

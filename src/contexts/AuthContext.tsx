@@ -77,24 +77,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
     });
 
-    if (!error && data.user) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          user_id: data.user.id,
-          username: fullName,
-          email_alias: alias,
-          receipts_captured: 0,
-          spam_blocked: 0,
-          warranties_tracked: 0,
-        });
-
-      if (profileError) {
-        return { error: profileError };
-      }
+    if (error) {
+      return { error };
     }
 
-    return { error };
+    if (!data.user) {
+      return { error: new Error('User creation failed') };
+    }
+
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .insert({
+        user_id: data.user.id,
+        username: fullName,
+        email_alias: alias,
+        receipts_captured: 0,
+        spam_blocked: 0,
+        warranties_tracked: 0,
+      });
+
+    if (profileError) {
+      console.error('Profile creation error:', profileError);
+      return { error: profileError };
+    }
+
+    const { data: profileData, error: fetchError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('user_id', data.user.id)
+      .maybeSingle();
+
+    if (fetchError || !profileData) {
+      console.error('Profile fetch error:', fetchError);
+      return { error: fetchError || new Error('Profile verification failed') };
+    }
+
+    setUsername(profileData.username || '');
+    setEmailAlias(profileData.email_alias || '');
+
+    return { error: null };
   };
 
   const signIn = async (email: string, password: string) => {

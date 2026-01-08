@@ -20,11 +20,15 @@ function App() {
 
   useEffect(() => {
     if (!authLoading && user) {
+      setActiveTab('wallet');
       const timer = setTimeout(() => {
         setShowApp(true);
       }, 2000);
 
       return () => clearTimeout(timer);
+    } else if (!authLoading && !user) {
+      setShowApp(false);
+      setActiveTab('wallet');
     }
   }, [authLoading, user]);
 
