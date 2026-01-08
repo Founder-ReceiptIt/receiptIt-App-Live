@@ -5,9 +5,8 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
 export function AliasTab() {
-  const { user } = useAuth();
+  const { user, emailAlias } = useAuth();
   const [copied, setCopied] = useState(false);
-  const [alias, setAlias] = useState('');
   const [stats, setStats] = useState([
     { label: 'Receipts Captured', value: '0', icon: Mail },
     { label: 'Spam Blocked', value: '0', icon: Lock },
@@ -32,7 +31,6 @@ export function AliasTab() {
       }
 
       if (data) {
-        setAlias(data.email_alias);
         setStats([
           { label: 'Receipts Captured', value: data.receipts_captured.toString(), icon: Mail },
           { label: 'Spam Blocked', value: data.spam_blocked.toLocaleString(), icon: Lock },
@@ -46,7 +44,7 @@ export function AliasTab() {
   }, [user]);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(alias);
+    navigator.clipboard.writeText(emailAlias);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -85,7 +83,7 @@ export function AliasTab() {
                 transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                 className="text-3xl font-bold font-mono text-teal-400 mb-2"
               >
-                {alias}
+                {emailAlias}
               </motion.div>
               <p className="text-gray-400 text-sm">
                 Use this email at checkout to protect your privacy

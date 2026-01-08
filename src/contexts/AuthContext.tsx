@@ -6,6 +6,8 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  username: string;
+  emailAlias: string;
   signUp: (email: string, password: string, alias: string, fullName: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
@@ -17,11 +19,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [username, setUsername] = useState('');
+  const [emailAlias, setEmailAlias] = useState('');
 
   useEffect(() => {
+    const fetchProfile = async (userId: string) => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (!error && data) {
+        setUsername(data.username || '');
+        setEmailAlias(data.email_alias || '');
+      }
+    };
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+
+      if (session?.user) {
+        fetchProfile(session.user.id);
+      }
+
       setLoading(false);
     });
 
@@ -30,6 +52,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
+
+      if (session?.user) {
+        fetchProfile(session.user.id);
+      } else {
+        setUsername('');
+        setEmailAlias('');
+      }
+
       setLoading(false);
     });
 
@@ -52,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .from('profiles')
         .insert({
           user_id: data.user.id,
+          username: fullName,
           email_alias: alias,
           receipts_captured: 0,
           spam_blocked: 0,
@@ -83,6 +114,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     session,
     loading,
+    username,
+    emailAlias,
     signUp,
     signIn,
     signOut,

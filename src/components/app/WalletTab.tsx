@@ -61,32 +61,12 @@ export interface Receipt {
 }
 
 export function WalletTab({ onReceiptClick }: WalletTabProps) {
-  const { user } = useAuth();
+  const { user, username } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<'all' | 'work' | 'personal'>('all');
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [loading, setLoading] = useState(true);
-  const [username, setUsername] = useState('');
-
-  useEffect(() => {
-    if (!user) return;
-
-    const fetchProfile = async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (!error && data) {
-        const fullName = user.user_metadata?.full_name || '';
-        setUsername(fullName);
-      }
-    };
-
-    fetchProfile();
-  }, [user]);
 
   useEffect(() => {
     if (!user) return;
