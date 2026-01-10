@@ -69,31 +69,39 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
         .from('receipts')
         .insert({
           user_id: user.id,
+          storage_path: storagePath,
+          status: 'processing',
           merchant: 'Analyzing...',
           amount: 0,
           subtotal: 0,
           vat: 0,
           vat_rate: 20,
           currency: '£',
-          date: new Date().toISOString().split('T')[0],
+          date: new Date().toISOString(),
           tag: 'Pending',
           reference_number: `SCAN-${timestamp}`,
           email_alias: emailAlias || 'unknown',
-          status: 'processing',
-          storage_path: storagePath,
           image_url: publicUrlData.publicUrl,
         })
         .select();
 
       if (insertError) {
+        console.error('Database insert failed after successful upload');
         console.error('Insert error:', insertError);
         console.error('Insert error details:', JSON.stringify(insertError, null, 2));
-        setErrorMessage(`Failed to create receipt entry: ${insertError.message}`);
+        setErrorMessage(`Upload succeeded but failed to create database record: ${insertError.message}`);
         setScanState('error');
         return;
       }
 
-      console.log('Receipt created successfully:', insertData);
+      if (!insertData || insertData.length === 0) {
+        console.error('Insert succeeded but no data returned');
+        setErrorMessage('Failed to verify receipt record creation');
+        setScanState('error');
+        return;
+      }
+
+      console.log('Receipt record created successfully:', insertData[0]);
 
       setScanState('success');
       setTimeout(() => {
