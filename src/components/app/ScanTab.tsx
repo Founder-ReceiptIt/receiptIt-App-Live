@@ -65,43 +65,55 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
       setScanState('processing');
 
-      const { data: insertData, error: insertError } = await supabase
-        .from('receipts')
-        .insert({
-          user_id: user.id,
-          storage_path: storagePath,
-          status: 'processing',
-          merchant: 'Analyzing...',
-          amount: 0,
-          subtotal: 0,
-          vat: 0,
-          vat_rate: 20,
-          currency: '£',
-          date: new Date().toISOString().split('T')[0],
-          tag: 'Pending',
-          reference_number: `SCAN-${timestamp}`,
-          email_alias: emailAlias || 'unknown',
-          image_url: publicUrlData.publicUrl,
-        })
-        .select();
+      try {
+        const { data: insertData, error: insertError } = await supabase
+          .from('receipts')
+          .insert({
+            user_id: user.id,
+            storage_path: storagePath,
+            status: 'processing',
+            merchant: 'Analyzing...',
+            amount: 0,
+            subtotal: 0,
+            vat: 0,
+            vat_rate: 20,
+            currency: '£',
+            date: new Date().toISOString().split('T')[0],
+            tag: 'Pending',
+            reference_number: `SCAN-${timestamp}`,
+            email_alias: emailAlias || 'unknown',
+            image_url: publicUrlData.publicUrl,
+          })
+          .select();
 
-      if (insertError) {
-        console.error('Database insert failed after successful upload');
-        console.error('Insert error:', insertError);
-        console.error('Insert error details:', JSON.stringify(insertError, null, 2));
-        setErrorMessage(`Upload succeeded but failed to create database record: ${insertError.message}`);
-        setScanState('error');
-        return;
+        if (insertError) {
+          const errorDetails = `DATABASE ERROR: ${insertError.message} | Code: ${insertError.code} | Details: ${insertError.details || 'None'} | Hint: ${insertError.hint || 'None'}`;
+          alert(errorDetails);
+          console.error('Database insert failed after successful upload');
+          console.error('Insert error:', insertError);
+          console.error('Full error object:', JSON.stringify(insertError, null, 2));
+          setErrorMessage(`Upload succeeded but failed to create database record: ${insertError.message}`);
+          setScanState('error');
+          throw insertError;
+        }
+
+        if (!insertData || insertData.length === 0) {
+          const noDataError = 'Insert succeeded but no data returned';
+          alert('DATABASE WARNING: ' + noDataError);
+          console.error(noDataError);
+          setErrorMessage('Failed to verify receipt record creation');
+          setScanState('error');
+          return;
+        }
+
+        console.log('Receipt record created successfully:', insertData[0]);
+        alert('SUCCESS: Database row created with ID: ' + insertData[0].id);
+      } catch (err) {
+        const criticalError = `CRITICAL FAILURE: ${err instanceof Error ? err.message : String(err)}`;
+        alert(criticalError);
+        console.error('Critical error in database insert:', err);
+        throw err;
       }
-
-      if (!insertData || insertData.length === 0) {
-        console.error('Insert succeeded but no data returned');
-        setErrorMessage('Failed to verify receipt record creation');
-        setScanState('error');
-        return;
-      }
-
-      console.log('Receipt record created successfully:', insertData[0]);
 
       setScanState('success');
       setTimeout(() => {
