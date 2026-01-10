@@ -43,7 +43,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       const fileName = `${timestamp}_${file.name}`;
       const filePath = `${user.id}/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
         .from('receipts')
         .upload(filePath, file, {
           cacheControl: '3600',
@@ -52,22 +52,24 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
       if (uploadError) {
         console.error('Upload error:', uploadError);
-        setErrorMessage('Failed to upload file');
+        setErrorMessage(`Failed to upload file: ${uploadError.message}`);
         setScanState('error');
         return;
       }
 
+      const storagePath = uploadData.path;
+
       const { data: publicUrlData } = supabase.storage
         .from('receipts')
-        .getPublicUrl(filePath);
+        .getPublicUrl(storagePath);
 
       setScanState('processing');
 
-      const { error: insertError } = await supabase
+      const { data: insertData, error: insertError } = await supabase
         .from('receipts')
         .insert({
           user_id: user.id,
-          merchant: 'Scanning Receipt...',
+          merchant: 'Analyzing...',
           amount: 0,
           subtotal: 0,
           vat: 0,
@@ -78,16 +80,20 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
           reference_number: `SCAN-${timestamp}`,
           email_alias: emailAlias || 'unknown',
           status: 'processing',
-          storage_path: filePath,
+          storage_path: storagePath,
           image_url: publicUrlData.publicUrl,
-        });
+        })
+        .select();
 
       if (insertError) {
         console.error('Insert error:', insertError);
-        setErrorMessage('Failed to create receipt entry');
+        console.error('Insert error details:', JSON.stringify(insertError, null, 2));
+        setErrorMessage(`Failed to create receipt entry: ${insertError.message}`);
         setScanState('error');
         return;
       }
+
+      console.log('Receipt created successfully:', insertData);
 
       setScanState('success');
       setTimeout(() => {
@@ -96,7 +102,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       }, 2000);
     } catch (error) {
       console.error('Scan error:', error);
-      setErrorMessage('An unexpected error occurred');
+      setErrorMessage(`An unexpected error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setScanState('error');
     }
   };
