@@ -77,7 +77,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
           vat: 0,
           vat_rate: 20,
           currency: '£',
-          date: new Date().toISOString(),
+          date: new Date().toISOString().split('T')[0],
           tag: 'Pending',
           reference_number: `SCAN-${timestamp}`,
           email_alias: emailAlias || 'unknown',
