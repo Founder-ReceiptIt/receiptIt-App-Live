@@ -1,36 +1,104 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, X, Camera, CheckCircle, Loader2, FileImage } from 'lucide-react';
 import { useState, useRef } from 'react';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 
-type ScanState = 'idle' | 'scanning' | 'processing' | 'success';
+type ScanState = 'idle' | 'uploading' | 'processing' | 'success' | 'error';
 
-export function ScanTab() {
+interface ScanTabProps {
+  onNavigateToWallet: () => void;
+}
+
+export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
+  const { user, emailAlias } = useAuth();
   const [scanState, setScanState] = useState<ScanState>('idle');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setSelectedFile(file);
       const url = URL.createObjectURL(file);
       setPreviewUrl(url);
-      startScan();
+      await startScan(file);
     }
   };
 
-  const startScan = () => {
-    setScanState('scanning');
-    setTimeout(() => {
+  const startScan = async (file: File) => {
+    if (!user) {
+      setErrorMessage('User not authenticated');
+      setScanState('error');
+      return;
+    }
+
+    setScanState('uploading');
+
+    try {
+      const timestamp = Date.now();
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${timestamp}_${file.name}`;
+      const filePath = `${user.id}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('receipts')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        setErrorMessage('Failed to upload file');
+        setScanState('error');
+        return;
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from('receipts')
+        .getPublicUrl(filePath);
+
       setScanState('processing');
+
+      const { error: insertError } = await supabase
+        .from('receipts')
+        .insert({
+          user_id: user.id,
+          merchant: 'Scanning Receipt...',
+          amount: 0,
+          subtotal: 0,
+          vat: 0,
+          vat_rate: 20,
+          currency: '£',
+          date: new Date().toISOString().split('T')[0],
+          tag: 'Pending',
+          reference_number: `SCAN-${timestamp}`,
+          email_alias: emailAlias || 'unknown',
+          status: 'processing',
+          storage_path: filePath,
+          image_url: publicUrlData.publicUrl,
+        });
+
+      if (insertError) {
+        console.error('Insert error:', insertError);
+        setErrorMessage('Failed to create receipt entry');
+        setScanState('error');
+        return;
+      }
+
+      setScanState('success');
       setTimeout(() => {
-        setScanState('success');
-        setTimeout(() => {
-          resetScan();
-        }, 2000);
+        onNavigateToWallet();
+        resetScan();
       }, 2000);
-    }, 1500);
+    } catch (error) {
+      console.error('Scan error:', error);
+      setErrorMessage('An unexpected error occurred');
+      setScanState('error');
+    }
   };
 
   const resetScan = () => {
@@ -81,7 +149,8 @@ export function ScanTab() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/*,application/pdf"
+                  capture="environment"
                   onChange={handleFileSelect}
                   className="hidden"
                 />
@@ -109,12 +178,12 @@ export function ScanTab() {
                 </div>
 
                 <p className="text-xs text-gray-500 text-center mt-6">
-                  Supports JPG, PNG up to 10MB
+                  Supports JPG, PNG, PDF up to 10MB
                 </p>
               </motion.div>
             )}
 
-            {(scanState === 'scanning' || scanState === 'processing') && (
+            {(scanState === 'uploading' || scanState === 'processing') && (
               <motion.div
                 key="scanning"
                 initial={{ opacity: 0, scale: 0.95 }}
@@ -133,7 +202,7 @@ export function ScanTab() {
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
 
-                      {scanState === 'scanning' && (
+                      {scanState === 'uploading' && (
                         <motion.div
                           initial={{ top: 0 }}
                           animate={{ top: '100%' }}
@@ -145,7 +214,7 @@ export function ScanTab() {
                   )}
 
                   <div className="flex items-center justify-center mb-4">
-                    {scanState === 'scanning' ? (
+                    {scanState === 'uploading' ? (
                       <FileImage className="w-16 h-16 text-teal-400 animate-pulse" strokeWidth={1.5} />
                     ) : (
                       <Loader2 className="w-16 h-16 text-teal-400 animate-spin" strokeWidth={1.5} />
@@ -153,12 +222,12 @@ export function ScanTab() {
                   </div>
 
                   <h2 className="text-2xl font-bold text-white mb-2">
-                    {scanState === 'scanning' ? 'Scanning Receipt...' : 'Processing Data...'}
+                    {scanState === 'uploading' ? 'Uploading Receipt...' : 'Creating Entry...'}
                   </h2>
                   <p className="text-gray-400 mb-6">
-                    {scanState === 'scanning'
-                      ? 'Analyzing receipt image'
-                      : 'Extracting merchant, amount, and date'
+                    {scanState === 'uploading'
+                      ? 'Uploading your receipt to secure storage'
+                      : 'Creating placeholder for AI processing'
                     }
                   </p>
 
@@ -211,29 +280,43 @@ export function ScanTab() {
                     <CheckCircle className="w-20 h-20 text-green-400 mx-auto mb-4" strokeWidth={1.5} />
                   </motion.div>
 
-                  <h2 className="text-2xl font-bold text-white mb-2">Receipt Captured!</h2>
-                  <p className="text-gray-400 mb-6">Your receipt has been successfully processed</p>
+                  <h2 className="text-2xl font-bold text-white mb-2">Upload Successful!</h2>
+                  <p className="text-gray-400 mb-6">Your receipt is being processed by AI</p>
 
-                  <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4 mb-6 text-left">
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Merchant:</span>
-                        <span className="text-white font-semibold">Apple Store</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Amount:</span>
-                        <span className="text-white font-semibold">£2,199.00</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-400">Date:</span>
-                        <span className="text-white font-semibold">29 Dec 2025</span>
-                      </div>
-                    </div>
+                  <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4 mb-6">
+                    <p className="text-sm text-gray-400">
+                      Your receipt will appear in your wallet with extracted data once processing is complete.
+                    </p>
                   </div>
 
                   <p className="text-sm text-green-400 font-semibold">
                     Redirecting to wallet...
                   </p>
+                </div>
+              </motion.div>
+            )}
+
+            {scanState === 'error' && (
+              <motion.div
+                key="error"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.3 }}
+                className="backdrop-blur-xl bg-white/5 border border-red-400/20 rounded-2xl p-8"
+              >
+                <div className="text-center">
+                  <X className="w-20 h-20 text-red-400 mx-auto mb-4" strokeWidth={1.5} />
+
+                  <h2 className="text-2xl font-bold text-white mb-2">Upload Failed</h2>
+                  <p className="text-gray-400 mb-6">{errorMessage || 'An error occurred during upload'}</p>
+
+                  <button
+                    onClick={resetScan}
+                    className="w-full backdrop-blur-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/30 rounded-xl py-3 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    <span className="font-semibold text-teal-400">Try Again</span>
+                  </button>
                 </div>
               </motion.div>
             )}

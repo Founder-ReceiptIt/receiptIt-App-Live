@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Store, Shield } from 'lucide-react';
+import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Store, Shield, Loader2 } from 'lucide-react';
 import { LucideIcon } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -58,6 +58,9 @@ export interface Receipt {
   paymentMethod?: string;
   location?: string;
   folder?: 'work' | 'personal';
+  status?: string;
+  imageUrl?: string;
+  storagePath?: string;
 }
 
 export function WalletTab({ onReceiptClick }: WalletTabProps) {
@@ -104,6 +107,9 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         paymentMethod: row.payment_method,
         location: row.location,
         folder: row.folder,
+        status: row.status,
+        imageUrl: row.image_url,
+        storagePath: row.storage_path,
       }));
 
       setReceipts(formattedReceipts);
@@ -342,42 +348,66 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             <div className="space-y-3">
               {filteredReceipts.map((receipt, index) => {
             const MerchantIcon = receipt.merchantIcon;
+            const isProcessing = receipt.status === 'processing';
             return (
               <motion.button
                 key={receipt.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: index * 0.1, ease: [0.22, 1, 0.36, 1] }}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => onReceiptClick(receipt)}
-                className="w-full backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-5 hover:bg-white/10 hover:border-teal-400/30 transition-all text-left"
+                whileHover={{ scale: isProcessing ? 1 : 1.02 }}
+                whileTap={{ scale: isProcessing ? 1 : 0.98 }}
+                onClick={() => !isProcessing && onReceiptClick(receipt)}
+                className={`w-full backdrop-blur-xl border rounded-xl p-5 transition-all text-left ${
+                  isProcessing
+                    ? 'bg-teal-400/5 border-teal-400/30 cursor-default'
+                    : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-teal-400/30'
+                }`}
               >
                 <div className="flex items-start gap-4 mb-3">
-                  <div className="w-12 h-12 flex-shrink-0 rounded-xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 flex items-center justify-center">
-                    <MerchantIcon className="w-6 h-6 text-teal-400" strokeWidth={1.5} />
+                  <div className={`w-12 h-12 flex-shrink-0 rounded-xl border flex items-center justify-center ${
+                    isProcessing
+                      ? 'bg-teal-400/10 border-teal-400/30'
+                      : 'bg-gradient-to-br from-white/10 to-white/5 border-white/10'
+                  }`}>
+                    {isProcessing ? (
+                      <Loader2 className="w-6 h-6 text-teal-400 animate-spin" strokeWidth={1.5} />
+                    ) : (
+                      <MerchantIcon className="w-6 h-6 text-teal-400" strokeWidth={1.5} />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-lg font-bold text-white mb-1">{receipt.merchant}</h3>
+                    <h3 className={`text-lg font-bold mb-1 ${isProcessing ? 'text-teal-400 animate-pulse' : 'text-white'}`}>
+                      {receipt.merchant}
+                    </h3>
                     <p className="text-sm text-gray-400">{new Date(receipt.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                   </div>
                   <div className="text-right">
-                    <div className="text-2xl font-bold text-white">
+                    <div className={`text-2xl font-bold ${isProcessing ? 'text-gray-500' : 'text-white'}`}>
                       {receipt.currency}{receipt.amount.toFixed(2)}
                     </div>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md ${receipt.tagColor}`}>
-                    <Tag className="w-3 h-3" />
-                    {receipt.tag}
-                  </div>
-                  {receipt.hasWarranty && (
+                  {isProcessing ? (
                     <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md text-teal-400 bg-teal-400/10 border-teal-400/30">
-                      <div className="w-2 h-2 bg-teal-400 rounded-full animate-pulse" />
-                      Warranty Active
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Processing...
                     </div>
+                  ) : (
+                    <>
+                      <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md ${receipt.tagColor}`}>
+                        <Tag className="w-3 h-3" />
+                        {receipt.tag}
+                      </div>
+                      {receipt.hasWarranty && (
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md text-teal-400 bg-teal-400/10 border-teal-400/30">
+                          <div className="w-2 h-2 bg-teal-400 rounded-full animate-pulse" />
+                          Warranty Active
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </motion.button>

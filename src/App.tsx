@@ -105,7 +105,7 @@ function App() {
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.3 }}
                   >
-                    <ScanTab />
+                    <ScanTab onNavigateToWallet={() => setActiveTab('wallet')} />
                   </motion.div>
                 )}
 
