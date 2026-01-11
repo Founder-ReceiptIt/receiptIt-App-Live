@@ -78,7 +78,6 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
       const { data, error } = await supabase
         .from('receipts')
         .select('*')
-        .eq('user_id', user.id)
         .order('date', { ascending: false });
 
       if (error) {
@@ -87,31 +86,39 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         return;
       }
 
-      const formattedReceipts: Receipt[] = (data || []).map((row) => ({
-        id: row.id,
-        merchant: row.merchant,
-        merchantIcon: getMerchantIcon(row.merchant, row.tag),
-        amount: parseFloat(row.amount),
-        subtotal: parseFloat(row.subtotal),
-        vat: parseFloat(row.vat),
-        vatRate: parseFloat(row.vat_rate),
-        currency: row.currency,
-        date: row.date,
-        tag: row.tag,
-        tagColor: getTagColor(row.tag),
-        hasWarranty: row.has_warranty,
-        warrantyMonths: row.warranty_months,
-        referenceNumber: row.reference_number,
-        emailAlias: row.email_alias,
-        items: row.items || [],
-        paymentMethod: row.payment_method,
-        location: row.location,
-        folder: row.folder,
-        status: row.status,
-        imageUrl: row.image_url,
-        storagePath: row.storage_path,
-      }));
+      console.log('Raw data from Supabase:', data);
+      console.log('Number of rows fetched:', data?.length || 0);
 
+      const formattedReceipts: Receipt[] = (data || []).map((row) => {
+        console.log('Processing row:', row);
+
+        return {
+          id: row.id,
+          merchant: row.merchant || 'Unknown Merchant',
+          merchantIcon: getMerchantIcon(row.merchant || '', row.tag || ''),
+          amount: parseFloat(row.amount) || 0,
+          subtotal: parseFloat(row.subtotal) || 0,
+          vat: parseFloat(row.vat) || 0,
+          vatRate: parseFloat(row.vat_rate) || 0,
+          currency: row.currency || '£',
+          date: row.date || new Date().toISOString(),
+          tag: row.tag || 'Pending',
+          tagColor: getTagColor(row.tag || 'Pending'),
+          hasWarranty: row.has_warranty || false,
+          warrantyMonths: row.warranty_months || 0,
+          referenceNumber: row.reference_number || '',
+          emailAlias: row.email_alias || '',
+          items: row.items || [],
+          paymentMethod: row.payment_method || '',
+          location: row.location || '',
+          folder: row.folder || undefined,
+          status: row.status || '',
+          imageUrl: row.image_url || '',
+          storagePath: row.storage_path || '',
+        };
+      });
+
+      console.log('Formatted receipts:', formattedReceipts);
       setReceipts(formattedReceipts);
       setLoading(false);
     };
@@ -126,7 +133,6 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           event: '*',
           schema: 'public',
           table: 'receipts',
-          filter: `user_id=eq.${user.id}`,
         },
         () => {
           fetchReceipts();
@@ -174,6 +180,13 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           <h1 className="text-3xl font-bold text-white">
             Welcome back{username && `, ${username}`}
           </h1>
+        </div>
+
+        <div className="mb-6 backdrop-blur-xl bg-red-400/10 border border-red-400/30 rounded-xl p-4">
+          <h2 className="text-red-400 font-bold mb-2">DEBUG MODE - Raw Receipts Data:</h2>
+          <pre className="text-xs text-white overflow-auto max-h-96 bg-black/40 p-4 rounded-lg">
+            {JSON.stringify(receipts, null, 2)}
+          </pre>
         </div>
 
         <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
