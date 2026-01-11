@@ -182,13 +182,6 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           </h1>
         </div>
 
-        <div className="mb-6 backdrop-blur-xl bg-red-400/10 border border-red-400/30 rounded-xl p-4">
-          <h2 className="text-red-400 font-bold mb-2">DEBUG MODE - Raw Receipts Data:</h2>
-          <pre className="text-xs text-white overflow-auto max-h-96 bg-black/40 p-4 rounded-lg">
-            {JSON.stringify(receipts, null, 2)}
-          </pre>
-        </div>
-
         <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
           <div className="flex items-baseline justify-between mb-4">
             <div>
