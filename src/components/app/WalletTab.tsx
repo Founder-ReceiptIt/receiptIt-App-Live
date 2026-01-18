@@ -43,11 +43,13 @@ export interface Receipt {
   vat: number;
   vatRate: number;
   currency: string;
+  currencySymbol?: string;
   date: string;
   tag: string;
   tagColor: string;
   hasWarranty?: boolean;
   warrantyMonths?: number;
+  warrantyDate?: string;
   referenceNumber: string;
   emailAlias: string;
   items?: Array<{
@@ -92,6 +94,8 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
       const formattedReceipts: Receipt[] = (data || []).map((row) => {
         console.log('Processing row:', row);
 
+        const currencySymbol = row.currency_symbol || '£';
+
         return {
           id: row.id,
           merchant: row.merchant || 'Unknown Merchant',
@@ -100,12 +104,14 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           subtotal: parseFloat(row.subtotal) || 0,
           vat: parseFloat(row.vat) || 0,
           vatRate: parseFloat(row.vat_rate) || 0,
-          currency: row.currency || '£',
+          currency: row.currency || 'GBP',
+          currencySymbol: currencySymbol,
           date: row.date || new Date().toISOString(),
           tag: row.tag || 'Pending',
           tagColor: getTagColor(row.tag || 'Pending'),
           hasWarranty: row.has_warranty || false,
           warrantyMonths: row.warranty_months || 0,
+          warrantyDate: row.warranty_date || undefined,
           referenceNumber: row.reference_number || '',
           emailAlias: row.email_alias || '',
           items: row.items || [],
@@ -147,7 +153,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
 
   const totalSpent = receipts.reduce((sum, receipt) => sum + receipt.amount, 0);
   const budget = {
-    currency: '£',
+    currency: receipts.length > 0 ? (receipts[0].currencySymbol || '£') : '£',
     spent: totalSpent,
     limit: 2500,
   };
@@ -390,7 +396,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                   </div>
                   <div className="text-right">
                     <div className={`text-2xl font-bold ${isProcessing ? 'text-gray-500' : 'text-white'}`}>
-                      {receipt.currency}{receipt.amount.toFixed(2)}
+                      {receipt.currencySymbol || '£'}{receipt.amount.toFixed(2)}
                     </div>
                   </div>
                 </div>

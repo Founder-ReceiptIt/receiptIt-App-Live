@@ -106,7 +106,7 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
                   </div>
                   <div className="text-right">
                     <div className="text-3xl font-bold text-white">
-                      {receipt.currency}{receipt.amount.toFixed(2)}
+                      {receipt.currencySymbol || '£'}{receipt.amount.toFixed(2)}
                     </div>
                   </div>
                 </div>
@@ -149,7 +149,7 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
                           <div className="text-sm text-gray-400">Qty: {item.quantity}</div>
                         </div>
                         <div className="text-white font-semibold">
-                          {receipt.currency}{item.price.toFixed(2)}
+                          {receipt.currencySymbol || '£'}{item.price.toFixed(2)}
                         </div>
                       </div>
                     ))}
@@ -159,16 +159,16 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-gray-400">
                     <span>Subtotal</span>
-                    <span>{receipt.currency}{receipt.subtotal.toFixed(2)}</span>
+                    <span>{receipt.currencySymbol || '£'}{receipt.subtotal.toFixed(2)}</span>
                   </div>
                   <div className="flex items-center justify-between text-gray-400">
                     <span>VAT ({receipt.vatRate}%)</span>
-                    <span>{receipt.currency}{receipt.vat.toFixed(2)}</span>
+                    <span>{receipt.currencySymbol || '£'}{receipt.vat.toFixed(2)}</span>
                   </div>
                   <div className="h-px bg-white/10 my-3" />
                   <div className="flex items-center justify-between text-white font-bold text-lg">
                     <span>Total</span>
-                    <span>{receipt.currency}{receipt.amount.toFixed(2)}</span>
+                    <span>{receipt.currencySymbol || '£'}{receipt.amount.toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -177,6 +177,22 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
                     <span className="font-bold">Tax Record:</span> This receipt includes all information required for HMRC tax filings and expense claims.
                   </p>
                 </div>
+
+                {receipt.warrantyDate && (
+                  <div className="mt-4 p-4 backdrop-blur-md bg-teal-400/10 border border-teal-400/20 rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-4 h-4 text-teal-400" />
+                      <span className="text-sm font-bold text-teal-400">Warranty Expiry:</span>
+                      <span className="text-sm text-white">
+                        {new Date(receipt.warrantyDate).toLocaleDateString('en-GB', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric'
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </motion.div>
 
               {receipt.hasWarranty && (

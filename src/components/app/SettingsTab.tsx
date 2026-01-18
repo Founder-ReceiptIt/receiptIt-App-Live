@@ -37,14 +37,13 @@ export function SettingsTab() {
     if (!user) return;
 
     const fetchUserData = async () => {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('receipts_captured')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      const { count, error } = await supabase
+        .from('receipts')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id);
 
-      if (profile) {
-        setReceiptsCount(profile.receipts_captured);
+      if (!error && count !== null) {
+        setReceiptsCount(count);
       }
       setLoading(false);
     };
@@ -283,7 +282,7 @@ export function SettingsTab() {
             </div>
           </div>
 
-          <div className="p-4 border-t border-white/10 space-y-2">
+          <div className="p-4 border-t border-white/10 space-y-2" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
             <button className="w-full text-left px-4 py-3 rounded-lg hover:bg-white/5 transition-colors text-gray-400 hover:text-white">
               Privacy Policy
             </button>
@@ -295,7 +294,7 @@ export function SettingsTab() {
             </button>
             <button
               onClick={handleSignOut}
-              className="w-full text-left px-4 py-3 rounded-lg hover:bg-white/5 transition-colors text-red-400 hover:text-red-300"
+              className="w-full text-left px-4 py-3 min-h-[44px] rounded-lg hover:bg-white/5 transition-colors text-red-400 hover:text-red-300 relative z-50 touch-manipulation"
             >
               Sign Out
             </button>
