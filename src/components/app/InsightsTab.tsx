@@ -36,9 +36,10 @@ export function InsightsTab() {
 
       const { data, error } = await supabase
         .from('receipts')
-        .select('amount, category, date, currency_symbol, status')
+        .select('*')
         .order('date', { ascending: false });
 
+      console.log('[InsightsTab] Raw data from Supabase:', data);
       console.log('[InsightsTab] Query result:', { data, error, dataLength: data?.length });
 
       if (error) {
