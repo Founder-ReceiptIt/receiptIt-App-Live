@@ -1,46 +1,58 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Mail } from 'lucide-react';
+import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Mail, MoreVertical, AlertTriangle } from 'lucide-react';
 import { Receipt } from './WalletTab';
 import { useState } from 'react';
-import { db, deleteDoc, doc } from '../../lib/firebase';
+import { supabase } from '../../lib/supabase';
 
 interface ReceiptModalProps {
   receipt: Receipt | null;
   onClose: () => void;
+  onDelete?: () => void;
 }
 
-export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
+export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) {
   const [autoDelete, setAutoDelete] = useState('After Warranty Expires');
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteMenu, setShowDeleteMenu] = useState(false);
 
-  const handleDelete = async () => {
+  const handleDelete = async (deleteOption: 'now' | '30days' | 'warranty') => {
     if (!receipt) return;
 
-    if (receipt.id === 'fake-apple-demo') {
-      alert('This is a demo receipt and cannot be deleted.');
-      return;
-    }
+    if (deleteOption === 'now') {
+      if (!confirm(`Delete receipt from ${receipt.merchant}?`)) {
+        return;
+      }
 
-    if (!confirm(`Delete receipt from ${receipt.merchant}?`)) {
-      return;
-    }
+      setIsDeleting(true);
+      try {
+        const { error } = await supabase
+          .from('receipts')
+          .delete()
+          .eq('id', receipt.id);
 
-    setIsDeleting(true);
-    try {
-      await deleteDoc(doc(db, 'receipts', receipt.id));
-      onClose();
-    } catch (error) {
-      console.error('Error deleting receipt:', error);
-      alert('Failed to delete receipt. Please try again.');
-      setIsDeleting(false);
+        if (error) throw error;
+
+        onDelete?.();
+        onClose();
+      } catch (error) {
+        console.error('Error deleting receipt:', error);
+        alert('Failed to delete receipt. Please try again.');
+        setIsDeleting(false);
+      }
+    } else if (deleteOption === '30days') {
+      alert('This receipt will be deleted in 30 days.');
+      setShowDeleteMenu(false);
+    } else if (deleteOption === 'warranty') {
+      alert('This receipt will be deleted when the warranty expires.');
+      setShowDeleteMenu(false);
     }
   };
 
   if (!receipt) return null;
 
-  const warrantyEndDate = new Date('2027-12-15');
+  const warrantyEndDate = receipt.warrantyDate ? new Date(receipt.warrantyDate) : null;
   const today = new Date();
-  const daysRemaining = Math.floor((warrantyEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  const daysRemaining = warrantyEndDate ? Math.floor((warrantyEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : 0;
   const monthsRemaining = Math.floor(daysRemaining / 30);
   const yearsRemaining = Math.floor(monthsRemaining / 12);
   const remainingMonths = monthsRemaining % 12;
@@ -111,19 +123,25 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
                   </div>
                 </div>
 
+                {receipt.summary && (
+                  <div className="mb-4 p-3 bg-white/5 rounded-lg">
+                    <p className="text-teal-400 font-semibold text-sm">{receipt.summary}</p>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-2 flex-wrap">
                   <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md ${receipt.tagColor}`}>
                     <Tag className="w-4 h-4" />
-                    {receipt.tag}
+                    {receipt.category || receipt.tag}
                   </div>
                   <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md text-gray-400 bg-white/5 border-white/10">
                     <FileText className="w-4 h-4" />
                     {receipt.referenceNumber}
                   </div>
-                  {receipt.paymentMethod && (
+                  {receipt.cardLast4 && (
                     <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md text-gray-400 bg-white/5 border-white/10">
                       <CreditCard className="w-4 h-4" />
-                      {receipt.paymentMethod}
+                      Card **** {receipt.cardLast4}
                     </div>
                   )}
                 </div>
@@ -161,10 +179,12 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
                     <span>Subtotal</span>
                     <span>{receipt.currencySymbol || '£'}{receipt.subtotal.toFixed(2)}</span>
                   </div>
-                  <div className="flex items-center justify-between text-gray-400">
-                    <span>VAT ({receipt.vatRate}%)</span>
-                    <span>{receipt.currencySymbol || '£'}{receipt.vat.toFixed(2)}</span>
-                  </div>
+                  {receipt.vat > 0 && (
+                    <div className="flex items-center justify-between text-gray-400">
+                      <span>VAT ({receipt.vatRate}%)</span>
+                      <span>{receipt.currencySymbol || '£'}{receipt.vat.toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="h-px bg-white/10 my-3" />
                   <div className="flex items-center justify-between text-white font-bold text-lg">
                     <span>Total</span>
@@ -178,24 +198,24 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
                   </p>
                 </div>
 
-                {receipt.warrantyDate && (
-                  <div className="mt-4 p-4 backdrop-blur-md bg-teal-400/10 border border-teal-400/20 rounded-xl">
+                {receipt.warrantyDate && daysRemaining > 0 && (
+                  <div className="mt-4 p-4 backdrop-blur-md bg-amber-400/10 border border-amber-400/20 rounded-xl">
                     <div className="flex items-center gap-2">
-                      <Shield className="w-4 h-4 text-teal-400" />
-                      <span className="text-sm font-bold text-teal-400">Warranty Expiry:</span>
-                      <span className="text-sm text-white">
-                        {new Date(receipt.warrantyDate).toLocaleDateString('en-GB', {
+                      <Shield className="w-4 h-4 text-amber-400" />
+                      <span className="text-sm font-bold text-amber-400">Warranty expires in {daysRemaining} days</span>
+                      <span className="text-sm text-gray-400">
+                        ({warrantyEndDate?.toLocaleDateString('en-GB', {
                           day: 'numeric',
                           month: 'short',
                           year: 'numeric'
-                        })}
+                        })})
                       </span>
                     </div>
                   </div>
                 )}
               </motion.div>
 
-              {receipt.hasWarranty && (
+              {receipt.warrantyDate && warrantyEndDate && daysRemaining > 0 && (
                 <>
                   <motion.div
                     initial={{ scale: 0.95, opacity: 0 }}
@@ -288,42 +308,73 @@ export function ReceiptModal({ receipt, onClose }: ReceiptModalProps) {
                 </>
               )}
 
-              <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: receipt.hasWarranty ? 0.4 : 0.2 }}
-                className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6"
-              >
-                <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                  <Mail className="w-5 h-5 text-teal-400" />
-                  Email Alias Used
-                </h4>
-                <div className="backdrop-blur-md bg-white/5 border border-white/10 rounded-xl px-4 py-3">
-                  <span className="text-teal-400 font-mono text-lg">{receipt.emailAlias}</span>
-                </div>
-                <p className="text-sm text-gray-400 mt-3">
-                  This privacy-protected email was used for this transaction
-                </p>
-              </motion.div>
-
-              {receipt.id !== 'fake-apple-demo' && (
+              {receipt.emailAlias && (
                 <motion.div
                   initial={{ y: 20, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: receipt.hasWarranty ? 0.5 : 0.3 }}
+                  transition={{ delay: 0.3 }}
+                  className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6"
                 >
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={handleDelete}
-                    disabled={isDeleting}
-                    className="w-full flex items-center justify-center gap-3 py-4 rounded-xl font-bold transition-all backdrop-blur-md border bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                    <span>{isDeleting ? 'Deleting...' : 'Delete Receipt'}</span>
-                  </motion.button>
+                  <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <Mail className="w-5 h-5 text-teal-400" />
+                    Email Alias Used
+                  </h4>
+                  <div className="backdrop-blur-md bg-white/5 border border-white/10 rounded-xl px-4 py-3">
+                    <span className="text-teal-400 font-mono text-lg">{receipt.emailAlias}</span>
+                  </div>
+                  <p className="text-sm text-gray-400 mt-3">
+                    This privacy-protected email was used for this transaction
+                  </p>
                 </motion.div>
               )}
+
+              <motion.div
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.4 }}
+                className="relative"
+              >
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setShowDeleteMenu(!showDeleteMenu)}
+                  disabled={isDeleting}
+                  className="w-full flex items-center justify-center gap-3 py-4 rounded-xl font-bold transition-all backdrop-blur-md border bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <MoreVertical className="w-5 h-5" />
+                  <span>Manage Receipt</span>
+                </motion.button>
+
+                {showDeleteMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="absolute bottom-full left-0 right-0 mb-2 backdrop-blur-xl bg-black/90 border border-white/10 rounded-xl overflow-hidden shadow-lg"
+                  >
+                    <button
+                      onClick={() => handleDelete('now')}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-500/10 transition-colors text-left text-red-400 border-b border-white/10"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span className="font-semibold">Delete Now</span>
+                    </button>
+                    <button
+                      onClick={() => handleDelete('30days')}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left text-gray-400 border-b border-white/10"
+                    >
+                      <Clock className="w-4 h-4" />
+                      <span className="font-semibold">Delete in 30 Days</span>
+                    </button>
+                    <button
+                      onClick={() => handleDelete('warranty')}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left text-gray-400"
+                    >
+                      <Shield className="w-4 h-4" />
+                      <span className="font-semibold">Delete when Warranty Expires</span>
+                    </button>
+                  </motion.div>
+                )}
+              </motion.div>
             </div>
           </div>
         </motion.div>

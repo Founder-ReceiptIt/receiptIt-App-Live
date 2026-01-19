@@ -17,6 +17,7 @@ function App() {
   const [showApp, setShowApp] = useState(false);
   const [activeTab, setActiveTab] = useState('wallet');
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -80,7 +81,7 @@ function App() {
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.3 }}
                   >
-                    <WalletTab onReceiptClick={setSelectedReceipt} />
+                    <WalletTab key={refreshKey} onReceiptClick={setSelectedReceipt} />
                   </motion.div>
                 )}
 
@@ -116,7 +117,7 @@ function App() {
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.3 }}
                   >
-                    <InsightsTab />
+                    <InsightsTab key={refreshKey} />
                   </motion.div>
                 )}
 
@@ -135,7 +136,11 @@ function App() {
             </div>
 
             <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
-            <ReceiptModal receipt={selectedReceipt} onClose={() => setSelectedReceipt(null)} />
+            <ReceiptModal
+              receipt={selectedReceipt}
+              onClose={() => setSelectedReceipt(null)}
+              onDelete={() => setRefreshKey(prev => prev + 1)}
+            />
           </motion.div>
         )}
       </AnimatePresence>

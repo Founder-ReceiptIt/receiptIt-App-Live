@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Store, Shield, Loader2 } from 'lucide-react';
+import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Store, Shield, Loader2, Car, Home, Plane, Zap, Utensils } from 'lucide-react';
 import { LucideIcon } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -9,14 +9,17 @@ interface WalletTabProps {
   onReceiptClick: (receipt: Receipt) => void;
 }
 
-const getMerchantIcon = (merchant: string, tag: string): LucideIcon => {
-  const merchantLower = merchant.toLowerCase();
+const getCategoryIcon = (category: string): LucideIcon => {
+  const categoryLower = category.toLowerCase();
 
-  if (merchantLower.includes('apple')) return Laptop;
-  if (merchantLower.includes('starbucks') || merchantLower.includes('coffee')) return Coffee;
-  if (merchantLower.includes('uniqlo') || tag.toLowerCase() === 'clothing') return Shirt;
-  if (tag.toLowerCase() === 'tech') return Laptop;
-  if (tag.toLowerCase() === 'food') return Coffee;
+  if (categoryLower.includes('tech') || categoryLower.includes('electronics')) return Laptop;
+  if (categoryLower.includes('food') || categoryLower.includes('restaurant') || categoryLower.includes('dining')) return Utensils;
+  if (categoryLower.includes('clothing') || categoryLower.includes('fashion')) return Shirt;
+  if (categoryLower.includes('groceries') || categoryLower.includes('grocery')) return Coffee;
+  if (categoryLower.includes('transport') || categoryLower.includes('travel') || categoryLower.includes('uber') || categoryLower.includes('taxi')) return Car;
+  if (categoryLower.includes('home') || categoryLower.includes('furniture')) return Home;
+  if (categoryLower.includes('flight') || categoryLower.includes('hotel')) return Plane;
+  if (categoryLower.includes('utilities') || categoryLower.includes('bills')) return Zap;
 
   return ShoppingBag;
 };
@@ -45,6 +48,7 @@ export interface Receipt {
   currency: string;
   currencySymbol?: string;
   date: string;
+  category: string;
   tag: string;
   tagColor: string;
   hasWarranty?: boolean;
@@ -52,6 +56,8 @@ export interface Receipt {
   warrantyDate?: string;
   referenceNumber: string;
   emailAlias: string;
+  summary?: string;
+  cardLast4?: string;
   items?: Array<{
     name: string;
     quantity: number;
@@ -95,25 +101,32 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         console.log('Processing row:', row);
 
         const currencySymbol = row.currency_symbol || '£';
+        const total = parseFloat(row.total) || 0;
+        const category = row.category || 'Other';
+        const isProcessing = row.status === 'processing' || total === 0;
+        const tag = isProcessing ? 'Processing' : (category || 'Complete');
 
         return {
           id: row.id,
           merchant: row.merchant || 'Unknown Merchant',
-          merchantIcon: getMerchantIcon(row.merchant || '', row.tag || ''),
-          amount: parseFloat(row.amount) || 0,
-          subtotal: parseFloat(row.subtotal) || 0,
-          vat: parseFloat(row.vat) || 0,
-          vatRate: parseFloat(row.vat_rate) || 0,
+          merchantIcon: getCategoryIcon(category),
+          amount: total,
+          subtotal: parseFloat(row.subtotal) || total,
+          vat: parseFloat(row.vat_amount) || 0,
+          vatRate: parseFloat(row.vat_rate) || 20,
           currency: row.currency || 'GBP',
           currencySymbol: currencySymbol,
           date: row.date || new Date().toISOString(),
-          tag: row.tag || 'Pending',
-          tagColor: getTagColor(row.tag || 'Pending'),
-          hasWarranty: row.has_warranty || false,
+          category: category,
+          tag: tag,
+          tagColor: getTagColor(tag),
+          hasWarranty: !!row.warranty_date,
           warrantyMonths: row.warranty_months || 0,
           warrantyDate: row.warranty_date || undefined,
-          referenceNumber: row.reference_number || '',
+          referenceNumber: row.reference_number || `REF-${row.id.slice(0, 8)}`,
           emailAlias: row.email_alias || '',
+          summary: row.summary || '',
+          cardLast4: row.card_last_4 || '',
           items: row.items || [],
           paymentMethod: row.payment_method || '',
           location: row.location || '',
@@ -360,7 +373,8 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             <div className="space-y-3">
               {filteredReceipts.map((receipt, index) => {
             const MerchantIcon = receipt.merchantIcon;
-            const isProcessing = receipt.status === 'processing';
+            const isProcessing = receipt.tag === 'Processing';
+            const hasActiveWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) > new Date();
             return (
               <motion.button
                 key={receipt.id}
@@ -370,9 +384,11 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                 whileHover={{ scale: isProcessing ? 1 : 1.02 }}
                 whileTap={{ scale: isProcessing ? 1 : 0.98 }}
                 onClick={() => !isProcessing && onReceiptClick(receipt)}
-                className={`w-full backdrop-blur-xl border rounded-xl p-5 transition-all text-left ${
+                className={`w-full backdrop-blur-xl border rounded-xl p-5 transition-all text-left relative ${
                   isProcessing
                     ? 'bg-teal-400/5 border-teal-400/30 cursor-default'
+                    : hasActiveWarranty
+                    ? 'bg-white/5 border-amber-400/40 hover:bg-white/10 hover:border-amber-400/60 shadow-[0_0_20px_rgba(251,191,36,0.15)]'
                     : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-teal-400/30'
                 }`}
               >
@@ -392,7 +408,12 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                     <h3 className={`text-lg font-bold mb-1 ${isProcessing ? 'text-teal-400 animate-pulse' : 'text-white'}`}>
                       {receipt.merchant}
                     </h3>
-                    <p className="text-sm text-gray-400">{new Date(receipt.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-gray-400">{new Date(receipt.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                      {hasActiveWarranty && !isProcessing && (
+                        <Shield className="w-3.5 h-3.5 text-amber-400" strokeWidth={2} />
+                      )}
+                    </div>
                   </div>
                   <div className="text-right">
                     <div className={`text-2xl font-bold ${isProcessing ? 'text-gray-500' : 'text-white'}`}>
@@ -401,7 +422,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   {isProcessing ? (
                     <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md text-teal-400 bg-teal-400/10 border-teal-400/30">
                       <Loader2 className="w-3 h-3 animate-spin" />
@@ -409,16 +430,10 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                     </div>
                   ) : (
                     <>
-                      <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md ${receipt.tagColor}`}>
+                      <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md ${getTagColor(receipt.category)}`}>
                         <Tag className="w-3 h-3" />
-                        {receipt.tag}
+                        {receipt.category}
                       </div>
-                      {receipt.hasWarranty && (
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md text-teal-400 bg-teal-400/10 border-teal-400/30">
-                          <div className="w-2 h-2 bg-teal-400 rounded-full animate-pulse" />
-                          Warranty Active
-                        </div>
-                      )}
                     </>
                   )}
                 </div>

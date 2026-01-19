@@ -1,58 +1,140 @@
 import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, DollarSign, Calendar, PieChart, BarChart3, Tag } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
+
+interface Receipt {
+  amount_gbp: number;
+  category: string;
+  date: string;
+  currency_symbol: string;
+}
+
+const getTagColor = (category: string): string => {
+  const categoryLower = category.toLowerCase();
+
+  if (categoryLower.includes('tech') || categoryLower.includes('electronics')) return 'text-blue-400 bg-blue-400/10 border-blue-400/30';
+  if (categoryLower.includes('food') || categoryLower.includes('restaurant')) return 'text-orange-400 bg-orange-400/10 border-orange-400/30';
+  if (categoryLower.includes('clothing') || categoryLower.includes('fashion')) return 'text-purple-400 bg-purple-400/10 border-purple-400/30';
+  if (categoryLower.includes('groceries') || categoryLower.includes('grocery')) return 'text-green-400 bg-green-400/10 border-green-400/30';
+  if (categoryLower.includes('transport') || categoryLower.includes('travel')) return 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30';
+
+  return 'text-gray-400 bg-gray-400/10 border-gray-400/30';
+};
 
 export function InsightsTab() {
-  const monthlyData = [
-    { month: 'Aug', amount: 1876.20 },
-    { month: 'Sep', amount: 2104.50 },
-    { month: 'Oct', amount: 1923.80 },
-    { month: 'Nov', amount: 2398.90 },
-    { month: 'Dec', amount: 2156.40 },
-    { month: 'Jan', amount: 2253.40 },
-  ];
+  const { user } = useAuth();
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const categoryBreakdown = [
-    { category: 'Tech', amount: 2199.00, percentage: 97.6, color: 'text-blue-400 bg-blue-400/10 border-blue-400/30', count: 1 },
-    { category: 'Clothing', amount: 49.90, percentage: 2.2, color: 'text-purple-400 bg-purple-400/10 border-purple-400/30', count: 1 },
-    { category: 'Food', amount: 4.50, percentage: 0.2, color: 'text-orange-400 bg-orange-400/10 border-orange-400/30', count: 1 },
-  ];
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchReceipts = async () => {
+      const { data, error } = await supabase
+        .from('receipts')
+        .select('amount_gbp, category, date, currency_symbol')
+        .eq('user_id', user.id)
+        .order('date', { ascending: false });
+
+      if (!error && data) {
+        setReceipts(data);
+      }
+      setLoading(false);
+    };
+
+    fetchReceipts();
+  }, [user]);
+
+  const totalSpent = receipts.reduce((sum, r) => sum + (parseFloat(r.amount_gbp as any) || 0), 0);
+
+  const categoryTotals = receipts.reduce((acc, r) => {
+    const cat = r.category || 'Other';
+    const amount = parseFloat(r.amount_gbp as any) || 0;
+    if (!acc[cat]) {
+      acc[cat] = { amount: 0, count: 0 };
+    }
+    acc[cat].amount += amount;
+    acc[cat].count += 1;
+    return acc;
+  }, {} as Record<string, { amount: number; count: number }>);
+
+  const categoryBreakdown = Object.entries(categoryTotals)
+    .map(([category, data]) => ({
+      category,
+      amount: data.amount,
+      count: data.count,
+      percentage: totalSpent > 0 ? (data.amount / totalSpent) * 100 : 0,
+      color: getTagColor(category),
+    }))
+    .sort((a, b) => b.amount - a.amount);
+
+  const topCategory = categoryBreakdown[0];
+  const avgTransaction = receipts.length > 0 ? totalSpent / receipts.length : 0;
+  const budgetLimit = 2500;
+  const budgetPercentage = (totalSpent / budgetLimit) * 100;
+
+  const monthlyData = (() => {
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const now = new Date();
+    const last6Months = [];
+
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const monthReceipts = receipts.filter(r => r.date.startsWith(monthKey));
+      const amount = monthReceipts.reduce((sum, r) => sum + (parseFloat(r.amount_gbp as any) || 0), 0);
+
+      last6Months.push({
+        month: monthNames[date.getMonth()],
+        amount,
+      });
+    }
+
+    return last6Months;
+  })();
+
+  const prevMonthAmount = monthlyData[monthlyData.length - 2]?.amount || 0;
+  const currentMonthAmount = monthlyData[monthlyData.length - 1]?.amount || 0;
+  const monthlyChange = prevMonthAmount > 0 ? ((currentMonthAmount - prevMonthAmount) / prevMonthAmount) * 100 : 0;
 
   const insights = [
     {
       title: 'Top Spending Category',
-      value: 'Tech',
-      detail: '£2,199.00 this month',
+      value: topCategory?.category || 'N/A',
+      detail: `£${topCategory?.amount.toFixed(2) || '0.00'} this period`,
       icon: PieChart,
-      trend: '+145%',
+      trend: `${topCategory?.count || 0} purchases`,
       trendUp: true
     },
     {
       title: 'Average Transaction',
-      value: '£751.13',
-      detail: 'Across 3 purchases',
+      value: `£${avgTransaction.toFixed(2)}`,
+      detail: `Across ${receipts.length} purchases`,
       icon: BarChart3,
-      trend: '+12%',
+      trend: receipts.length > 0 ? `${receipts.length} total` : 'No data',
       trendUp: true
     },
     {
       title: 'Budget Status',
-      value: '90.1%',
-      detail: '£246.60 remaining',
+      value: `${budgetPercentage.toFixed(1)}%`,
+      detail: `£${(budgetLimit - totalSpent).toFixed(2)} remaining`,
       icon: DollarSign,
-      trend: '-5%',
-      trendUp: false
+      trend: totalSpent > budgetLimit ? 'Over budget' : 'On track',
+      trendUp: totalSpent <= budgetLimit
     },
     {
       title: 'Monthly Comparison',
-      value: '+4.5%',
-      detail: 'vs December 2024',
+      value: monthlyChange >= 0 ? `+${monthlyChange.toFixed(1)}%` : `${monthlyChange.toFixed(1)}%`,
+      detail: `vs previous month`,
       icon: Calendar,
-      trend: '+£97.00',
-      trendUp: true
+      trend: `£${Math.abs(currentMonthAmount - prevMonthAmount).toFixed(2)}`,
+      trendUp: monthlyChange >= 0
     },
   ];
 
-  const maxAmount = Math.max(...monthlyData.map(d => d.amount));
+  const maxAmount = Math.max(...monthlyData.map(d => d.amount), 1);
 
   return (
     <div className="pb-32 px-6 pt-8 max-w-7xl mx-auto">
