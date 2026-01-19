@@ -190,7 +190,10 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
 
   const workReceipts = receipts.filter(r => r.folder === 'work');
   const personalReceipts = receipts.filter(r => r.folder === 'personal');
-  const warrantyReceipts = receipts.filter(r => r.hasWarranty);
+  const warrantyReceipts = receipts.filter(r => {
+    if (!r.warrantyDate) return false;
+    return new Date(r.warrantyDate) > new Date();
+  });
 
   return (
     <div className="pb-32 px-6 pt-8 max-w-7xl mx-auto">

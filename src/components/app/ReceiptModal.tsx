@@ -1,8 +1,9 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Mail, MoreVertical, AlertTriangle } from 'lucide-react';
+import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Mail, MoreVertical, AlertTriangle, Download } from 'lucide-react';
 import { Receipt } from './WalletTab';
 import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { formatDistanceToNow } from 'date-fns';
 
 interface ReceiptModalProps {
   receipt: Receipt | null;
@@ -84,14 +85,29 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
           <div className="backdrop-blur-xl bg-black/90 border border-white/10 rounded-3xl overflow-hidden shadow-[0_0_60px_rgba(45,212,191,0.3)]">
             <div className="p-6 border-b border-white/10 flex items-center justify-between">
               <h2 className="text-2xl font-bold text-white">Receipt Details</h2>
-              <motion.button
-                whileHover={{ scale: 1.1, rotate: 90 }}
-                whileTap={{ scale: 0.9 }}
-                onClick={onClose}
-                className="w-10 h-10 rounded-full backdrop-blur-md bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:border-white/20 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </motion.button>
+              <div className="flex items-center gap-2">
+                {(receipt.imageUrl || receipt.storagePath) && (
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      const url = receipt.imageUrl || receipt.storagePath;
+                      if (url) window.open(url, '_blank');
+                    }}
+                    className="w-10 h-10 rounded-full backdrop-blur-md bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-teal-400 hover:border-teal-400/30 transition-colors"
+                  >
+                    <Download className="w-5 h-5" />
+                  </motion.button>
+                )}
+                <motion.button
+                  whileHover={{ scale: 1.1, rotate: 90 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={onClose}
+                  className="w-10 h-10 rounded-full backdrop-blur-md bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:border-white/20 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </motion.button>
+              </div>
             </div>
 
             <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
@@ -129,52 +145,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   </div>
                 )}
 
-                {receipt.warrantyDate && daysRemaining > 0 && (
-                  <motion.div
-                    initial={{ scale: 0.95, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ delay: 0.1 }}
-                    className="relative mb-4"
-                  >
-                    <div className="absolute -inset-1 bg-gradient-to-r from-amber-400/30 to-yellow-400/30 blur-lg rounded-xl" />
-                    <div className="relative backdrop-blur-md bg-gradient-to-r from-amber-400/15 to-yellow-400/10 border-2 border-amber-400/40 rounded-xl p-4">
-                      <div className="flex items-center gap-3">
-                        <motion.div
-                          animate={{
-                            rotate: [0, 5, -5, 0],
-                          }}
-                          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                        >
-                          <Shield className="w-6 h-6 text-amber-400" strokeWidth={2} />
-                        </motion.div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
-                            <span className="text-amber-400 font-bold text-sm">Warranty Active</span>
-                          </div>
-                          <p className="text-white font-semibold">
-                            Expires in {daysRemaining > 365
-                              ? `${Math.floor(daysRemaining / 365)} year${Math.floor(daysRemaining / 365) > 1 ? 's' : ''}`
-                              : daysRemaining > 30
-                              ? `${Math.floor(daysRemaining / 30)} month${Math.floor(daysRemaining / 30) > 1 ? 's' : ''}`
-                              : `${daysRemaining} day${daysRemaining > 1 ? 's' : ''}`
-                            }
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs text-gray-400">
-                            {warrantyEndDate?.toLocaleDateString('en-GB', {
-                              day: 'numeric',
-                              month: 'short',
-                              year: 'numeric'
-                            })}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-
                 <div className="flex items-center gap-2 flex-wrap">
                   <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md ${receipt.tagColor}`}>
                     <Tag className="w-4 h-4" />
@@ -192,6 +162,49 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   )}
                 </div>
               </div>
+
+              {receipt.warrantyDate && daysRemaining > 0 && (
+                <motion.div
+                  initial={{ scale: 0.98, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.1 }}
+                  className="backdrop-blur-xl bg-gradient-to-br from-emerald-950/80 to-teal-950/70 border border-emerald-500/40 rounded-2xl p-6 shadow-[0_0_40px_rgba(16,185,129,0.15)]"
+                >
+                  <div className="flex items-center gap-5">
+                    <motion.div
+                      animate={{
+                        scale: [1, 1.05, 1],
+                        rotate: [0, 5, -5, 0],
+                      }}
+                      transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                      className="relative"
+                    >
+                      <div className="absolute inset-0 bg-emerald-400/30 blur-2xl rounded-full" />
+                      <Shield className="w-12 h-12 text-emerald-400 relative z-10" strokeWidth={1.5} />
+                    </motion.div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+                        <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">WARRANTY ACTIVE</span>
+                      </div>
+                      <div className="text-2xl font-bold text-white mb-1">
+                        {yearsRemaining > 0 && `${yearsRemaining} ${yearsRemaining === 1 ? 'Year' : 'Years'}`}
+                        {yearsRemaining > 0 && remainingMonths > 0 && ', '}
+                        {remainingMonths > 0 && `${remainingMonths} ${remainingMonths === 1 ? 'Month' : 'Months'}`}
+                        {yearsRemaining === 0 && remainingMonths === 0 && `${daysRemaining} ${daysRemaining === 1 ? 'Day' : 'Days'}`}
+                        {' left'}
+                      </div>
+                      <p className="text-sm text-emerald-300/70">
+                        Expires {warrantyEndDate?.toLocaleDateString('en-GB', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric'
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
 
               <motion.div
                 initial={{ y: 20, opacity: 0 }}
