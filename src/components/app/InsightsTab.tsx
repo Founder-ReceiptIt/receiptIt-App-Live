@@ -5,7 +5,8 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface Receipt {
-  amount_gbp: number;
+  amount: number;
+  total: number;
   category: string;
   date: string;
   currency_symbol: string;
@@ -34,8 +35,7 @@ export function InsightsTab() {
     const fetchReceipts = async () => {
       const { data, error } = await supabase
         .from('receipts')
-        .select('amount_gbp, category, date, currency_symbol')
-        .eq('user_id', user.id)
+        .select('amount, total, category, date, currency_symbol')
         .order('date', { ascending: false });
 
       if (!error && data) {
@@ -47,11 +47,11 @@ export function InsightsTab() {
     fetchReceipts();
   }, [user]);
 
-  const totalSpent = receipts.reduce((sum, r) => sum + (parseFloat(r.amount_gbp as any) || 0), 0);
+  const totalSpent = receipts.reduce((sum, r) => sum + (parseFloat(r.amount as any) || parseFloat(r.total as any) || 0), 0);
 
   const categoryTotals = receipts.reduce((acc, r) => {
     const cat = r.category || 'Other';
-    const amount = parseFloat(r.amount_gbp as any) || 0;
+    const amount = parseFloat(r.amount as any) || parseFloat(r.total as any) || 0;
     if (!acc[cat]) {
       acc[cat] = { amount: 0, count: 0 };
     }
@@ -84,7 +84,7 @@ export function InsightsTab() {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       const monthReceipts = receipts.filter(r => r.date.startsWith(monthKey));
-      const amount = monthReceipts.reduce((sum, r) => sum + (parseFloat(r.amount_gbp as any) || 0), 0);
+      const amount = monthReceipts.reduce((sum, r) => sum + (parseFloat(r.amount as any) || parseFloat(r.total as any) || 0), 0);
 
       last6Months.push({
         month: monthNames[date.getMonth()],

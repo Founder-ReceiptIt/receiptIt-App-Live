@@ -129,6 +129,52 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   </div>
                 )}
 
+                {receipt.warrantyDate && daysRemaining > 0 && (
+                  <motion.div
+                    initial={{ scale: 0.95, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.1 }}
+                    className="relative mb-4"
+                  >
+                    <div className="absolute -inset-1 bg-gradient-to-r from-amber-400/30 to-yellow-400/30 blur-lg rounded-xl" />
+                    <div className="relative backdrop-blur-md bg-gradient-to-r from-amber-400/15 to-yellow-400/10 border-2 border-amber-400/40 rounded-xl p-4">
+                      <div className="flex items-center gap-3">
+                        <motion.div
+                          animate={{
+                            rotate: [0, 5, -5, 0],
+                          }}
+                          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                        >
+                          <Shield className="w-6 h-6 text-amber-400" strokeWidth={2} />
+                        </motion.div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
+                            <span className="text-amber-400 font-bold text-sm">Warranty Active</span>
+                          </div>
+                          <p className="text-white font-semibold">
+                            Expires in {daysRemaining > 365
+                              ? `${Math.floor(daysRemaining / 365)} year${Math.floor(daysRemaining / 365) > 1 ? 's' : ''}`
+                              : daysRemaining > 30
+                              ? `${Math.floor(daysRemaining / 30)} month${Math.floor(daysRemaining / 30) > 1 ? 's' : ''}`
+                              : `${daysRemaining} day${daysRemaining > 1 ? 's' : ''}`
+                            }
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-gray-400">
+                            {warrantyEndDate?.toLocaleDateString('en-GB', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric'
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
                 <div className="flex items-center gap-2 flex-wrap">
                   <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md ${receipt.tagColor}`}>
                     <Tag className="w-4 h-4" />
@@ -317,7 +363,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                 >
                   <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                     <Mail className="w-5 h-5 text-teal-400" />
-                    Email Alias Used
+                    Received via
                   </h4>
                   <div className="backdrop-blur-md bg-white/5 border border-white/10 rounded-xl px-4 py-3">
                     <span className="text-teal-400 font-mono text-lg">{receipt.emailAlias}</span>

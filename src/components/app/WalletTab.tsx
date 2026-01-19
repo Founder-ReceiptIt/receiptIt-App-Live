@@ -76,6 +76,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<'all' | 'work' | 'personal'>('all');
+  const [warrantyFilterActive, setWarrantyFilterActive] = useState(false);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -182,7 +183,9 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                          receipt.referenceNumber.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = !selectedCategory || selectedCategory === 'All' || receipt.tag === selectedCategory;
     const matchesFolder = selectedFolder === 'all' || receipt.folder === selectedFolder;
-    return matchesSearch && matchesCategory && matchesFolder;
+    const hasActiveWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) > new Date();
+    const matchesWarranty = !warrantyFilterActive || hasActiveWarranty;
+    return matchesSearch && matchesCategory && matchesFolder && matchesWarranty;
   });
 
   const workReceipts = receipts.filter(r => r.folder === 'work');
@@ -298,20 +301,38 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         </div>
 
         {warrantyReceipts.length > 0 && (
-          <motion.div
+          <motion.button
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
-            className="backdrop-blur-xl bg-gradient-to-r from-teal-400/10 to-cyan-400/10 border border-teal-400/30 rounded-xl p-4 mb-6"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setWarrantyFilterActive(!warrantyFilterActive)}
+            className={`w-full backdrop-blur-xl border rounded-xl p-4 mb-6 transition-all ${
+              warrantyFilterActive
+                ? 'bg-gradient-to-r from-amber-400/20 to-yellow-400/15 border-amber-400/50 shadow-[0_0_30px_rgba(251,191,36,0.2)]'
+                : 'bg-gradient-to-r from-teal-400/10 to-cyan-400/10 border-teal-400/30 hover:border-teal-400/50'
+            }`}
           >
             <div className="flex items-center gap-3">
-              <Shield className="w-6 h-6 text-teal-400" />
-              <div className="flex-1">
+              <Shield className={`w-6 h-6 ${warrantyFilterActive ? 'text-amber-400' : 'text-teal-400'}`} />
+              <div className="flex-1 text-left">
                 <h3 className="text-white font-bold">{warrantyReceipts.length} Active {warrantyReceipts.length === 1 ? 'Warranty' : 'Warranties'}</h3>
-                <p className="text-sm text-gray-400">Protected items in {selectedFolder === 'all' ? 'all folders' : selectedFolder}</p>
+                <p className="text-sm text-gray-400">
+                  {warrantyFilterActive ? 'Showing warranty items only' : 'Click to filter warranty items'}
+                </p>
               </div>
+              {warrantyFilterActive && (
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="px-3 py-1 bg-amber-400/20 border border-amber-400/40 rounded-full text-xs font-bold text-amber-400"
+                >
+                  Active Filter
+                </motion.div>
+              )}
             </div>
-          </motion.div>
+          </motion.button>
         )}
 
         <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4 mb-6">
