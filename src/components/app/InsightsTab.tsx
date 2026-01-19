@@ -32,20 +32,38 @@ export function InsightsTab() {
     if (!user) return;
 
     const fetchReceipts = async () => {
+      console.log('[InsightsTab] Fetching receipts for user:', user?.id);
+
       const { data, error } = await supabase
         .from('receipts')
         .select('amount, category, date, currency_symbol, status')
         .order('date', { ascending: false });
 
-      if (!error && data) {
+      console.log('[InsightsTab] Query result:', { data, error, dataLength: data?.length });
+
+      if (error) {
+        console.error('[InsightsTab] Query error:', error);
+        setLoading(false);
+        return;
+      }
+
+      if (data) {
+        console.log('[InsightsTab] Raw data before filter:', data);
+
         const processedReceipts = data
-          .filter(row => row.status !== 'processing')
+          .filter(row => {
+            const shouldInclude = row.status !== 'processing';
+            console.log('[InsightsTab] Row:', row, 'Include:', shouldInclude);
+            return shouldInclude;
+          })
           .map(row => ({
             amount: typeof row.amount === 'string' ? parseFloat(row.amount) : (row.amount || 0),
             category: row.category || 'Other',
             date: row.date ? String(row.date) : new Date().toISOString().split('T')[0],
             currency_symbol: row.currency_symbol || '£',
           }));
+
+        console.log('[InsightsTab] Processed receipts:', processedReceipts);
         setReceipts(processedReceipts);
       }
       setLoading(false);

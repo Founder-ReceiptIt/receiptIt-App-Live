@@ -84,17 +84,23 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
     if (!user) return;
 
     const fetchReceipts = async () => {
+      console.log('[WalletTab] Fetching receipts for user:', user?.id);
+
       const { data, error } = await supabase
         .from('receipts')
         .select('*')
         .order('date', { ascending: false });
 
+      console.log('[WalletTab] Query result:', { data, error, dataLength: data?.length });
+
       if (error) {
+        console.error('[WalletTab] Query error:', error);
         setLoading(false);
         return;
       }
 
       const formattedReceipts: Receipt[] = (data || []).map((row) => {
+        console.log('[WalletTab] Processing row:', row);
 
         const currencySymbol = row.currency_symbol || '£';
         const total = parseFloat(row.amount) || parseFloat(row.total) || 0;

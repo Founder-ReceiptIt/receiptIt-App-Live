@@ -67,6 +67,9 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       setScanState('processing');
 
       try {
+        const referenceNumber = `REF-${timestamp}`;
+        const userEmailAlias = emailAlias || `user_${user.id.slice(0, 8)}@receipts.app`;
+
         const { data: insertData, error: insertError } = await supabase
           .from('receipts')
           .insert({
@@ -76,11 +79,17 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
             status: 'processing',
             merchant: 'Analyzing...',
             amount: 0,
-            date: new Date().toISOString(),
+            subtotal: 0,
+            vat: 0,
+            date: new Date().toISOString().split('T')[0],
+            tag: 'Processing',
+            reference_number: referenceNumber,
+            email_alias: userEmailAlias,
           })
           .select();
 
         if (insertError) {
+          console.error('Insert error:', insertError);
           setErrorMessage(`Failed to create database record: ${insertError.message}`);
           setScanState('error');
           throw insertError;
@@ -91,7 +100,10 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
           setScanState('error');
           return;
         }
+
+        console.log('Receipt created successfully:', insertData);
       } catch (err) {
+        console.error('Scan error:', err);
         throw err;
       }
 
