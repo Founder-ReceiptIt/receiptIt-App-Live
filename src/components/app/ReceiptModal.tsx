@@ -91,8 +91,14 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => {
-                      const url = receipt.imageUrl || receipt.storagePath;
-                      if (url) window.open(url, '_blank');
+                      let url = receipt.imageUrl || receipt.storagePath;
+                      if (url) {
+                        if (!url.startsWith('http')) {
+                          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+                          url = `${supabaseUrl}/storage/v1/object/public/${url}`;
+                        }
+                        window.open(url, '_blank', 'noopener,noreferrer');
+                      }
                     }}
                     className="w-10 h-10 rounded-full backdrop-blur-md bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-teal-400 hover:border-teal-400/30 transition-colors"
                   >
@@ -168,39 +174,19 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   initial={{ scale: 0.98, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ delay: 0.1 }}
-                  className="backdrop-blur-xl bg-gradient-to-br from-emerald-950/80 to-teal-950/70 border border-emerald-500/40 rounded-2xl p-6 shadow-[0_0_40px_rgba(16,185,129,0.15)]"
+                  className="w-full p-4 rounded-xl mb-6 flex items-center gap-4 bg-emerald-900/20 border border-emerald-500/50"
                 >
-                  <div className="flex items-center gap-5">
-                    <motion.div
-                      animate={{
-                        scale: [1, 1.05, 1],
-                        rotate: [0, 5, -5, 0],
-                      }}
-                      transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                      className="relative"
-                    >
-                      <div className="absolute inset-0 bg-emerald-400/30 blur-2xl rounded-full" />
-                      <Shield className="w-12 h-12 text-emerald-400 relative z-10" strokeWidth={1.5} />
-                    </motion.div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-                        <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">WARRANTY ACTIVE</span>
-                      </div>
-                      <div className="text-2xl font-bold text-white mb-1">
-                        {yearsRemaining > 0 && `${yearsRemaining} ${yearsRemaining === 1 ? 'Year' : 'Years'}`}
-                        {yearsRemaining > 0 && remainingMonths > 0 && ', '}
-                        {remainingMonths > 0 && `${remainingMonths} ${remainingMonths === 1 ? 'Month' : 'Months'}`}
-                        {yearsRemaining === 0 && remainingMonths === 0 && `${daysRemaining} ${daysRemaining === 1 ? 'Day' : 'Days'}`}
-                        {' left'}
-                      </div>
-                      <p className="text-sm text-emerald-300/70">
-                        Expires {warrantyEndDate?.toLocaleDateString('en-GB', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric'
-                        })}
-                      </p>
+                  <Shield className="text-emerald-400 h-8 w-8 flex-shrink-0" strokeWidth={1.5} />
+                  <div className="flex-1">
+                    <div className="text-xs tracking-widest text-emerald-400 uppercase font-bold mb-1">
+                      WARRANTY ACTIVE
+                    </div>
+                    <div className="text-lg text-white font-medium">
+                      Expires in{' '}
+                      {yearsRemaining > 0 && `${yearsRemaining} ${yearsRemaining === 1 ? 'Year' : 'Years'}`}
+                      {yearsRemaining > 0 && remainingMonths > 0 && ', '}
+                      {remainingMonths > 0 && `${remainingMonths} ${remainingMonths === 1 ? 'Month' : 'Months'}`}
+                      {yearsRemaining === 0 && remainingMonths === 0 && `${daysRemaining} ${daysRemaining === 1 ? 'Day' : 'Days'}`}
                     </div>
                   </div>
                 </motion.div>
@@ -216,6 +202,18 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   <FileText className="w-5 h-5 text-teal-400" />
                   Receipt Breakdown
                 </h4>
+
+                {receipt.emailAlias && (
+                  <div className="mb-4 pb-4 border-b border-white/10">
+                    <div className="flex items-center justify-between text-gray-400">
+                      <span className="flex items-center gap-2">
+                        <Mail className="w-4 h-4" />
+                        Received via
+                      </span>
+                      <span className="text-teal-400 font-mono text-sm">{receipt.emailAlias}</span>
+                    </div>
+                  </div>
+                )}
 
                 {receipt.items && receipt.items.length > 0 && (
                   <div className="space-y-3 mb-4 pb-4 border-b border-white/10">
@@ -256,134 +254,42 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                     <span className="font-bold">Tax Record:</span> This receipt includes all information required for HMRC tax filings and expense claims.
                   </p>
                 </div>
-
-                {receipt.warrantyDate && daysRemaining > 0 && (
-                  <div className="mt-4 p-4 backdrop-blur-md bg-amber-400/10 border border-amber-400/20 rounded-xl">
-                    <div className="flex items-center gap-2">
-                      <Shield className="w-4 h-4 text-amber-400" />
-                      <span className="text-sm font-bold text-amber-400">Warranty expires in {daysRemaining} days</span>
-                      <span className="text-sm text-gray-400">
-                        ({warrantyEndDate?.toLocaleDateString('en-GB', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric'
-                        })})
-                      </span>
-                    </div>
-                  </div>
-                )}
               </motion.div>
 
               {receipt.warrantyDate && warrantyEndDate && daysRemaining > 0 && (
-                <>
-                  <motion.div
-                    initial={{ scale: 0.95, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ delay: 0.1 }}
-                    className="relative"
-                  >
-                    <div className="absolute -inset-4 bg-gradient-to-r from-teal-400/20 to-cyan-400/20 blur-3xl" />
-
-                    <div className="relative backdrop-blur-xl bg-gradient-to-br from-teal-400/10 to-cyan-400/10 border-2 border-teal-400/30 rounded-2xl p-8">
-                      <div className="flex items-start gap-4">
-                        <motion.div
-                          animate={{
-                            rotate: [0, 5, -5, 0],
-                            scale: [1, 1.05, 1],
-                          }}
-                          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                          className="relative"
-                        >
-                          <motion.div
-                            animate={{
-                              scale: [1, 1.3, 1],
-                              opacity: [0.3, 0.6, 0.3]
-                            }}
-                            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                            className="absolute inset-0 blur-xl bg-teal-400/50 rounded-full"
-                          />
-                          <Shield className="w-16 h-16 text-teal-400 relative z-10" strokeWidth={1.5} />
-                        </motion.div>
-
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className="w-3 h-3 bg-teal-400 rounded-full animate-pulse" />
-                            <span className="text-teal-400 font-bold text-lg">Warranty Active</span>
-                          </div>
-                          <div className="text-4xl font-bold text-white mb-2">
-                            {yearsRemaining} {yearsRemaining === 1 ? 'Year' : 'Years'}, {remainingMonths} {remainingMonths === 1 ? 'Month' : 'Months'}
-                          </div>
-                          <p className="text-gray-400">Remaining on manufacturer warranty</p>
-
-                          <div className="mt-4 flex items-center gap-4 text-sm">
-                            <div className="flex items-center gap-2 text-gray-400">
-                              <Calendar className="w-4 h-4" />
-                              <span>Expires: {warrantyEndDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-gray-400">
-                              <Clock className="w-4 h-4" />
-                              <span>{daysRemaining} days left</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-
-                  <motion.div
-                    initial={{ y: 20, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ delay: 0.2 }}
-                    className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6"
-                  >
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <Trash2 className="w-5 h-5 text-red-400" />
-                        <div>
-                          <h4 className="text-lg font-bold text-white">Retention Setting</h4>
-                          <p className="text-sm text-gray-400">When should we delete this receipt?</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <select
-                      value={autoDelete}
-                      onChange={(e) => setAutoDelete(e.target.value)}
-                      className="w-full backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-semibold focus:outline-none focus:border-teal-400/50 transition-colors cursor-pointer hover:bg-white/10"
-                    >
-                      <option value="After Warranty Expires" className="bg-black">After Warranty Expires</option>
-                      <option value="Keep Forever" className="bg-black">Keep Forever</option>
-                      <option value="30 Days" className="bg-black">30 Days</option>
-                      <option value="90 Days" className="bg-black">90 Days</option>
-                      <option value="1 Year" className="bg-black">1 Year</option>
-                    </select>
-
-                    <div className="mt-4 p-4 backdrop-blur-md bg-teal-400/10 border border-teal-400/20 rounded-xl">
-                      <p className="text-sm text-teal-400">
-                        <span className="font-bold">Smart Protection:</span> Emails will be automatically deleted on {warrantyEndDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} to protect your privacy.
-                      </p>
-                    </div>
-                  </motion.div>
-                </>
-              )}
-
-              {receipt.emailAlias && (
                 <motion.div
                   initial={{ y: 20, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.3 }}
+                  transition={{ delay: 0.2 }}
                   className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6"
                 >
-                  <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                    <Mail className="w-5 h-5 text-teal-400" />
-                    Received via
-                  </h4>
-                  <div className="backdrop-blur-md bg-white/5 border border-white/10 rounded-xl px-4 py-3">
-                    <span className="text-teal-400 font-mono text-lg">{receipt.emailAlias}</span>
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <Trash2 className="w-5 h-5 text-red-400" />
+                      <div>
+                        <h4 className="text-lg font-bold text-white">Retention Setting</h4>
+                        <p className="text-sm text-gray-400">When should we delete this receipt?</p>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-sm text-gray-400 mt-3">
-                    This privacy-protected email was used for this transaction
-                  </p>
+
+                  <select
+                    value={autoDelete}
+                    onChange={(e) => setAutoDelete(e.target.value)}
+                    className="w-full backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-semibold focus:outline-none focus:border-teal-400/50 transition-colors cursor-pointer hover:bg-white/10"
+                  >
+                    <option value="After Warranty Expires" className="bg-black">After Warranty Expires</option>
+                    <option value="Keep Forever" className="bg-black">Keep Forever</option>
+                    <option value="30 Days" className="bg-black">30 Days</option>
+                    <option value="90 Days" className="bg-black">90 Days</option>
+                    <option value="1 Year" className="bg-black">1 Year</option>
+                  </select>
+
+                  <div className="mt-4 p-4 backdrop-blur-md bg-teal-400/10 border border-teal-400/20 rounded-xl">
+                    <p className="text-sm text-teal-400">
+                      <span className="font-bold">Smart Protection:</span> Emails will be automatically deleted on {warrantyEndDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} to protect your privacy.
+                    </p>
+                  </div>
                 </motion.div>
               )}
 
