@@ -101,14 +101,15 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         console.log('Processing row:', row);
 
         const currencySymbol = row.currency_symbol || '£';
-        const total = parseFloat(row.total) || 0;
+        const total = parseFloat(row.amount) || parseFloat(row.total) || 0;
+        const merchantName = row.merchant || row.store_name || 'Unknown Merchant';
         const category = row.category || 'Other';
         const isProcessing = row.status === 'processing' || total === 0;
         const tag = isProcessing ? 'Processing' : (category || 'Complete');
 
         return {
           id: row.id,
-          merchant: row.merchant || 'Unknown Merchant',
+          merchant: merchantName,
           merchantIcon: getCategoryIcon(category),
           amount: total,
           subtotal: parseFloat(row.subtotal) || total,
