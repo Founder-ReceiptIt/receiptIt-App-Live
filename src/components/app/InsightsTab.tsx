@@ -6,7 +6,6 @@ import { useAuth } from '../../contexts/AuthContext';
 
 interface Receipt {
   amount: number;
-  total: number;
   category: string;
   date: string;
   currency_symbol: string;
@@ -35,7 +34,7 @@ export function InsightsTab() {
     const fetchReceipts = async () => {
       const { data, error } = await supabase
         .from('receipts')
-        .select('amount, total, category, date, currency_symbol')
+        .select('amount, category, date, currency_symbol')
         .order('date', { ascending: false });
 
       if (!error && data) {
@@ -47,11 +46,14 @@ export function InsightsTab() {
     fetchReceipts();
   }, [user]);
 
-  const totalSpent = receipts.reduce((sum, r) => sum + (parseFloat(r.amount as any) || parseFloat(r.total as any) || 0), 0);
+  // Get currency symbol from first receipt, default to £
+  const currencySymbol = receipts.length > 0 ? (receipts[0].currency_symbol || '£') : '£';
+
+  const totalSpent = receipts.reduce((sum, r) => sum + (parseFloat(r.amount as any) || 0), 0);
 
   const categoryTotals = receipts.reduce((acc, r) => {
     const cat = r.category || 'Other';
-    const amount = parseFloat(r.amount as any) || parseFloat(r.total as any) || 0;
+    const amount = parseFloat(r.amount as any) || 0;
     if (!acc[cat]) {
       acc[cat] = { amount: 0, count: 0 };
     }
@@ -84,7 +86,7 @@ export function InsightsTab() {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       const monthReceipts = receipts.filter(r => r.date.startsWith(monthKey));
-      const amount = monthReceipts.reduce((sum, r) => sum + (parseFloat(r.amount as any) || parseFloat(r.total as any) || 0), 0);
+      const amount = monthReceipts.reduce((sum, r) => sum + (parseFloat(r.amount as any) || 0), 0);
 
       last6Months.push({
         month: monthNames[date.getMonth()],
@@ -101,17 +103,25 @@ export function InsightsTab() {
 
   const insights = [
     {
-      title: 'Top Spending Category',
+      title: 'Total Spent',
+      value: `${currencySymbol}${totalSpent.toFixed(2)}`,
+      detail: `Across ${receipts.length} ${receipts.length === 1 ? 'purchase' : 'purchases'}`,
+      icon: DollarSign,
+      trend: receipts.length > 0 ? `${receipts.length} total` : 'No data',
+      trendUp: true
+    },
+    {
+      title: 'Top Category',
       value: topCategory?.category || 'N/A',
-      detail: `£${topCategory?.amount.toFixed(2) || '0.00'} this period`,
+      detail: topCategory ? `${currencySymbol}${topCategory.amount.toFixed(2)} spent` : 'No data',
       icon: PieChart,
       trend: `${topCategory?.count || 0} purchases`,
       trendUp: true
     },
     {
       title: 'Average Transaction',
-      value: `£${avgTransaction.toFixed(2)}`,
-      detail: `Across ${receipts.length} purchases`,
+      value: `${currencySymbol}${avgTransaction.toFixed(2)}`,
+      detail: receipts.length > 0 ? 'Per purchase' : 'No data yet',
       icon: BarChart3,
       trend: receipts.length > 0 ? `${receipts.length} total` : 'No data',
       trendUp: true
@@ -119,18 +129,10 @@ export function InsightsTab() {
     {
       title: 'Budget Status',
       value: `${budgetPercentage.toFixed(1)}%`,
-      detail: `£${(budgetLimit - totalSpent).toFixed(2)} remaining`,
-      icon: DollarSign,
+      detail: `${currencySymbol}${(budgetLimit - totalSpent).toFixed(2)} remaining`,
+      icon: Calendar,
       trend: totalSpent > budgetLimit ? 'Over budget' : 'On track',
       trendUp: totalSpent <= budgetLimit
-    },
-    {
-      title: 'Monthly Comparison',
-      value: monthlyChange >= 0 ? `+${monthlyChange.toFixed(1)}%` : `${monthlyChange.toFixed(1)}%`,
-      detail: `vs previous month`,
-      icon: Calendar,
-      trend: `£${Math.abs(currentMonthAmount - prevMonthAmount).toFixed(2)}`,
-      trendUp: monthlyChange >= 0
     },
   ];
 
@@ -253,7 +255,7 @@ export function InsightsTab() {
                     >
                       <div className="absolute -top-10 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                         <div className="backdrop-blur-xl bg-black/90 border border-white/20 rounded-lg px-2 py-1 text-xs font-bold text-white whitespace-nowrap">
-                          £{data.amount.toFixed(2)}
+                          {currencySymbol}{data.amount.toFixed(2)}
                         </div>
                       </div>
                     </motion.div>
@@ -301,7 +303,7 @@ export function InsightsTab() {
                     <span className="text-sm text-gray-400">{category.count} {category.count === 1 ? 'purchase' : 'purchases'}</span>
                   </div>
                   <div className="text-right">
-                    <div className="text-lg font-bold text-white">£{category.amount.toFixed(2)}</div>
+                    <div className="text-lg font-bold text-white">{currencySymbol}{category.amount.toFixed(2)}</div>
                     <div className="text-xs text-gray-500">{category.percentage.toFixed(1)}%</div>
                   </div>
                 </div>

@@ -51,8 +51,6 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
         });
 
       if (uploadError) {
-        console.error('Upload error:', uploadError);
-        alert('Upload Failed: ' + (uploadError.message || JSON.stringify(uploadError)));
         setErrorMessage(`Failed to upload file: ${uploadError.message}`);
         setScanState('error');
         return;
@@ -76,27 +74,17 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
           .select();
 
         if (insertError) {
-          console.error('Supabase Error:', insertError);
-          alert('Upload Failed: ' + (insertError.message || JSON.stringify(insertError)));
           setErrorMessage(`Failed to create database record: ${insertError.message}`);
           setScanState('error');
           throw insertError;
         }
 
         if (!insertData || insertData.length === 0) {
-          const noDataError = 'Insert succeeded but no data returned';
-          alert('Database Warning: ' + noDataError);
-          console.error(noDataError);
           setErrorMessage('Failed to verify receipt record creation');
           setScanState('error');
           return;
         }
-
-        console.log('Receipt record created successfully:', insertData[0]);
-        alert('SUCCESS: Database row created with ID: ' + insertData[0].id);
       } catch (err) {
-        console.error('Critical error in database insert:', err);
-        alert('Upload Failed: ' + (err instanceof Error ? err.message : JSON.stringify(err)));
         throw err;
       }
 
@@ -106,8 +94,6 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
         resetScan();
       }, 2000);
     } catch (error) {
-      console.error('Scan error:', error);
-      alert('Upload Failed: ' + (error instanceof Error ? error.message : JSON.stringify(error)));
       setErrorMessage(`An unexpected error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setScanState('error');
     }

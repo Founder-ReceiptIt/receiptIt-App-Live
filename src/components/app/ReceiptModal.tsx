@@ -3,11 +3,12 @@ import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, 
 import { Receipt } from './WalletTab';
 import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { formatDistance } from 'date-fns';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 interface ReceiptModalProps {
-  receipt: any; // Using 'any' to temporarily bypass strict type checks for the snake/camel case mix
+  receipt: Receipt | null;
   onClose: () => void;
   onDelete?: () => void;
 }
@@ -17,35 +18,30 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteMenu, setShowDeleteMenu] = useState(false);
 
-  // --- 1. NORMALIZE DATA (The Critical Fix) ---
-  // We extract the values regardless of whether they are snake_case or camelCase
-  const r_warrantyDate = receipt?.warranty_date || receipt?.warrantyDate;
-  const r_emailAlias = receipt?.email_alias || receipt?.emailAlias;
-  const r_imageUrl = receipt?.image_url || receipt?.imageUrl;
-  const r_merchant = receipt?.merchant || receipt?.store_name || 'Unknown Merchant';
-  const r_amount = receipt?.amount || receipt?.total || 0;
-  const r_currency = receipt?.currency_symbol || receipt?.currencySymbol || '£';
-  const r_cardLast4 = receipt?.card_last_4 || receipt?.cardLast4;
-  const r_category = receipt?.category || receipt?.tag || 'Receipt';
-  const r_vat = receipt?.vat_amount || receipt?.vat || 0;
-
-  // --- LOGIC: DELETE HANDLING ---
+  // --- LOGIC FIX: ROBUST DELETE HANDLING ---
   const handleDelete = async (deleteOption: 'now' | '30days' | 'warranty') => {
     if (!receipt) return;
+
     if (deleteOption === 'now') {
-      if (!confirm(`Delete receipt from ${r_merchant}?`)) return;
+      if (!confirm(`Delete receipt from ${receipt.merchant}?`)) return;
+
       setIsDeleting(true);
       try {
-        const { error } = await supabase.from('receipts').delete().eq('id', receipt.id);
+        const { error } = await supabase
+          .from('receipts')
+          .delete()
+          .eq('id', receipt.id);
+
         if (error) throw error;
         onDelete?.();
         onClose();
       } catch (error) {
         console.error('Error deleting receipt:', error);
-        alert('Failed to delete receipt.');
+        alert('Failed to delete receipt. Please try again.');
         setIsDeleting(false);
       }
     } else {
+      // Placeholder for future logic
       alert(`This receipt will be deleted: ${deleteOption === '30days' ? 'In 30 Days' : 'When Warranty Expires'}`);
       setShowDeleteMenu(false);
     }
@@ -53,23 +49,37 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
 
   if (!receipt) return null;
 
-  // --- LOGIC: DATE & WARRANTY ---
-  const warrantyEndDate = r_warrantyDate ? new Date(r_warrantyDate) : null;
+  // --- LOGIC FIX: BETTER DATE HANDLING ---
+  const warrantyEndDate = receipt.warrantyDate ? new Date(receipt.warrantyDate) : null;
   const today = new Date();
   const isWarrantyActive = warrantyEndDate && warrantyEndDate > today;
   
+  // Calculate specific remaining time for the display
   const daysRemaining = warrantyEndDate ? Math.floor((warrantyEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : 0;
   const yearsRemaining = Math.floor(daysRemaining / 365);
   const monthsRemaining = Math.floor((daysRemaining % 365) / 30);
 
-  // --- LOGIC: DOWNLOAD URL ---
+  // --- LOGIC FIX: CORRECT DOWNLOAD URL (HANDLES LOCAL & PUBLIC) ---
   const getDownloadUrl = () => {
-    if (!r_imageUrl) return null;
-    if (r_imageUrl.startsWith('http')) return r_imageUrl;
-    return `${SUPABASE_URL}/storage/v1/object/public/receipts/${r_imageUrl}`;
+    if (!receipt.imageUrl) return null;
+    if (receipt.imageUrl.startsWith('http')) return receipt.imageUrl;
+    // Fixes the 404 error by prepending the bucket path
+    return `${SUPABASE_URL}/storage/v1/object/public/receipts/${receipt.imageUrl}`;
   };
 
   const downloadUrl = getDownloadUrl();
+
+  const handleDownloadClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (downloadUrl) {
+      console.log('Opening receipt image:', downloadUrl);
+      console.log('Receipt image_url field:', receipt.imageUrl);
+      console.log('Is external URL:', receipt.imageUrl?.startsWith('http'));
+      window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+    } else {
+      console.warn('No download URL available for this receipt');
+    }
+  };
 
   return (
     <AnimatePresence>
@@ -102,17 +112,15 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
               <h2 className="text-2xl font-bold text-white">Receipt Details</h2>
               <div className="flex items-center gap-2">
                 {downloadUrl && (
-                  <motion.a
-                    href={downloadUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <motion.button
+                    onClick={handleDownloadClick}
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.9 }}
                     className="w-10 h-10 rounded-full backdrop-blur-md bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-teal-400 hover:border-teal-400/30 transition-colors"
-                    title="Download Original"
+                    title="View Original Receipt"
                   >
                     <Download className="w-5 h-5" />
-                  </motion.a>
+                  </motion.button>
                 )}
                 <motion.button
                   whileHover={{ scale: 1.1, rotate: 90 }}
@@ -131,14 +139,17 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
               <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6">
                 <div className="flex items-start gap-4 mb-6">
                   <div className="w-16 h-16 flex-shrink-0 rounded-xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 flex items-center justify-center">
-                    <span className="text-2xl font-bold text-teal-400">
-                      {r_merchant.charAt(0)}
-                    </span>
+                    {/* Fallback for icon if missing */}
+                    {receipt.merchantIcon ? (
+                       <receipt.merchantIcon className="w-8 h-8 text-teal-400" strokeWidth={1.5} />
+                    ) : (
+                       <span className="text-2xl font-bold text-teal-400">{receipt.merchant.charAt(0)}</span>
+                    )}
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-2xl font-bold text-white mb-1">{r_merchant}</h3>
+                    <h3 className="text-2xl font-bold text-white mb-1">{receipt.merchant}</h3>
                     <p className="text-gray-400 text-sm">
-                      {receipt.date ? new Date(receipt.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'No Date'}
+                      {new Date(receipt.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
                     </p>
                     {receipt.location && (
                       <div className="flex items-center gap-1.5 mt-2 text-gray-400 text-xs">
@@ -149,32 +160,36 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   </div>
                   <div className="text-right">
                     <div className="text-3xl font-bold text-white">
-                      {r_currency}{Number(r_amount).toFixed(2)}
+                      {receipt.currencySymbol || '£'}{receipt.amount.toFixed(2)}
                     </div>
                   </div>
                 </div>
 
                 {receipt.summary && (
-                  <div className="mb-4 p-3 bg-white/5 rounded-lg">
-                    <p className="text-teal-400 font-semibold text-sm">{receipt.summary}</p>
+                  <div className="mb-4 p-4 bg-gradient-to-r from-teal-400/5 to-cyan-400/5 border border-teal-400/20 rounded-xl">
+                    <p className="text-teal-400 font-medium text-sm leading-relaxed">{receipt.summary}</p>
                   </div>
                 )}
 
                 <div className="flex items-center gap-2 flex-wrap">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md bg-white/5 border-white/10 text-gray-400">
+                  <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md ${receipt.tagColor || 'bg-white/5 border-white/10 text-gray-400'}`}>
                     <Tag className="w-4 h-4" />
-                    {r_category}
+                    {receipt.category || 'Receipt'}
                   </div>
-                  {r_cardLast4 && (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md text-gray-400 bg-white/5 border-white/10">
+                    <FileText className="w-3.5 h-3.5" />
+                    {receipt.referenceNumber}
+                  </div>
+                  {receipt.cardLast4 && (
                     <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md text-gray-400 bg-white/5 border-white/10">
                       <CreditCard className="w-4 h-4" />
-                      Card **** {r_cardLast4}
+                      **** {receipt.cardLast4}
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* --- WARRANTY SECTION (FIXED VISIBILITY) --- */}
+              {/* --- WARRANTY SECTION (Animated & Glowing) --- */}
               {isWarrantyActive && (
                 <motion.div
                   initial={{ scale: 0.95, opacity: 0 }}
@@ -194,21 +209,23 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                       </motion.div>
 
                       <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2 mb-2">
                           <div className="w-2 h-2 bg-teal-400 rounded-full animate-pulse" />
                           <span className="text-teal-400 font-bold text-xs uppercase tracking-widest">Warranty Active</span>
                         </div>
-                        <div className="text-2xl font-bold text-white">
-                          Expires in {yearsRemaining > 0 ? `${yearsRemaining} Yr ` : ''}{monthsRemaining} Mo
+                        <div className="text-3xl font-bold text-white mb-2">
+                          {yearsRemaining > 0 && <span>{yearsRemaining} {yearsRemaining === 1 ? 'Year' : 'Years'}{monthsRemaining > 0 ? ', ' : ''}</span>}
+                          {monthsRemaining > 0 && <span>{monthsRemaining} {monthsRemaining === 1 ? 'Month' : 'Months'}</span>}
+                          {yearsRemaining === 0 && monthsRemaining === 0 && <span>{daysRemaining} {daysRemaining === 1 ? 'Day' : 'Days'}</span>}
                         </div>
-                        <div className="mt-2 flex items-center gap-4 text-xs text-gray-400">
-                           <div className="flex items-center gap-1">
-                              <Calendar className="w-3 h-3" />
-                              {warrantyEndDate?.toLocaleDateString()}
+                        <div className="flex items-center gap-4 text-sm text-gray-400">
+                           <div className="flex items-center gap-1.5">
+                              <Calendar className="w-4 h-4" />
+                              <span>{warrantyEndDate?.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                            </div>
-                           <div className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              {daysRemaining} days left
+                           <div className="flex items-center gap-1.5">
+                              <Clock className="w-4 h-4" />
+                              <span>{daysRemaining} days remaining</span>
                            </div>
                         </div>
                       </div>
@@ -229,43 +246,58 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   Receipt Breakdown
                 </h4>
 
-                {/* ALIAS FIELD (FIXED VISIBILITY) */}
-                {r_emailAlias && (
-                   <div className="flex justify-between items-center py-3 border-b border-white/10 mb-3">
-                     <div className="flex items-center gap-2 text-gray-400 text-sm">
-                        <Mail className="w-4 h-4" />
-                        Received via
+                {receipt.emailAlias && (
+                   <div className="mb-4 pb-4 border-b border-white/10">
+                     <div className="flex items-center justify-between gap-4">
+                       <div className="flex items-center gap-2 text-gray-400">
+                          <Mail className="w-4 h-4" />
+                          <span className="text-sm font-medium">Received via</span>
+                       </div>
+                       <span className="text-teal-400 font-mono text-sm font-semibold">{receipt.emailAlias}</span>
                      </div>
-                     <span className="text-teal-400 font-mono text-sm">{r_emailAlias}</span>
                    </div>
+                )}
+
+                {receipt.items && receipt.items.length > 0 && (
+                  <div className="mb-4">
+                    <h5 className="text-sm font-bold text-gray-400 mb-3 uppercase tracking-wide">Items Purchased</h5>
+                    <div className="space-y-3">
+                      {receipt.items.map((item, index) => (
+                        <div key={index} className="flex items-start justify-between gap-4 p-3 bg-white/5 rounded-lg">
+                          <div className="flex-1">
+                            <div className="text-white font-semibold">{item.name}</div>
+                            <div className="text-xs text-gray-400 mt-0.5">Quantity: {item.quantity}</div>
+                          </div>
+                          <div className="text-white font-bold">
+                            {receipt.currencySymbol || '£'}{item.price.toFixed(2)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="h-px bg-white/10 my-4" />
+                  </div>
                 )}
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-gray-400">
                     <span>Subtotal</span>
-                    <span>{r_currency}{((Number(r_amount) || 0) - (Number(r_vat) || 0)).toFixed(2)}</span>
+                    <span>{receipt.currencySymbol || '£'}{((receipt.amount || 0) - (receipt.vat || 0)).toFixed(2)}</span>
                   </div>
-                  {Number(r_vat) > 0 && (
+                  {receipt.vat > 0 && (
                     <div className="flex items-center justify-between text-gray-400">
-                      <span>VAT</span>
-                      <span>{r_currency}{Number(r_vat).toFixed(2)}</span>
+                      <span>VAT ({receipt.vatRate || 20}%)</span>
+                      <span>{receipt.currencySymbol || '£'}{receipt.vat.toFixed(2)}</span>
                     </div>
                   )}
                   <div className="h-px bg-white/10 my-3" />
                   <div className="flex items-center justify-between text-white font-bold text-lg">
                     <span>Total</span>
-                    <span>{r_currency}{Number(r_amount).toFixed(2)}</span>
+                    <span>{receipt.currencySymbol || '£'}{receipt.amount.toFixed(2)}</span>
                   </div>
                 </div>
 
-                <div className="mt-4 p-4 backdrop-blur-md bg-blue-400/10 border border-blue-400/20 rounded-xl">
-                  <p className="text-sm text-blue-400">
-                    <span className="font-bold">Tax Record:</span> Included in HMRC tax filings.
-                  </p>
-                </div>
               </motion.div>
 
-              {/* --- ACTION BUTTONS --- */}
               <motion.div
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
@@ -277,27 +309,44 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setShowDeleteMenu(!showDeleteMenu)}
                   disabled={isDeleting}
-                  className="w-full flex items-center justify-center gap-3 py-4 rounded-xl font-bold transition-all backdrop-blur-md border bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-white"
+                  className="w-full flex items-center justify-center gap-3 py-4 rounded-xl font-bold transition-all backdrop-blur-md border bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-white hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <MoreVertical className="w-5 h-5" />
-                  <span>Manage Receipt</span>
+                  {isDeleting ? (
+                    <>
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                      >
+                        <Clock className="w-5 h-5" />
+                      </motion.div>
+                      <span>Deleting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <MoreVertical className="w-5 h-5" />
+                      <span>Manage Receipt</span>
+                    </>
+                  )}
                 </motion.button>
 
                 {showDeleteMenu && (
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="absolute bottom-full left-0 right-0 mb-2 backdrop-blur-xl bg-black/90 border border-white/10 rounded-xl overflow-hidden shadow-lg z-20"
+                    className="absolute bottom-full left-0 right-0 mb-2 backdrop-blur-xl bg-black/95 border border-white/10 rounded-xl overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.5)] z-20"
                   >
                     <button
                       onClick={() => handleDelete('now')}
-                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-500/10 transition-colors text-left text-red-400 border-b border-white/10"
+                      className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-red-500/10 transition-colors text-left text-red-400 hover:text-red-300 border-b border-white/10 group"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
                       <span className="font-semibold">Delete Now</span>
                     </button>
-                    <button onClick={() => handleDelete('warranty')} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 text-gray-400">
-                      <Shield className="w-4 h-4" />
+                    <button
+                      onClick={() => handleDelete('warranty')}
+                      className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-white/5 transition-colors text-gray-400 hover:text-white group"
+                    >
+                      <Shield className="w-4 h-4 group-hover:scale-110 transition-transform" />
                       <span className="font-semibold">Delete when Warranty Expires</span>
                     </button>
                   </motion.div>

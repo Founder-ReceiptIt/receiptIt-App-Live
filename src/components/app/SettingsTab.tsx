@@ -51,11 +51,37 @@ export function SettingsTab() {
     fetchUserData();
   }, [user]);
 
-  const handleExport = (format: 'csv' | 'xero') => {
-    const message = format === 'csv'
-      ? 'Downloading CSV export...'
-      : 'Preparing Xero-compatible export...';
-    alert(message);
+  const handleExport = async (format: 'csv' | 'xero') => {
+    if (!user) return;
+
+    const { data: receipts, error } = await supabase
+      .from('receipts')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('date', { ascending: false });
+
+    if (error || !receipts) return;
+
+    if (format === 'csv') {
+      const headers = ['Date', 'Merchant', 'Amount', 'Currency', 'Category', 'Reference'];
+      const rows = receipts.map(r => [
+        r.date,
+        r.merchant,
+        r.amount,
+        r.currency,
+        r.category || '',
+        r.reference_number || ''
+      ]);
+
+      const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `receipts-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
   };
 
   const handleSignOut = async () => {

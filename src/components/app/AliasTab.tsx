@@ -25,7 +25,6 @@ export function AliasTab() {
         .maybeSingle();
 
       if (error) {
-        console.error('Error fetching profile:', error);
         setLoading(false);
         return;
       }

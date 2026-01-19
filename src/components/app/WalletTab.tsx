@@ -90,16 +90,11 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         .order('date', { ascending: false });
 
       if (error) {
-        console.error('Error fetching receipts:', error);
         setLoading(false);
         return;
       }
 
-      console.log('Raw data from Supabase:', data);
-      console.log('Number of rows fetched:', data?.length || 0);
-
       const formattedReceipts: Receipt[] = (data || []).map((row) => {
-        console.log('Processing row:', row);
 
         const currencySymbol = row.currency_symbol || '£';
         const total = parseFloat(row.amount) || parseFloat(row.total) || 0;
@@ -139,7 +134,6 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         };
       });
 
-      console.log('Formatted receipts:', formattedReceipts);
       setReceipts(formattedReceipts);
       setLoading(false);
     };
@@ -410,7 +404,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                   isProcessing
                     ? 'bg-teal-400/5 border-teal-400/30 cursor-default'
                     : hasActiveWarranty
-                    ? 'bg-white/5 border-amber-400/40 hover:bg-white/10 hover:border-amber-400/60 shadow-[0_0_20px_rgba(251,191,36,0.15)]'
+                    ? 'bg-gradient-to-br from-emerald-900/10 to-teal-900/5 border-emerald-500/50 hover:bg-gradient-to-br hover:from-emerald-900/15 hover:to-teal-900/10 hover:border-emerald-400/60 shadow-[0_0_20px_rgba(16,185,129,0.2)]'
                     : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-teal-400/30'
                 }`}
               >
@@ -433,7 +427,10 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                     <div className="flex items-center gap-2">
                       <p className="text-sm text-gray-400">{new Date(receipt.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                       {hasActiveWarranty && !isProcessing && (
-                        <Shield className="w-3.5 h-3.5 text-amber-400" strokeWidth={2} />
+                        <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-400/10 border border-emerald-400/30 rounded-full">
+                          <Shield className="w-3 h-3 text-emerald-400" strokeWidth={2} />
+                          <span className="text-emerald-400 text-xs font-bold">Active</span>
+                        </div>
                       )}
                     </div>
                   </div>
