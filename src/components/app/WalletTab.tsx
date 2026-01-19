@@ -304,42 +304,31 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         </div>
 
         {warrantyReceipts.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="mb-6"
+          <div
+            onClick={() => setWarrantyFilterActive(!warrantyFilterActive)}
+            className={`w-full p-4 rounded-xl border cursor-pointer transition-all mb-8 ${
+              warrantyFilterActive
+                ? 'bg-emerald-900/30 border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                : 'bg-emerald-950/30 border-emerald-500/30 hover:border-emerald-500/50'
+            }`}
           >
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setWarrantyFilterActive(!warrantyFilterActive)}
-              className={`w-full backdrop-blur-xl border rounded-xl p-4 transition-all ${
-                warrantyFilterActive
-                  ? 'bg-emerald-900/30 border-emerald-400/50 shadow-[0_0_30px_rgba(16,185,129,0.2)]'
-                  : 'bg-emerald-950/30 border-emerald-500/30 hover:border-emerald-500/50'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <Shield className="w-6 h-6 text-emerald-400" />
-                <div className="flex-1 text-left">
-                  <h3 className="text-white font-bold text-lg">{warrantyReceipts.length} Active {warrantyReceipts.length === 1 ? 'Warranty' : 'Warranties'}</h3>
-                  <p className="text-xs text-gray-400">
-                    Protected items in all folders
-                  </p>
-                </div>
-                {warrantyFilterActive && (
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    className="px-3 py-1 bg-emerald-400/20 border border-emerald-400/40 rounded-full text-xs font-bold text-emerald-400"
-                  >
-                    Active
-                  </motion.div>
-                )}
+            <div className="flex items-center gap-4">
+              <Shield className="h-8 w-8 text-emerald-400" />
+              <div>
+                <h3 className="text-lg font-bold text-white">
+                  {warrantyReceipts.length} Active {warrantyReceipts.length === 1 ? 'Warranty' : 'Warranties'}
+                </h3>
+                <p className="text-emerald-400/80 text-sm">
+                  Protected items in all folders
+                </p>
               </div>
-            </motion.button>
-          </motion.div>
+              {warrantyFilterActive && (
+                <span className="ml-auto px-3 py-1 bg-emerald-500/20 text-emerald-400 text-xs rounded-full border border-emerald-500/30">
+                  Active Filter
+                </span>
+              )}
+            </div>
+          </div>
         )}
 
         <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4 mb-6">

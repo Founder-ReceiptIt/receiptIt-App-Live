@@ -170,26 +170,21 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
               </div>
 
               {receipt.warrantyDate && daysRemaining > 0 && (
-                <motion.div
-                  initial={{ scale: 0.98, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ delay: 0.1 }}
-                  className="w-full p-4 rounded-xl mb-6 flex items-center gap-4 bg-emerald-900/20 border border-emerald-500/50"
-                >
-                  <Shield className="text-emerald-400 h-8 w-8 flex-shrink-0" strokeWidth={1.5} />
-                  <div className="flex-1">
-                    <div className="text-xs tracking-widest text-emerald-400 uppercase font-bold mb-1">
-                      WARRANTY ACTIVE
-                    </div>
-                    <div className="text-lg text-white font-medium">
+                <div className="w-full p-4 rounded-xl mb-6 flex items-center gap-4 bg-emerald-900/20 border border-emerald-500/50 shadow-lg">
+                  <Shield className="h-8 w-8 text-emerald-400 shrink-0" />
+                  <div className="flex flex-col">
+                    <span className="text-xs tracking-[0.2em] text-emerald-400 uppercase font-bold">
+                      Warranty Active
+                    </span>
+                    <span className="text-lg text-white font-medium">
                       Expires in{' '}
                       {yearsRemaining > 0 && `${yearsRemaining} ${yearsRemaining === 1 ? 'Year' : 'Years'}`}
                       {yearsRemaining > 0 && remainingMonths > 0 && ', '}
                       {remainingMonths > 0 && `${remainingMonths} ${remainingMonths === 1 ? 'Month' : 'Months'}`}
                       {yearsRemaining === 0 && remainingMonths === 0 && `${daysRemaining} ${daysRemaining === 1 ? 'Day' : 'Days'}`}
-                    </div>
+                    </span>
                   </div>
-                </motion.div>
+                </div>
               )}
 
               <motion.div
@@ -204,14 +199,9 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                 </h4>
 
                 {receipt.emailAlias && (
-                  <div className="mb-4 pb-4 border-b border-white/10">
-                    <div className="flex items-center justify-between text-gray-400">
-                      <span className="flex items-center gap-2">
-                        <Mail className="w-4 h-4" />
-                        Received via
-                      </span>
-                      <span className="text-teal-400 font-mono text-sm">{receipt.emailAlias}</span>
-                    </div>
+                  <div className="flex justify-between py-2 border-b border-white/5 mb-4">
+                    <span className="text-gray-400">Received via</span>
+                    <span className="text-white font-medium">{receipt.emailAlias}</span>
                   </div>
                 )}
 
