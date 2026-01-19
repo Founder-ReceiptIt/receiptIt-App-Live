@@ -5,10 +5,10 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface Receipt {
-  amount: number;
-  category: string;
+  amount: number | string;
+  category: string | null;
   date: string;
-  currency_symbol: string;
+  currency_symbol: string | null;
 }
 
 const getTagColor = (category: string): string => {
@@ -34,26 +34,56 @@ export function InsightsTab() {
     const fetchReceipts = async () => {
       const { data, error } = await supabase
         .from('receipts')
-        .select('amount, category, date, currency_symbol')
+        .select('amount, category, date, currency_symbol, status')
         .order('date', { ascending: false });
 
       if (!error && data) {
-        setReceipts(data);
+        const processedReceipts = data
+          .filter(row => row.status !== 'processing')
+          .map(row => ({
+            amount: typeof row.amount === 'string' ? parseFloat(row.amount) : (row.amount || 0),
+            category: row.category || 'Other',
+            date: row.date ? String(row.date) : new Date().toISOString().split('T')[0],
+            currency_symbol: row.currency_symbol || '£',
+          }));
+        setReceipts(processedReceipts);
       }
       setLoading(false);
     };
 
     fetchReceipts();
+
+    const channel = supabase
+      .channel('receipts-insights-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'receipts',
+        },
+        () => {
+          fetchReceipts();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user]);
 
   // Get currency symbol from first receipt, default to £
   const currencySymbol = receipts.length > 0 ? (receipts[0].currency_symbol || '£') : '£';
 
-  const totalSpent = receipts.reduce((sum, r) => sum + (parseFloat(r.amount as any) || 0), 0);
+  const totalSpent = receipts.reduce((sum, r) => {
+    const amount = typeof r.amount === 'number' ? r.amount : parseFloat(String(r.amount)) || 0;
+    return sum + amount;
+  }, 0);
 
   const categoryTotals = receipts.reduce((acc, r) => {
     const cat = r.category || 'Other';
-    const amount = parseFloat(r.amount as any) || 0;
+    const amount = typeof r.amount === 'number' ? r.amount : parseFloat(String(r.amount)) || 0;
     if (!acc[cat]) {
       acc[cat] = { amount: 0, count: 0 };
     }
@@ -85,8 +115,14 @@ export function InsightsTab() {
     for (let i = 5; i >= 0; i--) {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      const monthReceipts = receipts.filter(r => r.date.startsWith(monthKey));
-      const amount = monthReceipts.reduce((sum, r) => sum + (parseFloat(r.amount as any) || 0), 0);
+      const monthReceipts = receipts.filter(r => {
+        const dateStr = String(r.date);
+        return dateStr.startsWith(monthKey);
+      });
+      const amount = monthReceipts.reduce((sum, r) => {
+        const amt = typeof r.amount === 'number' ? r.amount : parseFloat(String(r.amount)) || 0;
+        return sum + amt;
+      }, 0);
 
       last6Months.push({
         month: monthNames[date.getMonth()],
