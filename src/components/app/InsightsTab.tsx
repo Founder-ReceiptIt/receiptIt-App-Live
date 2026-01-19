@@ -43,6 +43,12 @@ export function InsightsTab() {
 
       if (error) {
         console.error('[InsightsTab] Query error:', error);
+        console.error('[InsightsTab] Error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+        });
         setLoading(false);
         return;
       }
