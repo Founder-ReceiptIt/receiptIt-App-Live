@@ -190,10 +190,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
 
   const workReceipts = receipts.filter(r => r.folder === 'work');
   const personalReceipts = receipts.filter(r => r.folder === 'personal');
-  const warrantyReceipts = receipts.filter(r => {
-    if (!r.warrantyDate) return false;
-    return new Date(r.warrantyDate) > new Date();
-  });
+  const warrantyReceipts = receipts.filter(r => r.hasWarranty);
 
   return (
     <div className="pb-32 px-6 pt-8 max-w-7xl mx-auto">
@@ -304,31 +301,38 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         </div>
 
         {warrantyReceipts.length > 0 && (
-          <div
+          <motion.button
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             onClick={() => setWarrantyFilterActive(!warrantyFilterActive)}
-            className={`w-full p-4 rounded-xl border cursor-pointer transition-all mb-8 ${
+            className={`w-full backdrop-blur-xl border rounded-xl p-4 mb-6 transition-all ${
               warrantyFilterActive
-                ? 'bg-emerald-900/30 border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
-                : 'bg-emerald-950/30 border-emerald-500/30 hover:border-emerald-500/50'
+                ? 'bg-gradient-to-r from-emerald-900/30 to-teal-900/25 border-emerald-500/60 shadow-[0_0_30px_rgba(16,185,129,0.25)]'
+                : 'bg-gradient-to-r from-emerald-900/20 to-teal-900/15 border-emerald-500/40 hover:border-emerald-500/60'
             }`}
           >
-            <div className="flex items-center gap-4">
-              <Shield className="h-8 w-8 text-emerald-400" />
-              <div>
-                <h3 className="text-lg font-bold text-white">
-                  {warrantyReceipts.length} Active {warrantyReceipts.length === 1 ? 'Warranty' : 'Warranties'}
-                </h3>
-                <p className="text-emerald-400/80 text-sm">
-                  Protected items in all folders
+            <div className="flex items-center gap-3">
+              <Shield className={`w-6 h-6 ${warrantyFilterActive ? 'text-emerald-400' : 'text-emerald-400'}`} />
+              <div className="flex-1 text-left">
+                <h3 className="text-white font-bold">{warrantyReceipts.length} Active {warrantyReceipts.length === 1 ? 'Warranty' : 'Warranties'}</h3>
+                <p className="text-sm text-gray-400">
+                  {warrantyFilterActive ? 'Showing warranty items only' : 'Click to filter warranty items'}
                 </p>
               </div>
               {warrantyFilterActive && (
-                <span className="ml-auto px-3 py-1 bg-emerald-500/20 text-emerald-400 text-xs rounded-full border border-emerald-500/30">
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="px-3 py-1 bg-emerald-400/20 border border-emerald-400/40 rounded-full text-xs font-bold text-emerald-400"
+                >
                   Active Filter
-                </span>
+                </motion.div>
               )}
             </div>
-          </div>
+          </motion.button>
         )}
 
         <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4 mb-6">

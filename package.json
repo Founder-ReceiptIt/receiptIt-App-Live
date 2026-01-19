@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
-    "date-fns": "^4.1.0",
     "firebase": "^12.7.0",
     "framer-motion": "^12.23.26",
     "lucide-react": "^0.344.0",

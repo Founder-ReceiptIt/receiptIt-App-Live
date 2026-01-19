@@ -3,7 +3,8 @@ import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, 
 import { Receipt } from './WalletTab';
 import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { formatDistanceToNow } from 'date-fns';
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 interface ReceiptModalProps {
   receipt: Receipt | null;
@@ -58,6 +59,17 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const yearsRemaining = Math.floor(monthsRemaining / 12);
   const remainingMonths = monthsRemaining % 12;
 
+  // Build download URL
+  const getDownloadUrl = () => {
+    if (!receipt.imageUrl) return null;
+    if (receipt.imageUrl.startsWith('http')) {
+      return receipt.imageUrl;
+    }
+    return `${SUPABASE_URL}/storage/v1/object/public/receipts/${receipt.imageUrl}`;
+  };
+
+  const downloadUrl = getDownloadUrl();
+
   return (
     <AnimatePresence>
       <motion.div
@@ -86,24 +98,18 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
             <div className="p-6 border-b border-white/10 flex items-center justify-between">
               <h2 className="text-2xl font-bold text-white">Receipt Details</h2>
               <div className="flex items-center gap-2">
-                {(receipt.imageUrl || receipt.storagePath) && (
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => {
-                      let url = receipt.imageUrl || receipt.storagePath;
-                      if (url) {
-                        if (!url.startsWith('http')) {
-                          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-                          url = `${supabaseUrl}/storage/v1/object/public/${url}`;
-                        }
-                        window.open(url, '_blank', 'noopener,noreferrer');
-                      }
-                    }}
+                {downloadUrl && (
+                  <motion.a
+                    href={downloadUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
                     className="w-10 h-10 rounded-full backdrop-blur-md bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-teal-400 hover:border-teal-400/30 transition-colors"
+                    title="Download Original"
                   >
                     <Download className="w-5 h-5" />
-                  </motion.button>
+                  </motion.a>
                 )}
                 <motion.button
                   whileHover={{ scale: 1.1, rotate: 90 }}
@@ -170,21 +176,20 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
               </div>
 
               {receipt.warrantyDate && daysRemaining > 0 && (
-                <div className="w-full p-4 rounded-xl mb-6 flex items-center gap-4 bg-emerald-900/20 border border-emerald-500/50 shadow-lg">
-                  <Shield className="h-8 w-8 text-emerald-400 shrink-0" />
-                  <div className="flex flex-col">
-                    <span className="text-xs tracking-[0.2em] text-emerald-400 uppercase font-bold">
-                      Warranty Active
-                    </span>
-                    <span className="text-lg text-white font-medium">
-                      Expires in{' '}
-                      {yearsRemaining > 0 && `${yearsRemaining} ${yearsRemaining === 1 ? 'Year' : 'Years'}`}
-                      {yearsRemaining > 0 && remainingMonths > 0 && ', '}
-                      {remainingMonths > 0 && `${remainingMonths} ${remainingMonths === 1 ? 'Month' : 'Months'}`}
-                      {yearsRemaining === 0 && remainingMonths === 0 && `${daysRemaining} ${daysRemaining === 1 ? 'Day' : 'Days'}`}
-                    </span>
+                <motion.div
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.1 }}
+                  className="w-full p-4 rounded-xl mb-6 flex items-center gap-4 backdrop-blur-xl bg-emerald-900/20 border border-emerald-500/50"
+                >
+                  <Shield className="h-8 w-8 text-emerald-400 flex-shrink-0" strokeWidth={2} />
+                  <div className="flex-1">
+                    <p className="text-emerald-400 font-bold text-xs uppercase tracking-wide mb-1">WARRANTY ACTIVE</p>
+                    <p className="text-white font-semibold">
+                      Expires in {yearsRemaining} {yearsRemaining === 1 ? 'Year' : 'Years'}, {remainingMonths} {remainingMonths === 1 ? 'Month' : 'Months'}
+                    </p>
                   </div>
-                </div>
+                </motion.div>
               )}
 
               <motion.div
@@ -199,9 +204,11 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                 </h4>
 
                 {receipt.emailAlias && (
-                  <div className="flex justify-between py-2 border-b border-white/5 mb-4">
-                    <span className="text-gray-400">Received via</span>
-                    <span className="text-white font-medium">{receipt.emailAlias}</span>
+                  <div className="mb-4 pb-4 border-b border-white/10">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400 text-sm">Received via</span>
+                      <span className="text-teal-400 font-mono text-sm font-semibold">{receipt.emailAlias}</span>
+                    </div>
                   </div>
                 )}
 
@@ -247,40 +254,96 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
               </motion.div>
 
               {receipt.warrantyDate && warrantyEndDate && daysRemaining > 0 && (
-                <motion.div
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.2 }}
-                  className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6"
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <Trash2 className="w-5 h-5 text-red-400" />
-                      <div>
-                        <h4 className="text-lg font-bold text-white">Retention Setting</h4>
-                        <p className="text-sm text-gray-400">When should we delete this receipt?</p>
+                <>
+                  <motion.div
+                    initial={{ scale: 0.95, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.1 }}
+                    className="relative"
+                  >
+                    <div className="absolute -inset-4 bg-gradient-to-r from-teal-400/20 to-cyan-400/20 blur-3xl" />
+
+                    <div className="relative backdrop-blur-xl bg-gradient-to-br from-teal-400/10 to-cyan-400/10 border-2 border-teal-400/30 rounded-2xl p-8">
+                      <div className="flex items-start gap-4">
+                        <motion.div
+                          animate={{
+                            rotate: [0, 5, -5, 0],
+                            scale: [1, 1.05, 1],
+                          }}
+                          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                          className="relative"
+                        >
+                          <motion.div
+                            animate={{
+                              scale: [1, 1.3, 1],
+                              opacity: [0.3, 0.6, 0.3]
+                            }}
+                            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                            className="absolute inset-0 blur-xl bg-teal-400/50 rounded-full"
+                          />
+                          <Shield className="w-16 h-16 text-teal-400 relative z-10" strokeWidth={1.5} />
+                        </motion.div>
+
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="w-3 h-3 bg-teal-400 rounded-full animate-pulse" />
+                            <span className="text-teal-400 font-bold text-lg">Warranty Active</span>
+                          </div>
+                          <div className="text-4xl font-bold text-white mb-2">
+                            {yearsRemaining} {yearsRemaining === 1 ? 'Year' : 'Years'}, {remainingMonths} {remainingMonths === 1 ? 'Month' : 'Months'}
+                          </div>
+                          <p className="text-gray-400">Remaining on manufacturer warranty</p>
+
+                          <div className="mt-4 flex items-center gap-4 text-sm">
+                            <div className="flex items-center gap-2 text-gray-400">
+                              <Calendar className="w-4 h-4" />
+                              <span>Expires: {warrantyEndDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-gray-400">
+                              <Clock className="w-4 h-4" />
+                              <span>{daysRemaining} days left</span>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  </motion.div>
 
-                  <select
-                    value={autoDelete}
-                    onChange={(e) => setAutoDelete(e.target.value)}
-                    className="w-full backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-semibold focus:outline-none focus:border-teal-400/50 transition-colors cursor-pointer hover:bg-white/10"
+                  <motion.div
+                    initial={{ y: 20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 0.2 }}
+                    className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6"
                   >
-                    <option value="After Warranty Expires" className="bg-black">After Warranty Expires</option>
-                    <option value="Keep Forever" className="bg-black">Keep Forever</option>
-                    <option value="30 Days" className="bg-black">30 Days</option>
-                    <option value="90 Days" className="bg-black">90 Days</option>
-                    <option value="1 Year" className="bg-black">1 Year</option>
-                  </select>
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <Trash2 className="w-5 h-5 text-red-400" />
+                        <div>
+                          <h4 className="text-lg font-bold text-white">Retention Setting</h4>
+                          <p className="text-sm text-gray-400">When should we delete this receipt?</p>
+                        </div>
+                      </div>
+                    </div>
 
-                  <div className="mt-4 p-4 backdrop-blur-md bg-teal-400/10 border border-teal-400/20 rounded-xl">
-                    <p className="text-sm text-teal-400">
-                      <span className="font-bold">Smart Protection:</span> Emails will be automatically deleted on {warrantyEndDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} to protect your privacy.
-                    </p>
-                  </div>
-                </motion.div>
+                    <select
+                      value={autoDelete}
+                      onChange={(e) => setAutoDelete(e.target.value)}
+                      className="w-full backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white font-semibold focus:outline-none focus:border-teal-400/50 transition-colors cursor-pointer hover:bg-white/10"
+                    >
+                      <option value="After Warranty Expires" className="bg-black">After Warranty Expires</option>
+                      <option value="Keep Forever" className="bg-black">Keep Forever</option>
+                      <option value="30 Days" className="bg-black">30 Days</option>
+                      <option value="90 Days" className="bg-black">90 Days</option>
+                      <option value="1 Year" className="bg-black">1 Year</option>
+                    </select>
+
+                    <div className="mt-4 p-4 backdrop-blur-md bg-teal-400/10 border border-teal-400/20 rounded-xl">
+                      <p className="text-sm text-teal-400">
+                        <span className="font-bold">Smart Protection:</span> Emails will be automatically deleted on {warrantyEndDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} to protect your privacy.
+                      </p>
+                    </div>
+                  </motion.div>
+                </>
               )}
 
               <motion.div
