@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Download, MoreVertical, Mail } from 'lucide-react';
 import { Receipt } from './WalletTab';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { formatDistance } from 'date-fns';
 
@@ -17,6 +17,10 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const [autoDelete, setAutoDelete] = useState('After Warranty Expires');
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteMenu, setShowDeleteMenu] = useState(false);
+
+  useEffect(() => {
+    setShowDeleteMenu(false);
+  }, [receipt]);
 
   // --- LOGIC FIX: ROBUST DELETE HANDLING ---
   const handleDelete = async (deleteOption: 'now' | '30days' | 'warranty') => {
@@ -59,12 +63,17 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const yearsRemaining = Math.floor(daysRemaining / 365);
   const monthsRemaining = Math.floor((daysRemaining % 365) / 30);
 
-  // --- LOGIC FIX: CORRECT DOWNLOAD URL (HANDLES LOCAL & PUBLIC) ---
   const getDownloadUrl = () => {
-    if (!receipt.imageUrl) return null;
-    if (receipt.imageUrl.startsWith('http')) return receipt.imageUrl;
-    // Fixes the 404 error by prepending the bucket path
-    return `${SUPABASE_URL}/storage/v1/object/public/receipts/${receipt.imageUrl}`;
+    if (receipt.imageUrl) {
+      if (receipt.imageUrl.startsWith('http')) return receipt.imageUrl;
+      return `${SUPABASE_URL}/storage/v1/object/public/receipts/${receipt.imageUrl}`;
+    }
+
+    if (receipt.storagePath) {
+      return `${SUPABASE_URL}/storage/v1/object/public/receipts/${receipt.storagePath}`;
+    }
+
+    return null;
   };
 
   const downloadUrl = getDownloadUrl();

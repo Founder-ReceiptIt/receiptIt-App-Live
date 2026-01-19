@@ -58,6 +58,12 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
       const storagePath = uploadData.path;
 
+      const { data: publicUrlData } = supabase.storage
+        .from('receipts')
+        .getPublicUrl(storagePath);
+
+      const publicUrl = publicUrlData.publicUrl;
+
       setScanState('processing');
 
       try {
@@ -66,6 +72,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
           .insert({
             user_id: user.id,
             storage_path: storagePath,
+            image_url: publicUrl,
             status: 'processing',
             merchant: 'Analyzing...',
             amount: 0,

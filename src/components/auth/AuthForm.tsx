@@ -128,9 +128,11 @@ export function AuthForm() {
                   type="email"
                   value={email}
                   onChange={(e) => {
-                    setEmail(e.target.value);
+                    const newEmail = e.target.value;
+                    setEmail(newEmail);
                     if (isSignUp && !aliasUsername) {
-                      setAliasUsername(generateAliasUsername());
+                      const username = newEmail.split('@')[0] || 'user';
+                      setAliasUsername(username.toLowerCase().replace(/[^a-z0-9-]/g, ''));
                     }
                   }}
                   placeholder="you@example.com"
