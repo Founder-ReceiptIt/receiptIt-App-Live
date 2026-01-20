@@ -109,9 +109,9 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
       setScanState('success');
       setTimeout(() => {
-        onNavigateToWallet();
         resetScan();
-      }, 2000);
+        onNavigateToWallet();
+      }, 2500);
     } catch (error) {
       setErrorMessage(`An unexpected error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setScanState('error');

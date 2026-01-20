@@ -243,6 +243,31 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                 </motion.div>
               )}
 
+              {/* --- EXPIRED WARRANTY SECTION --- */}
+              {!isWarrantyActive && warrantyEndDate && (
+                <motion.div
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.1 }}
+                  className="backdrop-blur-xl bg-gradient-to-br from-red-400/10 to-red-900/10 border-2 border-red-400/30 rounded-2xl p-6"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 flex-shrink-0 rounded-xl bg-red-400/10 border border-red-400/30 flex items-center justify-center">
+                      <Shield className="w-8 h-8 text-red-400" strokeWidth={1.5} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-red-400 font-bold text-xs uppercase tracking-widest">Warranty Expired</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-gray-400">
+                        <Calendar className="w-4 h-4" />
+                        <span>Expired on {warrantyEndDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
               {/* --- BREAKDOWN SECTION --- */}
               <motion.div
                 initial={{ y: 20, opacity: 0 }}

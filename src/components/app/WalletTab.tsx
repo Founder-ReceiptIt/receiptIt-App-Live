@@ -155,13 +155,20 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           schema: 'public',
           table: 'receipts',
         },
-        () => {
+        (payload) => {
+          console.log('[WalletTab] Realtime update received:', payload);
           fetchReceipts();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[WalletTab] Subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('[WalletTab] Successfully subscribed to realtime updates');
+        }
+      });
 
     return () => {
+      console.log('[WalletTab] Cleaning up realtime subscription');
       supabase.removeChannel(channel);
     };
   }, [user]);
@@ -190,7 +197,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
 
   const workReceipts = receipts.filter(r => r.folder === 'work');
   const personalReceipts = receipts.filter(r => r.folder === 'personal');
-  const warrantyReceipts = receipts.filter(r => r.hasWarranty);
+  const warrantyReceipts = receipts.filter(r => r.warrantyDate && new Date(r.warrantyDate) > new Date());
 
   return (
     <div className="pb-32 px-6 pt-8 max-w-7xl mx-auto">
@@ -397,6 +404,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             const MerchantIcon = receipt.merchantIcon;
             const isProcessing = receipt.tag === 'Processing';
             const hasActiveWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) > new Date();
+            const hasExpiredWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) <= new Date();
             return (
               <motion.button
                 key={receipt.id}
@@ -436,6 +444,12 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                         <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-400/10 border border-emerald-400/30 rounded-full">
                           <Shield className="w-3 h-3 text-emerald-400" strokeWidth={2} />
                           <span className="text-emerald-400 text-xs font-bold">Active</span>
+                        </div>
+                      )}
+                      {hasExpiredWarranty && !isProcessing && (
+                        <div className="flex items-center gap-1 px-2 py-0.5 bg-red-400/10 border border-red-400/30 rounded-full">
+                          <Shield className="w-3 h-3 text-red-400" strokeWidth={2} />
+                          <span className="text-red-400 text-xs font-bold">Expired</span>
                         </div>
                       )}
                     </div>
