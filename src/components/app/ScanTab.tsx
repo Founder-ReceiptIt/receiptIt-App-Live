@@ -20,6 +20,10 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
   const isScanningRef = useRef(false);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // CRITICAL: Prevent any default browser behavior
+    e.preventDefault();
+    e.stopPropagation();
+
     const file = e.target.files?.[0];
     if (!file || isScanningRef.current) {
       console.log('[ScanTab] File selection blocked - already scanning or no file');
