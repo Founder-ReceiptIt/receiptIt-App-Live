@@ -84,20 +84,22 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
     if (!user) return;
 
     const fetchReceipts = async () => {
-      console.log('[WalletTab] Fetching receipts for user:', user?.id);
+      try {
+        console.log('[WalletTab] Fetching receipts for user:', user?.id);
 
-      const { data, error } = await supabase
-        .from('receipts')
-        .select('*')
-        .order('date', { ascending: false });
+        const { data, error } = await supabase
+          .from('receipts')
+          .select('*')
+          .order('date', { ascending: false });
 
-      console.log('[WalletTab] Query result:', { data, error, dataLength: data?.length });
+        console.log('[WalletTab] Query result:', { data, error, dataLength: data?.length });
 
-      if (error) {
-        console.error('[WalletTab] Query error:', error);
-        setLoading(false);
-        return;
-      }
+        if (error) {
+          console.error('[WalletTab] Query error:', error);
+          setReceipts([]);
+          setLoading(false);
+          return;
+        }
 
       const formattedReceipts: Receipt[] = (data || []).map((row) => {
         console.log('[WalletTab] Processing row:', row);
@@ -140,8 +142,13 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         };
       });
 
-      setReceipts(formattedReceipts);
-      setLoading(false);
+        setReceipts(formattedReceipts);
+        setLoading(false);
+      } catch (error) {
+        console.error('[WalletTab] Unexpected error fetching receipts:', error);
+        setReceipts([]);
+        setLoading(false);
+      }
     };
 
     fetchReceipts();

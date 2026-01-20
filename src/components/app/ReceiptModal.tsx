@@ -31,17 +31,43 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
 
       setIsDeleting(true);
       try {
-        const { error } = await supabase
+        // Step 1: Try to delete storage file if it exists (don't block if this fails)
+        if (receipt.storagePath || receipt.imageUrl) {
+          const storagePath = receipt.storagePath || receipt.imageUrl;
+          if (storagePath && !storagePath.startsWith('http')) {
+            console.log('[Delete] Attempting to delete storage file:', storagePath);
+            const { error: storageError } = await supabase
+              .storage
+              .from('receipts')
+              .remove([storagePath]);
+
+            if (storageError) {
+              console.warn('[Delete] Storage deletion failed (non-critical):', storageError);
+            } else {
+              console.log('[Delete] Storage file deleted successfully');
+            }
+          }
+        }
+
+        // Step 2: Delete database record (this must succeed)
+        console.log('[Delete] Deleting database record:', receipt.id);
+        const { error: dbError } = await supabase
           .from('receipts')
           .delete()
           .eq('id', receipt.id);
 
-        if (error) throw error;
+        if (dbError) {
+          console.error('[Delete] Database deletion failed:', dbError);
+          throw dbError;
+        }
+
+        console.log('[Delete] Receipt deleted successfully');
         onDelete?.();
         onClose();
       } catch (error) {
-        console.error('Error deleting receipt:', error);
+        console.error('[Delete] Error deleting receipt:', error);
         alert('Failed to delete receipt. Please try again.');
+      } finally {
         setIsDeleting(false);
       }
     } else {

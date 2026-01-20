@@ -21,9 +21,12 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      console.log('[ScanTab] File selected:', file.name);
       setSelectedFile(file);
       const url = URL.createObjectURL(file);
       setPreviewUrl(url);
+      // Set uploading state IMMEDIATELY to show modal without delay
+      setScanState('uploading');
       await startScan(file);
     }
   };
@@ -35,7 +38,8 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       return;
     }
 
-    setScanState('uploading');
+    // State is already set to 'uploading' in handleFileSelect for immediate feedback
+    console.log('[ScanTab] Starting upload to storage...');
 
     try {
       const timestamp = Date.now();
@@ -107,8 +111,10 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
         throw err;
       }
 
+      console.log('[ScanTab] Upload successful, showing success message for 2.5 seconds');
       setScanState('success');
       setTimeout(() => {
+        console.log('[ScanTab] Navigating to wallet...');
         resetScan();
         onNavigateToWallet();
       }, 2500);
