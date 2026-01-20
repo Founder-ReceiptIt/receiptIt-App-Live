@@ -19,7 +19,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isScanningRef = useRef(false);
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || isScanningRef.current) {
       console.log('[ScanTab] File selection blocked - already scanning or no file');
@@ -28,20 +28,22 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
     console.log('[ScanTab] File selected:', file.name);
 
-    // Set scanning flag FIRST to prevent any premature navigation
+    // CRITICAL: Block all further interactions immediately
     isScanningRef.current = true;
 
-    // Set state synchronously BEFORE any async operations
+    // Set all state synchronously - this MUST happen before any async code
     setSelectedFile(file);
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
     setScanState('uploading');
 
-    // Small delay to ensure state has rendered before async operations
-    await new Promise(resolve => setTimeout(resolve, 50));
+    // Reset the input immediately to prevent re-triggering
+    e.target.value = '';
 
-    console.log('[ScanTab] Modal should now be visible, starting upload...');
-    await startScan(file);
+    console.log('[ScanTab] State set to uploading, modal should be visible');
+
+    // Start the async upload process separately (not awaited in this handler)
+    startScan(file);
   };
 
   const startScan = async (file: File) => {
