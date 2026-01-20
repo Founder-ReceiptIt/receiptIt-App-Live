@@ -207,6 +207,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
                 <div className="space-y-3">
                   <button
+                    type="button"
                     onClick={() => fileInputRef.current?.click()}
                     className="w-full backdrop-blur-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/30 rounded-xl p-4 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
                   >
@@ -217,6 +218,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                   </button>
 
                   <button
+                    type="button"
                     onClick={() => fileInputRef.current?.click()}
                     className="w-full backdrop-blur-xl bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl p-4 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
                   >
@@ -300,6 +302,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                   </div>
 
                   <button
+                    type="button"
                     onClick={handleCancel}
                     className="backdrop-blur-xl bg-red-500/20 hover:bg-red-500/30 border border-red-400/30 rounded-xl px-6 py-3 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
                   >
@@ -362,6 +365,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                   <p className="text-gray-400 mb-6">{errorMessage || 'An error occurred during upload'}</p>
 
                   <button
+                    type="button"
                     onClick={resetScan}
                     className="w-full backdrop-blur-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/30 rounded-xl py-3 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
                   >
