@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, X, Camera, CheckCircle, Loader2, FileImage } from 'lucide-react';
 import { useState, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -32,22 +33,27 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
     console.log('[ScanTab] File selected:', file.name);
 
-    // CRITICAL: Block all further interactions immediately
-    isScanningRef.current = true;
-
-    // Set all state synchronously - this MUST happen before any async code
-    setSelectedFile(file);
-    const url = URL.createObjectURL(file);
-    setPreviewUrl(url);
-    setScanState('uploading');
-
     // Reset the input immediately to prevent re-triggering
     e.target.value = '';
 
-    console.log('[ScanTab] State set to uploading, modal should be visible');
+    // CRITICAL: Block all further interactions immediately
+    isScanningRef.current = true;
+
+    // FORCE synchronous render - this ensures the modal appears IMMEDIATELY on mobile
+    flushSync(() => {
+      const url = URL.createObjectURL(file);
+      setSelectedFile(file);
+      setPreviewUrl(url);
+      setScanState('uploading');
+    });
+
+    console.log('[ScanTab] State set to uploading with flushSync, modal MUST be visible now');
 
     // Start the async upload process separately (not awaited in this handler)
-    startScan(file);
+    // Use setTimeout to ensure this happens AFTER the render
+    setTimeout(() => {
+      startScan(file);
+    }, 0);
   };
 
   const startScan = async (file: File) => {
@@ -200,8 +206,12 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                   ref={fileInputRef}
                   type="file"
                   accept="image/*,application/pdf"
-                  capture="environment"
                   onChange={handleFileSelect}
+                  onClick={(e) => {
+                    // Ensure we don't have stale values
+                    const target = e.target as HTMLInputElement;
+                    target.value = '';
+                  }}
                   className="hidden"
                 />
 
