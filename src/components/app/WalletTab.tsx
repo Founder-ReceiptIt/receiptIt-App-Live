@@ -153,24 +153,54 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
 
     fetchReceipts();
 
+    // Set up realtime subscription with user_id filter for RLS compatibility
     const channel = supabase
       .channel('receipts-changes')
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'INSERT',
           schema: 'public',
           table: 'receipts',
+          filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          console.log('[WalletTab] Realtime update received:', payload);
+          console.log('[WalletTab] Realtime INSERT received:', payload);
+          fetchReceipts();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'receipts',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log('[WalletTab] Realtime UPDATE received:', payload);
+          fetchReceipts();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'receipts',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log('[WalletTab] Realtime DELETE received:', payload);
           fetchReceipts();
         }
       )
       .subscribe((status) => {
         console.log('[WalletTab] Subscription status:', status);
         if (status === 'SUBSCRIBED') {
-          console.log('[WalletTab] Successfully subscribed to realtime updates');
+          console.log('[WalletTab] Successfully subscribed to realtime updates for user:', user.id);
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('[WalletTab] Subscription error - retrying...');
         }
       });
 

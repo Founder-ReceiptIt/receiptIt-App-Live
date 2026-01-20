@@ -17,18 +17,31 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isScanningRef = useRef(false);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      console.log('[ScanTab] File selected:', file.name);
-      setSelectedFile(file);
-      const url = URL.createObjectURL(file);
-      setPreviewUrl(url);
-      // Set uploading state IMMEDIATELY to show modal without delay
-      setScanState('uploading');
-      await startScan(file);
+    if (!file || isScanningRef.current) {
+      console.log('[ScanTab] File selection blocked - already scanning or no file');
+      return;
     }
+
+    console.log('[ScanTab] File selected:', file.name);
+
+    // Set scanning flag FIRST to prevent any premature navigation
+    isScanningRef.current = true;
+
+    // Set state synchronously BEFORE any async operations
+    setSelectedFile(file);
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    setScanState('uploading');
+
+    // Small delay to ensure state has rendered before async operations
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    console.log('[ScanTab] Modal should now be visible, starting upload...');
+    await startScan(file);
   };
 
   const startScan = async (file: File) => {
@@ -115,28 +128,36 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       setScanState('success');
       setTimeout(() => {
         console.log('[ScanTab] Navigating to wallet...');
+        isScanningRef.current = false;
         resetScan();
         onNavigateToWallet();
       }, 2500);
     } catch (error) {
+      console.error('[ScanTab] Error during scan:', error);
       setErrorMessage(`An unexpected error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setScanState('error');
+      isScanningRef.current = false;
     }
   };
 
   const resetScan = () => {
+    console.log('[ScanTab] Resetting scan state');
+    isScanningRef.current = false;
     setScanState('idle');
     setSelectedFile(null);
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
     }
     setPreviewUrl(null);
+    setErrorMessage('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
 
   const handleCancel = () => {
+    console.log('[ScanTab] User cancelled scan');
+    isScanningRef.current = false;
     resetScan();
   };
 
