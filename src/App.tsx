@@ -19,9 +19,22 @@ function App() {
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // ANDROID FIX: Check if user was scanning when tab was killed
+  useEffect(() => {
+    const isScanning = localStorage.getItem('isScanning');
+    if (isScanning === 'true') {
+      console.log('[App] Detected scanning flag in localStorage, forcing scan tab');
+      setActiveTab('scan');
+    }
+  }, []);
+
   useEffect(() => {
     if (!authLoading && user) {
-      setActiveTab('wallet');
+      // Don't override activeTab if we're restoring scan state
+      const isScanning = localStorage.getItem('isScanning');
+      if (isScanning !== 'true') {
+        setActiveTab('wallet');
+      }
       const timer = setTimeout(() => {
         setShowApp(true);
       }, 2000);

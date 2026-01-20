@@ -28,6 +28,19 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       // Show waiting state - the file picker should still deliver the file
       setScanState('uploading');
       isScanningRef.current = true;
+
+      // ANDROID SAFETY: If no file arrives within 10 seconds, assume Android lost it
+      const timeout = setTimeout(() => {
+        console.log('[ScanTab] No file received after reload - Android likely lost the file');
+        setErrorMessage('Android closed the camera. Please try uploading again.');
+        setScanState('error');
+        isScanningRef.current = false;
+        localStorage.removeItem('isScanning');
+        localStorage.removeItem('scanningSource');
+      }, 10000);
+
+      // Clean up timeout if component unmounts
+      return () => clearTimeout(timeout);
     }
   }, []);
 
@@ -41,6 +54,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       console.log('[ScanTab] File selection blocked - already scanning or no file');
       // Clear localStorage if no file selected (user cancelled)
       localStorage.removeItem('isScanning');
+      localStorage.removeItem('scanningSource');
       return;
     }
 
@@ -74,6 +88,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       setErrorMessage('User not authenticated');
       setScanState('error');
       localStorage.removeItem('isScanning');
+      localStorage.removeItem('scanningSource');
       return;
     }
 
@@ -97,6 +112,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
         setErrorMessage(`Failed to upload file: ${uploadError.message}`);
         setScanState('error');
         localStorage.removeItem('isScanning');
+        localStorage.removeItem('scanningSource');
         return;
       }
 
@@ -137,6 +153,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
           setErrorMessage(`Failed to create database record: ${insertError.message}`);
           setScanState('error');
           localStorage.removeItem('isScanning');
+          localStorage.removeItem('scanningSource');
           throw insertError;
         }
 
@@ -144,6 +161,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
           setErrorMessage('Failed to verify receipt record creation');
           setScanState('error');
           localStorage.removeItem('isScanning');
+          localStorage.removeItem('scanningSource');
           return;
         }
 
@@ -157,6 +175,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       setScanState('success');
       // ANDROID FIX: Clear localStorage on success
       localStorage.removeItem('isScanning');
+      localStorage.removeItem('scanningSource');
       setTimeout(() => {
         console.log('[ScanTab] Navigating to wallet...');
         isScanningRef.current = false;
@@ -170,6 +189,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       isScanningRef.current = false;
       // ANDROID FIX: Clear localStorage on error
       localStorage.removeItem('isScanning');
+      localStorage.removeItem('scanningSource');
     }
   };
 
@@ -188,6 +208,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     }
     // ANDROID FIX: Clear localStorage on reset
     localStorage.removeItem('isScanning');
+    localStorage.removeItem('scanningSource');
   };
 
   const handleCancel = () => {
@@ -241,10 +262,12 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                 <div className="space-y-3">
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.preventDefault();
                       // ANDROID FIX: Save to localStorage BEFORE opening file picker
                       // This survives tab kill when Android opens camera
                       localStorage.setItem('isScanning', 'true');
+                      localStorage.setItem('scanningSource', 'gallery');
                       fileInputRef.current?.click();
                     }}
                     className="w-full backdrop-blur-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/30 rounded-xl p-4 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
@@ -257,11 +280,25 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.preventDefault();
                       // ANDROID FIX: Save to localStorage BEFORE opening file picker
                       // This survives tab kill when Android opens camera
                       localStorage.setItem('isScanning', 'true');
+                      localStorage.setItem('scanningSource', 'camera');
+
+                      // Set capture attribute for camera
+                      if (fileInputRef.current) {
+                        fileInputRef.current.setAttribute('capture', 'environment');
+                      }
                       fileInputRef.current?.click();
+
+                      // Remove capture after click to allow gallery next time
+                      setTimeout(() => {
+                        if (fileInputRef.current) {
+                          fileInputRef.current.removeAttribute('capture');
+                        }
+                      }, 100);
                     }}
                     className="w-full backdrop-blur-xl bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl p-4 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
                   >
