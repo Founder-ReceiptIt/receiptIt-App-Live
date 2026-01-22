@@ -9,11 +9,13 @@
 
 html {
   scroll-behavior: smooth;
+  font-family: 'JetBrains Mono', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace, sans-serif;
 }
 
 body {
   background: #000000;
   position: relative;
+  font-family: 'JetBrains Mono', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace, sans-serif;
 }
 
 body::before {
