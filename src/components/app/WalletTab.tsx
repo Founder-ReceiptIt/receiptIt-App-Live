@@ -162,6 +162,8 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
     fetchReceipts();
 
     // Set up realtime subscription
+    console.log('[WalletTab] Setting up realtime subscription for user:', user.id);
+
     const channel = supabase
       .channel('receipts-changes')
       .on(
@@ -173,43 +175,57 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          console.log('[WalletTab] Realtime event:', payload.eventType, payload);
+          console.log('[WalletTab] Realtime event received:', payload.eventType, payload);
 
           if (payload.eventType === 'INSERT') {
             const newRow = payload.new as any;
+            console.log('[WalletTab] New receipt inserted:', newRow);
 
-            // Check if this is a new receipt (not just processing update)
-            if (!previousReceiptIdsRef.current.has(newRow.id)) {
-              const merchantName = newRow.merchant || newRow.store_name || 'Unknown Merchant';
-              const isProcessing = newRow.status === 'processing';
+            // Always show notification for new receipts
+            const merchantName = newRow.merchant || newRow.store_name || 'Unknown Merchant';
+            const amount = parseFloat(newRow.amount) || parseFloat(newRow.total) || 0;
+            const currencySymbol = newRow.currency_symbol || '£';
 
-              // Show notification
-              if (!isProcessing) {
-                showToast('New receipt added', merchantName);
-              }
-            }
+            const formattedAmount = amount > 0 ? `${currencySymbol}${amount.toFixed(2)}` : 'Processing...';
+            showToast('New Receipt Processed', `${merchantName} - ${formattedAmount}`);
 
-            // Refresh receipts
+            // Refresh receipts to show in list
             fetchReceipts();
           } else if (payload.eventType === 'UPDATE') {
             const updatedRow = payload.new as any;
             const oldRow = payload.old as any;
 
-            // Check if status changed from processing to complete
-            if (oldRow.status === 'processing' && updatedRow.status !== 'processing') {
+            console.log('[WalletTab] Receipt updated:', { old: oldRow, new: updatedRow });
+
+            // Check if amount was just processed (changed from 0 or null to a value)
+            const oldAmount = parseFloat(oldRow.amount) || parseFloat(oldRow.total) || 0;
+            const newAmount = parseFloat(updatedRow.amount) || parseFloat(updatedRow.total) || 0;
+
+            if (oldAmount === 0 && newAmount > 0) {
               const merchantName = updatedRow.merchant || updatedRow.store_name || 'Unknown Merchant';
-              showToast('Receipt processed', merchantName);
+              const currencySymbol = updatedRow.currency_symbol || '£';
+              showToast('Receipt processed', `${merchantName} - ${currencySymbol}${newAmount.toFixed(2)}`);
             }
 
             // Refresh receipts
             fetchReceipts();
           } else if (payload.eventType === 'DELETE') {
+            console.log('[WalletTab] Receipt deleted');
             // Refresh receipts
             fetchReceipts();
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[WalletTab] Subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('[WalletTab] ✅ Successfully subscribed to realtime updates');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('[WalletTab] ❌ Channel error - realtime updates may not work');
+        } else if (status === 'TIMED_OUT') {
+          console.error('[WalletTab] ❌ Subscription timed out');
+        }
+      });
 
     // Clean up subscription on unmount
     return () => {
