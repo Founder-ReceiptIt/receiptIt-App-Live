@@ -1,46 +1,19 @@
 import { motion } from 'framer-motion';
 import { Copy, Check, Shield, Mail, Lock } from 'lucide-react';
-import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useStats } from '../../hooks/useStats';
 
 export function AliasTab() {
   const { user, emailAlias } = useAuth();
   const [copied, setCopied] = useState(false);
-  const [stats, setStats] = useState([
-    { label: 'Receipts Captured', value: '0', icon: Mail },
-    { label: 'Spam Blocked', value: '0', icon: Lock },
-    { label: 'Warranties Tracked', value: '0', icon: Shield },
-  ]);
-  const [loading, setLoading] = useState(true);
+  const { stats: statsData, loading } = useStats(user?.id);
 
-  useEffect(() => {
-    if (!user) return;
-
-    const fetchProfile = async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (error) {
-        setLoading(false);
-        return;
-      }
-
-      if (data) {
-        setStats([
-          { label: 'Receipts Captured', value: data.receipts_captured.toString(), icon: Mail },
-          { label: 'Spam Blocked', value: data.spam_blocked.toLocaleString(), icon: Lock },
-          { label: 'Warranties Tracked', value: data.warranties_tracked.toString(), icon: Shield },
-        ]);
-      }
-      setLoading(false);
-    };
-
-    fetchProfile();
-  }, [user]);
+  const stats = [
+    { label: 'Receipts Captured', value: statsData.receiptsCaptured.toString(), icon: Mail },
+    { label: 'Spam Blocked', value: statsData.spamBlocked.toLocaleString(), icon: Lock },
+    { label: 'Warranties Tracked', value: statsData.warrantiesTracked.toString(), icon: Shield },
+  ];
 
   const handleCopy = () => {
     navigator.clipboard.writeText(emailAlias);
