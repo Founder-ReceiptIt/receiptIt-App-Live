@@ -193,6 +193,44 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
             <div className="p-6 border-b border-white/10 flex items-center justify-between">
               <h2 className="text-2xl font-bold text-white">Receipt Details</h2>
               <div className="flex items-center gap-2">
+                {!isEditingDates ? (
+                  <motion.button
+                    onClick={() => setIsEditingDates(true)}
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    className="w-10 h-10 rounded-full backdrop-blur-md bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-teal-400 hover:border-teal-400/30 transition-colors"
+                    title="Edit Receipt"
+                  >
+                    <Edit2 className="w-5 h-5" />
+                  </motion.button>
+                ) : (
+                  <>
+                    <motion.button
+                      onClick={() => {
+                        setIsEditingDates(false);
+                        setEditWarrantyDate(receipt.warrantyDate || '');
+                        setEditReturnDate(receipt.returnDate || '');
+                      }}
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      className="w-10 h-10 rounded-full backdrop-blur-md bg-gray-400/10 border border-gray-400/30 flex items-center justify-center text-gray-400 hover:text-white hover:border-white/20 transition-colors"
+                      title="Cancel"
+                      disabled={isSaving}
+                    >
+                      <X className="w-5 h-5" />
+                    </motion.button>
+                    <motion.button
+                      onClick={handleSaveDates}
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      className="w-10 h-10 rounded-full backdrop-blur-md bg-teal-400/10 border border-teal-400/30 flex items-center justify-center text-teal-400 hover:text-teal-300 hover:border-teal-400/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Save Changes"
+                      disabled={isSaving}
+                    >
+                      <Save className="w-5 h-5" />
+                    </motion.button>
+                  </>
+                )}
                 {downloadUrl && (
                   <motion.button
                     onClick={handleDownloadClick}
@@ -414,109 +452,50 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                 </motion.div>
               )}
 
-              {/* --- EDIT DATES SECTION --- */}
-              <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.2 }}
-                className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6"
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-lg font-bold text-white flex items-center gap-2">
-                    <Calendar className="w-5 h-5 text-teal-400" />
-                    Important Dates
+              {/* --- EDIT DATES FORM (SHOWN WHEN EDITING) --- */}
+              {isEditingDates && (
+                <motion.div
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ duration: 0.2 }}
+                  className="backdrop-blur-xl bg-teal-400/10 border-2 border-teal-400/30 rounded-2xl p-6"
+                >
+                  <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <Edit2 className="w-5 h-5 text-teal-400" />
+                    Edit Receipt Dates
                   </h4>
-                  {!isEditingDates ? (
-                    <motion.button
-                      onClick={() => setIsEditingDates(true)}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-teal-400/10 border border-teal-400/30 text-teal-400 text-sm font-semibold hover:bg-teal-400/20 transition-colors"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                      Edit
-                    </motion.button>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <motion.button
-                        onClick={() => {
-                          setIsEditingDates(false);
-                          setEditWarrantyDate(receipt.warrantyDate || '');
-                          setEditReturnDate(receipt.returnDate || '');
-                        }}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        className="px-3 py-1.5 rounded-lg bg-gray-400/10 border border-gray-400/30 text-gray-400 text-sm font-semibold hover:bg-gray-400/20 transition-colors"
-                        disabled={isSaving}
-                      >
-                        Cancel
-                      </motion.button>
-                      <motion.button
-                        onClick={handleSaveDates}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-teal-400/10 border border-teal-400/30 text-teal-400 text-sm font-semibold hover:bg-teal-400/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        disabled={isSaving}
-                      >
-                        <Save className="w-4 h-4" />
-                        {isSaving ? 'Saving...' : 'Save'}
-                      </motion.button>
-                    </div>
-                  )}
-                </div>
 
-                <div className="space-y-4">
-                  {/* Warranty Date */}
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
-                    <div className="flex items-center gap-3">
-                      <Shield className="w-5 h-5 text-emerald-400" />
-                      <div>
-                        <p className="text-sm font-semibold text-white">Warranty Expiry</p>
-                        {!isEditingDates && (
-                          <p className="text-xs text-gray-400">
-                            {receipt.warrantyDate
-                              ? new Date(receipt.warrantyDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-                              : 'Not set'}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    {isEditingDates && (
+                  <div className="space-y-4">
+                    {/* Warranty Date Input */}
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 text-sm font-semibold text-gray-300">
+                        <Shield className="w-4 h-4 text-emerald-400" />
+                        Warranty Expiry Date
+                      </label>
                       <input
                         type="date"
                         value={editWarrantyDate}
                         onChange={(e) => setEditWarrantyDate(e.target.value)}
-                        className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white text-sm focus:outline-none focus:border-teal-400/50 focus:ring-1 focus:ring-teal-400/50"
+                        className="w-full px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white focus:outline-none focus:border-teal-400/50 focus:ring-2 focus:ring-teal-400/20 transition-all"
                       />
-                    )}
-                  </div>
-
-                  {/* Return Date */}
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
-                    <div className="flex items-center gap-3">
-                      <Undo2 className="w-5 h-5 text-red-400" />
-                      <div>
-                        <p className="text-sm font-semibold text-white">Return Window Ends</p>
-                        {!isEditingDates && (
-                          <p className="text-xs text-gray-400">
-                            {receipt.returnDate
-                              ? new Date(receipt.returnDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-                              : 'Not set'}
-                          </p>
-                        )}
-                      </div>
                     </div>
-                    {isEditingDates && (
+
+                    {/* Return Date Input */}
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 text-sm font-semibold text-gray-300">
+                        <Undo2 className="w-4 h-4 text-red-400" />
+                        Return Window End Date
+                      </label>
                       <input
                         type="date"
                         value={editReturnDate}
                         onChange={(e) => setEditReturnDate(e.target.value)}
-                        className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white text-sm focus:outline-none focus:border-teal-400/50 focus:ring-1 focus:ring-teal-400/50"
+                        className="w-full px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white focus:outline-none focus:border-teal-400/50 focus:ring-2 focus:ring-teal-400/20 transition-all"
                       />
-                    )}
+                    </div>
                   </div>
-                </div>
-              </motion.div>
+                </motion.div>
+              )}
 
               {/* --- BREAKDOWN SECTION --- */}
               <motion.div
