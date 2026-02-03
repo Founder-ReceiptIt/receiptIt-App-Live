@@ -1,9 +1,11 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Store, Shield, Loader2, Car, Home, Plane, Zap, Utensils } from 'lucide-react';
+import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Store, Shield, Loader2, Car, Home, Plane, Zap, Utensils, RotateCcw } from 'lucide-react';
 import { LucideIcon } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
+import { useToast } from '../../contexts/ToastContext';
 
 interface WalletTabProps {
   onReceiptClick: (receipt: Receipt) => void;
@@ -73,12 +75,14 @@ export interface Receipt {
 
 export function WalletTab({ onReceiptClick }: WalletTabProps) {
   const { user, username } = useAuth();
+  const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<'all' | 'work' | 'personal'>('all');
   const [warrantyFilterActive, setWarrantyFilterActive] = useState(false);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [loading, setLoading] = useState(true);
+  const previousReceiptIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!user) return;
@@ -142,6 +146,9 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         };
       });
 
+        // Track receipt IDs for notification detection
+        previousReceiptIdsRef.current = new Set(formattedReceipts.map(r => r.id));
+
         setReceipts(formattedReceipts);
         setLoading(false);
       } catch (error) {
@@ -154,18 +161,62 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
     // Initial fetch
     fetchReceipts();
 
-    // Set up polling - fetch every 5 seconds
-    const pollInterval = setInterval(() => {
-      console.log('[WalletTab] Polling for updates...');
-      fetchReceipts();
-    }, 5000);
+    // Set up realtime subscription
+    const channel = supabase
+      .channel('receipts-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'receipts',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          console.log('[WalletTab] Realtime event:', payload.eventType, payload);
 
-    // Clean up interval on unmount
+          if (payload.eventType === 'INSERT') {
+            const newRow = payload.new as any;
+
+            // Check if this is a new receipt (not just processing update)
+            if (!previousReceiptIdsRef.current.has(newRow.id)) {
+              const merchantName = newRow.merchant || newRow.store_name || 'Unknown Merchant';
+              const isProcessing = newRow.status === 'processing';
+
+              // Show notification
+              if (!isProcessing) {
+                showToast('New receipt added', merchantName);
+              }
+            }
+
+            // Refresh receipts
+            fetchReceipts();
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedRow = payload.new as any;
+            const oldRow = payload.old as any;
+
+            // Check if status changed from processing to complete
+            if (oldRow.status === 'processing' && updatedRow.status !== 'processing') {
+              const merchantName = updatedRow.merchant || updatedRow.store_name || 'Unknown Merchant';
+              showToast('Receipt processed', merchantName);
+            }
+
+            // Refresh receipts
+            fetchReceipts();
+          } else if (payload.eventType === 'DELETE') {
+            // Refresh receipts
+            fetchReceipts();
+          }
+        }
+      )
+      .subscribe();
+
+    // Clean up subscription on unmount
     return () => {
-      console.log('[WalletTab] Cleaning up polling interval');
-      clearInterval(pollInterval);
+      console.log('[WalletTab] Cleaning up realtime subscription');
+      supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user, showToast]);
 
   const totalSpent = receipts.reduce((sum, receipt) => sum + receipt.amount, 0);
   const budget = {
