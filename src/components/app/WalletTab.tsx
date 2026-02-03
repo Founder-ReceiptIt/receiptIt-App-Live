@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Store, Shield, Loader2, Car, Home, Plane, Zap, Utensils, RotateCcw } from 'lucide-react';
+import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Store, Shield, Loader2, Car, Home, Plane, Zap, Utensils, RotateCcw, Undo2 } from 'lucide-react';
 import { LucideIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -56,6 +56,7 @@ export interface Receipt {
   hasWarranty?: boolean;
   warrantyMonths?: number;
   warrantyDate?: string;
+  returnDate?: string;
   referenceNumber: string;
   emailAlias: string;
   summary?: string;
@@ -132,6 +133,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           hasWarranty: !!row.warranty_date,
           warrantyMonths: row.warranty_months || 0,
           warrantyDate: row.warranty_date || undefined,
+          returnDate: row.return_date || undefined,
           referenceNumber: row.reference_number || `REF-${row.id.slice(0, 8)}`,
           emailAlias: row.email_alias || '',
           summary: row.summary || '',
@@ -466,6 +468,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             const isProcessing = receipt.tag === 'Processing';
             const hasActiveWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) > new Date();
             const hasExpiredWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) <= new Date();
+            const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
             return (
               <motion.button
                 key={receipt.id}
@@ -511,6 +514,24 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                         <div className="flex items-center gap-1 px-2 py-0.5 bg-red-400/10 border border-red-400/30 rounded-full">
                           <Shield className="w-3 h-3 text-red-400" strokeWidth={2} />
                           <span className="text-red-400 text-xs font-bold">Expired</span>
+                        </div>
+                      )}
+                      {returnWindowStatus.status === 'active' && !isProcessing && (
+                        <div className="flex items-center gap-1 px-1.5 py-0.5 bg-red-400/10 border border-red-400/20 rounded-full">
+                          <Undo2 className="w-2.5 h-2.5 text-red-400" strokeWidth={2.5} />
+                          <span className="text-red-400 text-[10px] font-bold">{returnWindowStatus.message}</span>
+                        </div>
+                      )}
+                      {returnWindowStatus.status === 'urgent' && !isProcessing && (
+                        <div className="flex items-center gap-1 px-1.5 py-0.5 bg-red-500/20 border border-red-500/40 rounded-full animate-pulse">
+                          <Undo2 className="w-2.5 h-2.5 text-red-400" strokeWidth={2.5} />
+                          <span className="text-red-400 text-[10px] font-bold">{returnWindowStatus.message}</span>
+                        </div>
+                      )}
+                      {returnWindowStatus.status === 'expired' && !isProcessing && (
+                        <div className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-400/10 border border-gray-400/20 rounded-full">
+                          <Undo2 className="w-2.5 h-2.5 text-gray-500" strokeWidth={2.5} />
+                          <span className="text-gray-500 text-[10px] font-bold">{returnWindowStatus.message}</span>
                         </div>
                       )}
                     </div>

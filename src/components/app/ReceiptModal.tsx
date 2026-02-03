@@ -1,9 +1,10 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Download, MoreVertical, Mail } from 'lucide-react';
+import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Download, MoreVertical, Mail, Undo2, Edit2, Save } from 'lucide-react';
 import { Receipt } from './WalletTab';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { formatDistance } from 'date-fns';
+import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -17,9 +18,18 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const [autoDelete, setAutoDelete] = useState('After Warranty Expires');
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteMenu, setShowDeleteMenu] = useState(false);
+  const [isEditingDates, setIsEditingDates] = useState(false);
+  const [editWarrantyDate, setEditWarrantyDate] = useState('');
+  const [editReturnDate, setEditReturnDate] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     setShowDeleteMenu(false);
+    setIsEditingDates(false);
+    if (receipt) {
+      setEditWarrantyDate(receipt.warrantyDate || '');
+      setEditReturnDate(receipt.returnDate || '');
+    }
   }, [receipt]);
 
   // --- LOGIC FIX: ROBUST DELETE HANDLING ---
@@ -77,17 +87,54 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     }
   };
 
+  const handleSaveDates = async () => {
+    if (!receipt) return;
+
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from('receipts')
+        .update({
+          warranty_date: editWarrantyDate || null,
+          return_date: editReturnDate || null,
+        })
+        .eq('id', receipt.id);
+
+      if (error) {
+        console.error('[SaveDates] Error updating dates:', error);
+        alert('Failed to save dates. Please try again.');
+        return;
+      }
+
+      console.log('[SaveDates] Dates updated successfully');
+      setIsEditingDates(false);
+
+      // Update local receipt object
+      if (receipt.warrantyDate !== editWarrantyDate || receipt.returnDate !== editReturnDate) {
+        window.location.reload();
+      }
+    } catch (error) {
+      console.error('[SaveDates] Unexpected error:', error);
+      alert('Failed to save dates. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (!receipt) return null;
 
   // --- LOGIC FIX: BETTER DATE HANDLING ---
   const warrantyEndDate = receipt.warrantyDate ? new Date(receipt.warrantyDate) : null;
   const today = new Date();
   const isWarrantyActive = warrantyEndDate && warrantyEndDate > today;
-  
+
   // Calculate specific remaining time for the display
   const daysRemaining = warrantyEndDate ? Math.floor((warrantyEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : 0;
   const yearsRemaining = Math.floor(daysRemaining / 365);
   const monthsRemaining = Math.floor((daysRemaining % 365) / 30);
+
+  // Return window status
+  const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
 
   const getDownloadUrl = () => {
     if (receipt.imageUrl) {
@@ -293,6 +340,183 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   </div>
                 </motion.div>
               )}
+
+              {/* --- RETURN WINDOW SECTION --- */}
+              {returnWindowStatus.status === 'active' && (
+                <motion.div
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.15 }}
+                  className="backdrop-blur-xl bg-gradient-to-br from-red-400/10 to-orange-900/10 border-2 border-red-400/30 rounded-2xl p-6"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 flex-shrink-0 rounded-xl bg-red-400/10 border border-red-400/30 flex items-center justify-center">
+                      <Undo2 className="w-7 h-7 text-red-400" strokeWidth={1.5} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-red-400 font-bold text-xs uppercase tracking-widest">Return Window Active</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-gray-400">
+                        <Clock className="w-4 h-4" />
+                        <span>{returnWindowStatus.daysLeft} days remaining</span>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {returnWindowStatus.status === 'urgent' && (
+                <motion.div
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.15 }}
+                  className="backdrop-blur-xl bg-gradient-to-br from-red-500/20 to-orange-900/20 border-2 border-red-500/50 rounded-2xl p-6 animate-pulse"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 flex-shrink-0 rounded-xl bg-red-500/20 border border-red-500/40 flex items-center justify-center">
+                      <Undo2 className="w-7 h-7 text-red-400" strokeWidth={1.5} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-red-400 font-bold text-xs uppercase tracking-widest">⚠️ Return Window Ending Soon</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-red-300">
+                        <Clock className="w-4 h-4" />
+                        <span className="font-bold">{returnWindowStatus.message}</span>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {returnWindowStatus.status === 'expired' && receipt.returnDate && (
+                <motion.div
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.15 }}
+                  className="backdrop-blur-xl bg-gradient-to-br from-gray-400/10 to-gray-900/10 border-2 border-gray-400/30 rounded-2xl p-6"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 flex-shrink-0 rounded-xl bg-gray-400/10 border border-gray-400/30 flex items-center justify-center">
+                      <Undo2 className="w-7 h-7 text-gray-500" strokeWidth={1.5} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-gray-500 font-bold text-xs uppercase tracking-widest">Return Window Expired</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-gray-400">
+                        <Calendar className="w-4 h-4" />
+                        <span>Expired on {new Date(receipt.returnDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* --- EDIT DATES SECTION --- */}
+              <motion.div
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.2 }}
+                className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-lg font-bold text-white flex items-center gap-2">
+                    <Calendar className="w-5 h-5 text-teal-400" />
+                    Important Dates
+                  </h4>
+                  {!isEditingDates ? (
+                    <motion.button
+                      onClick={() => setIsEditingDates(true)}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-teal-400/10 border border-teal-400/30 text-teal-400 text-sm font-semibold hover:bg-teal-400/20 transition-colors"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                      Edit
+                    </motion.button>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <motion.button
+                        onClick={() => {
+                          setIsEditingDates(false);
+                          setEditWarrantyDate(receipt.warrantyDate || '');
+                          setEditReturnDate(receipt.returnDate || '');
+                        }}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        className="px-3 py-1.5 rounded-lg bg-gray-400/10 border border-gray-400/30 text-gray-400 text-sm font-semibold hover:bg-gray-400/20 transition-colors"
+                        disabled={isSaving}
+                      >
+                        Cancel
+                      </motion.button>
+                      <motion.button
+                        onClick={handleSaveDates}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-teal-400/10 border border-teal-400/30 text-teal-400 text-sm font-semibold hover:bg-teal-400/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={isSaving}
+                      >
+                        <Save className="w-4 h-4" />
+                        {isSaving ? 'Saving...' : 'Save'}
+                      </motion.button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  {/* Warranty Date */}
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
+                    <div className="flex items-center gap-3">
+                      <Shield className="w-5 h-5 text-emerald-400" />
+                      <div>
+                        <p className="text-sm font-semibold text-white">Warranty Expiry</p>
+                        {!isEditingDates && (
+                          <p className="text-xs text-gray-400">
+                            {receipt.warrantyDate
+                              ? new Date(receipt.warrantyDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                              : 'Not set'}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    {isEditingDates && (
+                      <input
+                        type="date"
+                        value={editWarrantyDate}
+                        onChange={(e) => setEditWarrantyDate(e.target.value)}
+                        className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white text-sm focus:outline-none focus:border-teal-400/50 focus:ring-1 focus:ring-teal-400/50"
+                      />
+                    )}
+                  </div>
+
+                  {/* Return Date */}
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
+                    <div className="flex items-center gap-3">
+                      <Undo2 className="w-5 h-5 text-red-400" />
+                      <div>
+                        <p className="text-sm font-semibold text-white">Return Window Ends</p>
+                        {!isEditingDates && (
+                          <p className="text-xs text-gray-400">
+                            {receipt.returnDate
+                              ? new Date(receipt.returnDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                              : 'Not set'}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    {isEditingDates && (
+                      <input
+                        type="date"
+                        value={editReturnDate}
+                        onChange={(e) => setEditReturnDate(e.target.value)}
+                        className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white text-sm focus:outline-none focus:border-teal-400/50 focus:ring-1 focus:ring-teal-400/50"
+                      />
+                    )}
+                  </div>
+                </div>
+              </motion.div>
 
               {/* --- BREAKDOWN SECTION --- */}
               <motion.div
