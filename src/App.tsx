@@ -10,6 +10,8 @@ import { ReceiptModal } from './components/app/ReceiptModal';
 import { InsightsTab } from './components/app/InsightsTab';
 import { SettingsTab } from './components/app/SettingsTab';
 import { AuthForm } from './components/auth/AuthForm';
+import { Toast } from './components/app/Toast';
+import { ToastProvider } from './contexts/ToastContext';
 import { useAuth } from './contexts/AuthContext';
 
 function App() {
@@ -55,7 +57,8 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white font-mono overflow-x-hidden">
+    <ToastProvider>
+      <div className="min-h-screen bg-black text-white font-mono overflow-x-hidden">
       <style>
         {`
           * {
@@ -157,7 +160,9 @@ function App() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+      <Toast />
+      </div>
+    </ToastProvider>
   );
 }
 

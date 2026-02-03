@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { flushSync } from 'react-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 
 type ScanState = 'idle' | 'uploading' | 'processing' | 'success' | 'error';
 
@@ -13,6 +14,7 @@ interface ScanTabProps {
 
 export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
   const { user, emailAlias } = useAuth();
+  const { showToast } = useToast();
   const [scanState, setScanState] = useState<ScanState>('idle');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -166,6 +168,9 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
         }
 
         console.log('Receipt created successfully:', insertData);
+
+        const merchant = insertData[0]?.merchant || undefined;
+        showToast('New receipt received', merchant !== 'Analyzing...' ? merchant : undefined);
       } catch (err) {
         console.error('Scan error:', err);
         throw err;
