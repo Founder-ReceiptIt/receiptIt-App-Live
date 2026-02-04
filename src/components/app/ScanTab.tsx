@@ -122,19 +122,17 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     console.log('[ScanTab] Starting upload to storage...');
 
     try {
-      const timestamp = Date.now();
+      // CRITICAL: Generate completely random filename (NO original filename, NO spaces, NO special chars)
+      // 1. Get the extension (e.g., "png")
       const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
 
-      // VALIDATION 3: Sanitize filename to prevent path traversal and special characters
-      const sanitizedBaseName = file.name
-        .replace(/\.[^/.]+$/, '') // Remove extension
-        .replace(/[^a-zA-Z0-9_-]/g, '_') // Replace special chars with underscore
-        .slice(0, 50); // Limit length
+      // 2. Create a clean, random filename (NO spaces, NO special chars)
+      const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
 
-      const fileName = `${timestamp}_${sanitizedBaseName}.${fileExt}`;
+      // 3. Build the path
       const filePath = `${user.id}/${fileName}`;
 
-      console.log('[ScanTab] Sanitized filename:', fileName);
+      console.log('[ScanTab] Generated random filename:', fileName);
 
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('receipts')
