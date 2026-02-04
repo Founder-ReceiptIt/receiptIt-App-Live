@@ -122,12 +122,14 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     console.log('[ScanTab] Starting upload to storage...');
 
     try {
+      const timestamp = Date.now();
+
       // CRITICAL: Generate completely random filename (NO original filename, NO spaces, NO special chars)
       // 1. Get the extension (e.g., "png")
       const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
 
       // 2. Create a clean, random filename (NO spaces, NO special chars)
-      const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+      const fileName = `${Math.random().toString(36).substring(2)}_${timestamp}.${fileExt}`;
 
       // 3. Build the path
       const filePath = `${user.id}/${fileName}`;
