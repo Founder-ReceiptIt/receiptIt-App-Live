@@ -203,23 +203,44 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
         console.log('Receipt created successfully:', insertData);
 
         const merchant = insertData[0]?.merchant || undefined;
+        const receiptId = insertData[0]?.id;
         showToast('New receipt received', merchant !== 'Analyzing...' ? merchant : undefined);
+
+        // Simulate AI processing by updating the receipt after a delay
+        if (receiptId) {
+          setTimeout(async () => {
+            await supabase
+              .from('receipts')
+              .update({
+                status: 'completed',
+                merchant: 'Receipt Scanned',
+                amount: 0.00,
+                tag: 'Uncategorized',
+              })
+              .eq('id', receiptId);
+          }, 2000);
+        }
       } catch (err) {
         console.error('Scan error:', err);
         throw err;
       }
 
-      console.log('[ScanTab] Upload successful, showing success message for 3 seconds');
+      console.log('[ScanTab] Showing processing state for 4.5 seconds');
+      // Stay in processing state to show the scanning animation
+      await new Promise(resolve => setTimeout(resolve, 4500));
+
+      console.log('[ScanTab] Showing success message for 0.5 seconds');
       setScanState('success');
       // ANDROID FIX: Clear localStorage on success
       localStorage.removeItem('isScanning');
       localStorage.removeItem('scanningSource');
-      setTimeout(() => {
-        console.log('[ScanTab] Navigating to wallet...');
-        isScanningRef.current = false;
-        resetScan();
-        onNavigateToWallet();
-      }, 3000);
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      console.log('[ScanTab] Navigating to wallet...');
+      isScanningRef.current = false;
+      resetScan();
+      onNavigateToWallet();
     } catch (error) {
       console.error('[ScanTab] Error during scan:', error);
       setErrorMessage(`An unexpected error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`);
