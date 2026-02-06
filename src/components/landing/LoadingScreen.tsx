@@ -30,7 +30,7 @@ export function LoadingScreen() {
           transition={{ duration: 0.6, delay: 0.4, ease: [0.22, 1, 0.36, 1] }}
           className="text-xl text-gray-400 font-light tracking-wide"
         >
-          Privacy First. Finances Sorted.
+          Finances First. Privacy Always.
         </motion.p>
 
         <motion.div

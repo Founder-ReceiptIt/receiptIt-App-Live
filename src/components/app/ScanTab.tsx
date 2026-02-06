@@ -209,7 +209,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
         throw err;
       }
 
-      console.log('[ScanTab] Upload successful, showing success message for 2.5 seconds');
+      console.log('[ScanTab] Upload successful, showing success message for 3 seconds');
       setScanState('success');
       // ANDROID FIX: Clear localStorage on success
       localStorage.removeItem('isScanning');
@@ -219,7 +219,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
         isScanningRef.current = false;
         resetScan();
         onNavigateToWallet();
-      }, 2500);
+      }, 3000);
     } catch (error) {
       console.error('[ScanTab] Error during scan:', error);
       setErrorMessage(`An unexpected error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`);
