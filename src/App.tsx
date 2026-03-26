@@ -10,7 +10,6 @@ import { ReceiptModal } from './components/app/ReceiptModal';
 import { InsightsTab } from './components/app/InsightsTab';
 import { SettingsTab } from './components/app/SettingsTab';
 import { AuthForm } from './components/auth/AuthForm';
-import AlphaGatekeeper from './components/auth/AlphaGatekeeper';
 import { Toast } from './components/app/Toast';
 import { ToastProvider } from './contexts/ToastContext';
 import { useAuth } from './contexts/AuthContext';
@@ -50,24 +49,15 @@ function App() {
   }, [authLoading, user]);
 
   if (authLoading) {
-    return (
-      <AlphaGatekeeper>
-        <LoadingScreen />
-      </AlphaGatekeeper>
-    );
+    return <LoadingScreen />;
   }
 
   if (!user) {
-    return (
-      <AlphaGatekeeper>
-        <AuthForm />
-      </AlphaGatekeeper>
-    );
+    return <AuthForm />;
   }
 
   return (
-    <AlphaGatekeeper>
-      <ToastProvider>
+    <ToastProvider>
       <div className="min-h-screen bg-black text-white font-mono overflow-x-hidden">
       <style>
         {`
@@ -173,7 +163,6 @@ function App() {
       <Toast />
       </div>
     </ToastProvider>
-    </AlphaGatekeeper>
   );
 }
 

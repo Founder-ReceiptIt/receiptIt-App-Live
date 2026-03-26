@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, Lock, Shield, User } from 'lucide-react';
+import { Mail, Lock, Shield } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 export function AuthForm() {
   const [isSignUp, setIsSignUp] = useState(false);
-  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [aliasUsername, setAliasUsername] = useState('');
@@ -36,7 +35,7 @@ export function AuthForm() {
           throw new Error('Please enter a valid alias');
         }
         const finalAlias = `${username}@receiptit.app`;
-        const { error } = await signUp(email, password, finalAlias, fullName);
+        const { error } = await signUp(email, password, finalAlias, '');
         if (error) throw error;
       } else {
         const { error } = await signIn(email, password);
@@ -99,28 +98,9 @@ export function AuthForm() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {isSignUp && (
-              <div>
-                <label className="block text-sm font-semibold text-gray-300 mb-2">
-                  Username <span className="text-xs text-zinc-500 font-normal">(So we know what to call you)</span>
-                </label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="e.g. Jane Doe"
-                    required
-                    className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-teal-400/50 transition-colors"
-                  />
-                </div>
-              </div>
-            )}
-
             <div>
               <label className="block text-sm font-semibold text-gray-300 mb-2">
-                Email {isSignUp && <span className="text-xs text-zinc-500 font-normal">(For verification - unlike others, we'll never share it)</span>}
+                Email
               </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -179,9 +159,6 @@ export function AuthForm() {
                     @receiptit.app
                   </div>
                 </div>
-                <p className="text-xs text-gray-400 mt-2">
-                  Your privacy-protected email will be {aliasUsername || 'john'}@receiptit.app
-                </p>
               </div>
             )}
 
