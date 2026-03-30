@@ -174,12 +174,9 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
             status: 'processing',
             merchant: 'Analyzing...',
             amount: 0,
-            subtotal: 0,
-            vat: 0,
-            date: new Date().toISOString().split('T')[0],
-            tag: 'Processing',
+            currency: 'GBP',
+            transaction_date: new Date().toISOString().split('T')[0],
             reference_number: referenceNumber,
-            email_alias: userEmailAlias,
           })
           .select();
 
@@ -215,7 +212,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                 status: 'completed',
                 merchant: 'Receipt Scanned',
                 amount: 0.00,
-                tag: 'Uncategorized',
+                category: 'Uncategorized',
               })
               .eq('id', receiptId);
           }, 2000);

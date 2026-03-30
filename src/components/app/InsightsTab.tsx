@@ -7,7 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 interface Receipt {
   amount: number | string;
   category: string | null;
-  date: string;
+  transaction_date: string;
   currency_symbol: string | null;
 }
 
@@ -37,7 +37,7 @@ export function InsightsTab() {
       const { data, error } = await supabase
         .from('receipts')
         .select('*')
-        .order('date', { ascending: false });
+        .order('transaction_date', { ascending: false });
 
       console.log('[InsightsTab] Raw data from Supabase:', data);
       console.log('[InsightsTab] Query result:', { data, error, dataLength: data?.length });
@@ -66,7 +66,7 @@ export function InsightsTab() {
           .map(row => ({
             amount: typeof row.amount === 'string' ? parseFloat(row.amount) : (row.amount || 0),
             category: row.category || 'Other',
-            date: row.date ? String(row.date) : new Date().toISOString().split('T')[0],
+            transaction_date: row.transaction_date ? String(row.transaction_date) : new Date().toISOString().split('T')[0],
             currency_symbol: row.currency_symbol || '£',
           }));
 
@@ -141,7 +141,7 @@ export function InsightsTab() {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       const monthReceipts = receipts.filter(r => {
-        const dateStr = String(r.date);
+        const dateStr = String(r.transaction_date);
         return dateStr.startsWith(monthKey);
       });
       const amount = monthReceipts.reduce((sum, r) => {

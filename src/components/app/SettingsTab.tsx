@@ -65,7 +65,7 @@ export function SettingsTab() {
     if (format === 'csv') {
       const headers = ['Date', 'Merchant', 'Amount', 'Currency', 'Category', 'Reference'];
       const rows = receipts.map(r => [
-        r.date,
+        r.transaction_date,
         r.merchant,
         r.amount,
         r.currency,

@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Store, Shield, Loader2, Car, Home, Plane, Zap, Utensils, RotateCcw, Undo2 } from 'lucide-react';
-import { LucideIcon } from 'lucide-react';
+import { Video as LucideIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -44,21 +44,15 @@ export interface Receipt {
   merchantIcon: LucideIcon;
   merchantLogo?: string;
   amount: number;
-  subtotal: number;
-  vat: number;
-  vatRate: number;
   currency: string;
   currencySymbol?: string;
   date: string;
   category: string;
-  tag: string;
   tagColor: string;
   hasWarranty?: boolean;
-  warrantyMonths?: number;
   warrantyDate?: string;
   returnDate?: string;
   referenceNumber: string;
-  emailAlias: string;
   summary?: string;
   cardLast4?: string;
   items?: Array<{
@@ -95,7 +89,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         const { data, error } = await supabase
           .from('receipts')
           .select('*')
-          .order('date', { ascending: false });
+          .order('transaction_date', { ascending: false });
 
         console.log('[WalletTab] Query result:', { data, error, dataLength: data?.length });
 
@@ -110,33 +104,26 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         console.log('[WalletTab] Processing row:', row);
 
         const currencySymbol = row.currency_symbol || '£';
-        const total = parseFloat(row.amount) || parseFloat(row.total) || 0;
-        const merchantName = row.merchant || row.store_name || 'Unknown Merchant';
+        const total = parseFloat(row.amount) || 0;
+        const merchantName = row.merchant || 'Unknown Merchant';
         const category = row.category || 'Other';
         const isProcessing = row.status === 'processing' || total === 0;
-        const tag = isProcessing ? 'Processing' : (category || 'Complete');
 
         return {
           id: row.id,
           merchant: merchantName,
           merchantIcon: getCategoryIcon(category),
           amount: total,
-          subtotal: parseFloat(row.subtotal) || total,
-          vat: parseFloat(row.vat_amount) || 0,
-          vatRate: parseFloat(row.vat_rate) || 20,
           currency: row.currency || 'GBP',
           currencySymbol: currencySymbol,
-          date: row.date || new Date().toISOString(),
+          date: row.transaction_date || new Date().toISOString(),
           category: category,
-          tag: tag,
-          tagColor: getTagColor(tag),
+          tagColor: getTagColor(category),
           hasWarranty: !!row.warranty_date,
-          warrantyMonths: row.warranty_months || 0,
           warrantyDate: row.warranty_date || undefined,
           returnDate: row.return_date || undefined,
           referenceNumber: row.reference_number || `REF-${row.id.slice(0, 8)}`,
-          emailAlias: row.email_alias || '',
-          summary: row.summary || '',
+          summary: row.short_summary || '',
           cardLast4: row.card_last_4 || '',
           items: row.items || [],
           paymentMethod: row.payment_method || '',
@@ -245,13 +232,13 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
 
   const percentage = (budget.spent / budget.limit) * 100;
 
-  const uniqueTags = Array.from(new Set(receipts.map(r => r.tag)));
-  const categories = ['All', ...uniqueTags];
+  const uniqueCategories = Array.from(new Set(receipts.map(r => r.category)));
+  const categories = ['All', ...uniqueCategories];
 
   const filteredReceipts = receipts.filter(receipt => {
     const matchesSearch = receipt.merchant.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          receipt.referenceNumber.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = !selectedCategory || selectedCategory === 'All' || receipt.tag === selectedCategory;
+    const matchesCategory = !selectedCategory || selectedCategory === 'All' || receipt.category === selectedCategory;
     const matchesFolder = selectedFolder === 'all' || receipt.folder === selectedFolder;
     const hasActiveWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) > new Date();
     const matchesWarranty = !warrantyFilterActive || hasActiveWarranty;
@@ -465,7 +452,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             <div className="space-y-3">
               {filteredReceipts.map((receipt, index) => {
             const MerchantIcon = receipt.merchantIcon;
-            const isProcessing = receipt.tag === 'Processing';
+            const isProcessing = receipt.status === 'processing';
             const hasActiveWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) > new Date();
             const hasExpiredWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) <= new Date();
             const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);

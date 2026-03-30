@@ -18,16 +18,11 @@ export interface Receipt {
   user_id: string;
   merchant: string;
   amount: number;
-  subtotal: number;
-  vat: number;
-  vat_rate: number;
   currency: string;
-  date: string;
-  tag: string;
-  has_warranty: boolean;
-  warranty_months: number | null;
-  reference_number: string;
-  email_alias: string;
+  transaction_date: string;
+  short_summary: string | null;
+  status: string | null;
+  category: string | null;
   items: Array<{
     name: string;
     quantity: number;
@@ -37,6 +32,11 @@ export interface Receipt {
   location: string | null;
   folder: 'work' | 'personal';
   created_at: string;
+  storage_path: string | null;
+  image_url: string | null;
+  reference_number: string | null;
+  warranty_date: string | null;
+  return_date: string | null;
 }
 
 export interface Profile {

@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Download, MoreVertical, Mail, Undo2, Edit2, Save } from 'lucide-react';
+import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Download, MoreVertical, Undo2, CreditCard as Edit2, Save } from 'lucide-react';
 import { Receipt } from './WalletTab';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -509,17 +509,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   Receipt Breakdown
                 </h4>
 
-                {receipt.emailAlias && (
-                   <div className="mb-4 pb-4 border-b border-white/10">
-                     <div className="flex items-center justify-between gap-4">
-                       <div className="flex items-center gap-2 text-gray-400">
-                          <Mail className="w-4 h-4" />
-                          <span className="text-sm font-medium">Received via</span>
-                       </div>
-                       <span className="text-teal-400 font-mono text-sm font-semibold">{receipt.emailAlias}</span>
-                     </div>
-                   </div>
-                )}
 
                 {receipt.items && receipt.items.length > 0 && (
                   <div className="mb-4">
@@ -542,17 +531,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                 )}
 
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between text-gray-400">
-                    <span>Subtotal</span>
-                    <span>{receipt.currencySymbol || '£'}{((receipt.amount || 0) - (receipt.vat || 0)).toFixed(2)}</span>
-                  </div>
-                  {receipt.vat > 0 && (
-                    <div className="flex items-center justify-between text-gray-400">
-                      <span>VAT ({receipt.vatRate || 20}%)</span>
-                      <span>{receipt.currencySymbol || '£'}{receipt.vat.toFixed(2)}</span>
-                    </div>
-                  )}
-                  <div className="h-px bg-white/10 my-3" />
                   <div className="flex items-center justify-between text-white font-bold text-lg">
                     <span>Total</span>
                     <span>{receipt.currencySymbol || '£'}{receipt.amount.toFixed(2)}</span>
