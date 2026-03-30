@@ -58,7 +58,7 @@ export function SettingsTab() {
       .from('receipts')
       .select('*')
       .eq('user_id', user.id)
-      .order('date', { ascending: false });
+      .order('transaction_date', { ascending: false });
 
     if (error || !receipts) return;
 

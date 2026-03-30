@@ -13,7 +13,7 @@ interface ScanTabProps {
 }
 
 export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
-  const { user, emailAlias } = useAuth();
+  const { user } = useAuth();
   const { showToast } = useToast();
   const [scanState, setScanState] = useState<ScanState>('idle');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -163,7 +163,6 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
       try {
         const referenceNumber = `REF-${timestamp}`;
-        const userEmailAlias = emailAlias || `user_${user.id.slice(0, 8)}@receipts.app`;
 
         const { data: insertData, error: insertError } = await supabase
           .from('receipts')
