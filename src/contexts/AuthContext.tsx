@@ -30,9 +30,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq('user_id', userId)
         .maybeSingle();
 
-      if (!error && data) {
+      if (error) {
+        console.error('Profile fetch error:', error);
+        return;
+      }
+
+      if (data) {
+        console.log('Profile data loaded:', { username: data.username, email_alias: data.email_alias });
         setUsername(data.username || '');
         setEmailAlias(data.email_alias || '');
+      } else {
+        console.warn('No profile found for user:', userId);
       }
     };
 
