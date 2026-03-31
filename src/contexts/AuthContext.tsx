@@ -42,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (data) {
-        console.log('Profile data loaded:', data);
+        console.log('PROFILE DATA:', data);
         console.log('email_alias value:', data.email_alias, 'type:', typeof data.email_alias);
         console.log('username value:', data.username, 'type:', typeof data.username);
 
