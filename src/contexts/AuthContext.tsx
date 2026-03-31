@@ -31,7 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('*')
+        .select('id, user_id, email, email_alias, username, receipts_captured, spam_blocked, warranties_tracked, created_at')
         .eq('user_id', userId)
         .maybeSingle();
 
@@ -42,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (data) {
-        console.log('Profile data loaded - full data:', data);
+        console.log('Profile data loaded:', data);
         console.log('email_alias value:', data.email_alias, 'type:', typeof data.email_alias);
         console.log('username value:', data.username, 'type:', typeof data.username);
 
@@ -118,7 +118,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { error: profileError } = await supabase
       .from('profiles')
       .insert({
-        id: data.user.id,
         user_id: data.user.id,
         email: data.user.email,
         username: fullName,
@@ -135,7 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data: profileData, error: fetchError } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, user_id, email, email_alias, username, receipts_captured, spam_blocked, warranties_tracked, created_at')
       .eq('user_id', data.user.id)
       .maybeSingle();
 

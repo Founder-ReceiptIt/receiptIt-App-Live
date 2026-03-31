@@ -37,7 +37,7 @@ export function InsightsTab() {
       const { data, error } = await supabase
         .from('receipts')
         .select('*')
-        .order('transaction_date', { ascending: false });
+        .order('date', { ascending: false });
 
       console.log('[InsightsTab] Raw data from Supabase:', data);
       console.log('[InsightsTab] Query result:', { data, error, dataLength: data?.length });
@@ -66,7 +66,7 @@ export function InsightsTab() {
           .map(row => ({
             amount: typeof row.amount === 'string' ? parseFloat(row.amount) : (row.amount || 0),
             category: row.category || 'Other',
-            transaction_date: row.transaction_date ? String(row.transaction_date) : new Date().toISOString().split('T')[0],
+            date: row.date ? String(row.date) : new Date().toISOString().split('T')[0],
             currency_symbol: row.currency_symbol || '£',
           }));
 

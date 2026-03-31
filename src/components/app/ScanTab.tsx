@@ -13,7 +13,7 @@ interface ScanTabProps {
 }
 
 export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
-  const { user } = useAuth();
+  const { user, emailAlias } = useAuth();
   const { showToast } = useToast();
   const [scanState, setScanState] = useState<ScanState>('idle');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -173,9 +173,13 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
             status: 'processing',
             merchant: 'Analyzing...',
             amount: 0,
+            subtotal: 0,
+            vat_amount: 0,
             currency: 'GBP',
             transaction_date: new Date().toISOString().split('T')[0],
+            tag: 'Other',
             reference_number: referenceNumber,
+            email_alias: emailAlias || 'temp@receiptit.app',
           })
           .select();
 
