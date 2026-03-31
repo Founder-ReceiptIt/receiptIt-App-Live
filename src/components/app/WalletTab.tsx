@@ -103,7 +103,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
       const formattedReceipts: Receipt[] = (data || []).map((row) => {
         console.log('[WalletTab] Processing row:', row);
 
-        const currencySymbol = row.currency_symbol || '£';
+        const currencySymbol = '£';
         const total = parseFloat(row.amount) || 0;
         const merchantName = row.merchant || 'Unknown Merchant';
         const category = row.category || 'Other';
@@ -125,10 +125,10 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           referenceNumber: row.reference_number || `REF-${row.id.slice(0, 8)}`,
           summary: row.short_summary || '',
           cardLast4: row.card_last_4 || '',
-          items: row.items || [],
-          paymentMethod: row.payment_method || '',
-          location: row.location || '',
-          folder: row.folder || undefined,
+          items: [],
+          paymentMethod: '',
+          location: '',
+          folder: undefined,
           status: row.status || '',
           imageUrl: row.image_url || '',
           storagePath: row.storage_path || '',

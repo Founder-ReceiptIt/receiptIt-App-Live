@@ -177,9 +177,8 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
             vat_amount: 0,
             currency: 'GBP',
             transaction_date: new Date().toISOString().split('T')[0],
-            tag: 'Other',
+            category: 'Other',
             reference_number: referenceNumber,
-            email_alias: emailAlias || 'temp@receiptit.app',
           })
           .select();
 

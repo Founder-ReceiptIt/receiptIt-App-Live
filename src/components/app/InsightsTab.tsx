@@ -8,7 +8,6 @@ interface Receipt {
   amount: number | string;
   category: string | null;
   transaction_date: string;
-  currency_symbol: string | null;
 }
 
 const getTagColor = (category: string): string => {
@@ -98,8 +97,7 @@ export function InsightsTab() {
     };
   }, [user]);
 
-  // Get currency symbol from first receipt, default to £
-  const currencySymbol = receipts.length > 0 ? (receipts[0].currency_symbol || '£') : '£';
+  const currencySymbol = '£';
 
   const totalSpent = receipts.reduce((sum, r) => {
     const amount = typeof r.amount === 'number' ? r.amount : parseFloat(String(r.amount)) || 0;

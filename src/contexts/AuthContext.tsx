@@ -26,13 +26,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const fetchProfile = async (userId: string) => {
-      console.log('Fetching profile for user_id:', userId);
+      console.log('Fetching profile for id:', userId);
       setProfileLoading(true);
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, user_id, email, email_alias, username, receipts_captured, spam_blocked, warranties_tracked, created_at')
-        .eq('user_id', userId)
+        .select('id, email, email_alias, username, full_name, plan, created_at')
+        .eq('id', userId)
         .maybeSingle();
 
       if (error) {
@@ -118,13 +118,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { error: profileError } = await supabase
       .from('profiles')
       .insert({
-        user_id: data.user.id,
+        id: data.user.id,
         email: data.user.email,
         username: fullName,
         email_alias: alias,
-        receipts_captured: 0,
-        spam_blocked: 0,
-        warranties_tracked: 0,
+        full_name: fullName,
+        plan: 'free',
       });
 
     if (profileError) {
@@ -134,8 +133,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data: profileData, error: fetchError } = await supabase
       .from('profiles')
-      .select('id, user_id, email, email_alias, username, receipts_captured, spam_blocked, warranties_tracked, created_at')
-      .eq('user_id', data.user.id)
+      .select('id, email, email_alias, username, full_name, plan, created_at')
+      .eq('id', data.user.id)
       .maybeSingle();
 
     if (fetchError || !profileData) {

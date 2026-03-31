@@ -20,44 +20,32 @@ export interface Receipt {
   amount: number;
   subtotal: number;
   vat_amount: number;
-  vat_rate: number | null;
   currency: string;
   transaction_date: string;
-  tag: string;
-  has_warranty: boolean | null;
-  warranty_months: number | null;
+  category: string | null;
   reference_number: string;
-  email_alias: string;
-  items: Array<{
-    name: string;
-    quantity: number;
-    price: number;
-  }> | null;
-  payment_method: string | null;
-  location: string | null;
-  folder: string | null;
   created_at: string;
   status: string | null;
   storage_path: string | null;
   image_url: string | null;
   warranty_date: string | null;
-  category: string | null;
-  currency_symbol: string | null;
   card_last_4: string | null;
   short_summary: string | null;
-  return_window_days: number | null;
-  return_window_end_date: string | null;
   return_date: string | null;
+  source: string | null;
+  error_reason: string | null;
+  processing_attempts: number | null;
+  receipt_hash: string | null;
+  confidence_score: number | null;
+  parsed_at: string | null;
 }
 
 export interface Profile {
   id: string;
-  user_id: string;
   email: string | null;
+  full_name: string | null;
   email_alias: string | null;
-  username: string | null;
-  receipts_captured: number | null;
-  spam_blocked: number | null;
-  warranties_tracked: number | null;
+  plan: string | null;
   created_at: string;
+  username: string | null;
 }
