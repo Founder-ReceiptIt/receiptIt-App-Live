@@ -6,6 +6,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  profileLoading: boolean;
   username: string;
   emailAlias: string;
   signUp: (email: string, password: string, alias: string, fullName: string) => Promise<{ error: any }>;
@@ -19,11 +20,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(false);
   const [username, setUsername] = useState('');
   const [emailAlias, setEmailAlias] = useState('');
 
   useEffect(() => {
     const fetchProfile = async (userId: string) => {
+      console.log('Fetching profile for user_id:', userId);
+      setProfileLoading(true);
+
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -32,24 +37,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         console.error('Profile fetch error:', error);
+        setProfileLoading(false);
         return;
       }
 
       if (data) {
-        console.log('Profile data loaded:', { username: data.username, email_alias: data.email_alias });
+        console.log('Profile data loaded - full data:', data);
+        console.log('email_alias value:', data.email_alias, 'type:', typeof data.email_alias);
+        console.log('username value:', data.username, 'type:', typeof data.username);
+
         setUsername(data.username || '');
         setEmailAlias(data.email_alias || '');
+
+        console.log('State set - username:', data.username || '', 'emailAlias:', data.email_alias || '');
       } else {
         console.warn('No profile found for user:', userId);
       }
+
+      setProfileLoading(false);
     };
 
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('Session retrieved:', session?.user?.id);
       setSession(session);
       setUser(session?.user ?? null);
 
       if (session?.user) {
+        console.log('Calling fetchProfile for user:', session.user.id);
         fetchProfile(session.user.id);
+      } else {
+        console.log('No session user found');
       }
 
       setLoading(false);
@@ -58,17 +75,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+      (async () => {
+        console.log('Auth state changed, event:', _event, 'user:', session?.user?.id);
+        setSession(session);
+        setUser(session?.user ?? null);
 
-      if (session?.user) {
-        fetchProfile(session.user.id);
-      } else {
-        setUsername('');
-        setEmailAlias('');
-      }
+        if (session?.user) {
+          console.log('Auth state change - calling fetchProfile for user:', session.user.id);
+          await fetchProfile(session.user.id);
+        } else {
+          console.log('Auth state change - no user, clearing profile data');
+          setUsername('');
+          setEmailAlias('');
+        }
 
-      setLoading(false);
+        setLoading(false);
+      })();
     });
 
     return () => subscription.unsubscribe();
@@ -145,12 +167,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     session,
     loading,
+    profileLoading,
     username,
     emailAlias,
     signUp,
     signIn,
     signOut,
   };
+
+  // Debug: log whenever context value changes
+  useEffect(() => {
+    console.log('AuthContext value updated - username:', username, 'emailAlias:', emailAlias);
+  }, [username, emailAlias]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

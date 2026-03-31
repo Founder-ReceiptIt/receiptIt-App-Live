@@ -9,6 +9,8 @@ export function AliasTab() {
   const [copied, setCopied] = useState(false);
   const { stats: statsData, loading } = useStats(user?.id);
 
+  console.log('AliasTab - emailAlias:', emailAlias, 'user:', user?.id);
+
   const stats = [
     { label: 'Receipts Captured', value: statsData.receiptsCaptured.toString(), icon: Mail },
     { label: 'Spam Blocked', value: statsData.spamBlocked.toLocaleString(), icon: Lock },
@@ -55,7 +57,7 @@ export function AliasTab() {
                 transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                 className="text-3xl font-bold font-mono text-teal-400 mb-2"
               >
-                {emailAlias}
+                {emailAlias || 'No alias set'}
               </motion.div>
               <p className="text-gray-400 text-sm">
                 Use this email at checkout to protect your privacy
