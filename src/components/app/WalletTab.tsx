@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Store, Shield, Loader2, Car, Home, Plane, Zap, Utensils, RotateCcw, Undo2 } from 'lucide-react';
+import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Store, Shield, Loader2, Car, Home, Plane, Zap, Utensils, RotateCcw, Undo2, Trash2, CheckSquare, Square } from 'lucide-react';
 import { Video as LucideIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -78,6 +78,10 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
   const [warrantyFilterActive, setWarrantyFilterActive] = useState(false);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedReceipts, setSelectedReceipts] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const previousReceiptIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -107,7 +111,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         const currencySymbol = '£';
         const total = parseFloat(row.amount) || 0;
         const totalGbp = parseFloat(row.amount_gbp) || total;
-        const merchantName = row.merchant || row.short_summary || 'Receipt';
+        const merchantName = row.merchant || 'Receipt';
         const category = row.category || 'Other';
         const isProcessing = row.status === 'processing' || totalGbp === 0;
 
@@ -251,6 +255,55 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
   const workReceipts = receipts.filter(r => r.folder === 'work');
   const personalReceipts = receipts.filter(r => r.folder === 'personal');
   const warrantyReceipts = receipts.filter(r => r.warrantyDate && new Date(r.warrantyDate) > new Date());
+
+  const toggleReceiptSelection = (receiptId: string) => {
+    const newSelected = new Set(selectedReceipts);
+    if (newSelected.has(receiptId)) {
+      newSelected.delete(receiptId);
+    } else {
+      newSelected.add(receiptId);
+    }
+    setSelectedReceipts(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedReceipts.size === filteredReceipts.length) {
+      setSelectedReceipts(new Set());
+    } else {
+      setSelectedReceipts(new Set(filteredReceipts.map(r => r.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedReceipts.size === 0) return;
+
+    setIsDeleting(true);
+    try {
+      const receiptIds = Array.from(selectedReceipts);
+      const { error } = await supabase
+        .from('receipts')
+        .delete()
+        .in('id', receiptIds);
+
+      if (error) {
+        console.error('[WalletTab] Delete error:', error);
+        showToast('Failed to delete receipts', 'error');
+        setIsDeleting(false);
+        return;
+      }
+
+      setReceipts(receipts.filter(r => !selectedReceipts.has(r.id)));
+      setSelectedReceipts(new Set());
+      setSelectMode(false);
+      setDeleteConfirmOpen(false);
+      showToast(`Deleted ${receiptIds.length} receipt${receiptIds.length > 1 ? 's' : ''}`, 'success');
+    } catch (error) {
+      console.error('[WalletTab] Unexpected error during delete:', error);
+      showToast('Failed to delete receipts', 'error');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <div className="pb-32 px-6 pt-8 max-w-7xl mx-auto">
@@ -436,7 +489,37 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           <h2 className="text-xl font-bold text-white">
             {filteredReceipts.length} {filteredReceipts.length === 1 ? 'Transaction' : 'Transactions'}
           </h2>
-          <ReceiptIcon className="w-5 h-5 text-gray-400" />
+          <div className="flex items-center gap-3">
+            {selectedReceipts.size > 0 && (
+              <motion.button
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                onClick={() => setDeleteConfirmOpen(true)}
+                disabled={isDeleting}
+                className="flex items-center gap-2 px-3 py-1.5 bg-red-500/20 border border-red-500/50 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-red-400 text-sm font-semibold transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete ({selectedReceipts.size})
+              </motion.button>
+            )}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                setSelectMode(!selectMode);
+                setSelectedReceipts(new Set());
+              }}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                selectMode
+                  ? 'bg-teal-400/20 border border-teal-400/40 text-teal-400'
+                  : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
+              }`}
+            >
+              {selectMode ? 'Cancel' : 'Select'}
+            </motion.button>
+            <ReceiptIcon className="w-5 h-5 text-gray-400" />
+          </div>
         </div>
 
         <AnimatePresence mode="popLayout">
@@ -467,9 +550,17 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                 transition={{ duration: 0.5, delay: index * 0.1, ease: [0.22, 1, 0.36, 1] }}
                 whileHover={{ scale: isProcessing ? 1 : 1.02 }}
                 whileTap={{ scale: isProcessing ? 1 : 0.98 }}
-                onClick={() => !isProcessing && onReceiptClick(receipt)}
+                onClick={() => {
+                  if (selectMode && !isProcessing) {
+                    toggleReceiptSelection(receipt.id);
+                  } else if (!isProcessing) {
+                    onReceiptClick(receipt);
+                  }
+                }}
                 className={`w-full backdrop-blur-xl border rounded-xl p-5 transition-all text-left relative ${
-                  isProcessing
+                  selectMode && selectedReceipts.has(receipt.id)
+                    ? 'bg-teal-400/20 border-teal-400/60'
+                    : isProcessing
                     ? 'bg-teal-400/5 border-teal-400/30 cursor-default'
                     : hasActiveWarranty
                     ? 'bg-gradient-to-br from-emerald-900/10 to-teal-900/5 border-emerald-500/50 hover:bg-gradient-to-br hover:from-emerald-900/15 hover:to-teal-900/10 hover:border-emerald-400/60 shadow-[0_0_20px_rgba(16,185,129,0.2)]'
@@ -477,17 +568,27 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                 }`}
               >
                 <div className="flex items-start gap-4 mb-3">
-                  <div className={`w-12 h-12 flex-shrink-0 rounded-xl border flex items-center justify-center ${
-                    isProcessing
-                      ? 'bg-teal-400/10 border-teal-400/30'
-                      : 'bg-gradient-to-br from-white/10 to-white/5 border-white/10'
-                  }`}>
-                    {isProcessing ? (
-                      <Loader2 className="w-6 h-6 text-teal-400 animate-spin" strokeWidth={1.5} />
-                    ) : (
-                      <MerchantIcon className="w-6 h-6 text-teal-400" strokeWidth={1.5} />
-                    )}
-                  </div>
+                  {selectMode ? (
+                    <div className="w-12 h-12 flex-shrink-0 rounded-xl border border-teal-400/50 bg-teal-400/10 flex items-center justify-center">
+                      {selectedReceipts.has(receipt.id) ? (
+                        <CheckSquare className="w-6 h-6 text-teal-400" strokeWidth={2} />
+                      ) : (
+                        <Square className="w-6 h-6 text-gray-500" strokeWidth={1.5} />
+                      )}
+                    </div>
+                  ) : (
+                    <div className={`w-12 h-12 flex-shrink-0 rounded-xl border flex items-center justify-center ${
+                      isProcessing
+                        ? 'bg-teal-400/10 border-teal-400/30'
+                        : 'bg-gradient-to-br from-white/10 to-white/5 border-white/10'
+                    }`}>
+                      {isProcessing ? (
+                        <Loader2 className="w-6 h-6 text-teal-400 animate-spin" strokeWidth={1.5} />
+                      ) : (
+                        <MerchantIcon className="w-6 h-6 text-teal-400" strokeWidth={1.5} />
+                      )}
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <h3 className={`text-lg font-bold mb-1 ${isProcessing ? 'text-teal-400 animate-pulse' : 'text-white'}`}>
                       {receipt.merchant}
@@ -552,6 +653,51 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             );
           })}
             </div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {deleteConfirmOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+              onClick={() => !isDeleting && setDeleteConfirmOpen(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="backdrop-blur-xl bg-black/90 border border-white/10 rounded-2xl p-6 max-w-sm mx-4"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 className="text-xl font-bold text-white mb-2">Delete Receipts?</h3>
+                <p className="text-gray-400 text-sm mb-6">
+                  Are you sure you want to permanently delete {selectedReceipts.size} receipt{selectedReceipts.size > 1 ? 's' : ''}? This action cannot be undone.
+                </p>
+                <div className="flex gap-3">
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setDeleteConfirmOpen(false)}
+                    disabled={isDeleting}
+                    className="flex-1 px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white font-semibold hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Cancel
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleBulkDelete}
+                    disabled={isDeleting}
+                    className="flex-1 px-4 py-2.5 rounded-lg bg-red-500/20 border border-red-500/50 text-red-400 font-semibold hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {isDeleting ? 'Deleting...' : 'Delete'}
+                  </motion.button>
+                </div>
+              </motion.div>
+            </motion.div>
           )}
         </AnimatePresence>
       </motion.div>

@@ -268,6 +268,9 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   </div>
                   <div className="flex-1">
                     <h3 className="text-2xl font-bold text-white mb-1">{receipt.merchant}</h3>
+                    {receipt.summary && (
+                      <p className="text-teal-400 text-sm mb-2">{receipt.summary}</p>
+                    )}
                     <p className="text-gray-400 text-sm">
                       {new Date(receipt.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
                     </p>
@@ -284,12 +287,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                     </div>
                   </div>
                 </div>
-
-                {receipt.summary && (
-                  <div className="mb-4 p-4 bg-gradient-to-r from-teal-400/5 to-cyan-400/5 border border-teal-400/20 rounded-xl">
-                    <p className="text-teal-400 font-medium text-sm leading-relaxed">{receipt.summary}</p>
-                  </div>
-                )}
 
                 <div className="flex items-center gap-2 flex-wrap">
                   <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md ${receipt.tagColor || 'bg-white/5 border-white/10 text-gray-400'}`}>
