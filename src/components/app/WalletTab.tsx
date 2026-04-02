@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Store, Shield, Loader2, Car, Home, Plane, Zap, Utensils, RotateCcw, Undo2, Trash2, CheckSquare, Square } from 'lucide-react';
+import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Store, Shield, Loader2, Car, Home, Plane, Zap, Utensils, RotateCcw, Undo2, Trash2, CheckSquare, Square, ChevronDown } from 'lucide-react';
 import { Video as LucideIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -82,6 +82,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
   const [selectedReceipts, setSelectedReceipts] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [moveMenuOpen, setMoveMenuOpen] = useState(false);
   const previousReceiptIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -329,6 +330,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
       setReceipts(updatedReceipts);
       setSelectedReceipts(new Set());
       setSelectMode(false);
+      setMoveMenuOpen(false);
 
       const folderName = targetFolder === 'work' ? 'Work' : targetFolder === 'personal' ? 'Personal' : 'All';
       showToast(`Moved ${receiptIds.length} receipt${receiptIds.length > 1 ? 's' : ''} to ${folderName}`, 'success');
@@ -499,42 +501,62 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           <h2 className="text-xl font-bold text-white">
             {filteredReceipts.length} {filteredReceipts.length === 1 ? 'Transaction' : 'Transactions'}
           </h2>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 relative">
             {selectedReceipts.size > 0 && (
               <>
                 <motion.button
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.8 }}
-                  onClick={() => handleBulkMove('work')}
-                  disabled={isDeleting}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/20 border border-blue-500/50 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-blue-400 text-sm font-semibold transition-colors"
-                  title="Move to Work folder"
-                >
-                  Work
-                </motion.button>
-                <motion.button
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  onClick={() => handleBulkMove('personal')}
-                  disabled={isDeleting}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 border border-purple-500/50 hover:bg-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-purple-400 text-sm font-semibold transition-colors"
-                  title="Move to Personal folder"
-                >
-                  Personal
-                </motion.button>
-                <motion.button
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  onClick={() => handleBulkMove(null)}
+                  onClick={() => setMoveMenuOpen(!moveMenuOpen)}
                   disabled={isDeleting}
                   className="flex items-center gap-2 px-3 py-1.5 bg-teal-500/20 border border-teal-500/50 hover:bg-teal-500/30 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-teal-400 text-sm font-semibold transition-colors"
-                  title="Move to All folder"
+                  title="Move to folder"
                 >
-                  All
+                  Move to folder
+                  <ChevronDown className="w-4 h-4" />
                 </motion.button>
+
+                {moveMenuOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="absolute top-full left-0 mt-2 w-48 backdrop-blur-xl bg-black/95 border border-white/10 rounded-lg overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.5)] z-20"
+                  >
+                    <button
+                      onClick={() => {
+                        handleBulkMove('work');
+                        setMoveMenuOpen(false);
+                      }}
+                      disabled={isDeleting}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-500/10 transition-colors text-left text-blue-400 hover:text-blue-300 border-b border-white/10 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold"
+                    >
+                      Work
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleBulkMove('personal');
+                        setMoveMenuOpen(false);
+                      }}
+                      disabled={isDeleting}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-purple-500/10 transition-colors text-left text-purple-400 hover:text-purple-300 border-b border-white/10 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold"
+                    >
+                      Personal
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleBulkMove(null);
+                        setMoveMenuOpen(false);
+                      }}
+                      disabled={isDeleting}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-500/10 transition-colors text-left text-gray-400 hover:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold"
+                    >
+                      All
+                    </button>
+                  </motion.div>
+                )}
+
                 <motion.button
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -646,7 +668,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                   )}
                   <div className="flex-1 min-w-0">
                     <h3 className={`text-lg font-bold mb-1 ${isProcessing ? 'text-teal-400 animate-pulse' : 'text-white'}`}>
-                      {receipt.merchant || 'Receipt (Seller Unknown)'}
+                      {receipt.merchant ? receipt.merchant : 'Receipt (Unknown Seller)'}
                     </h3>
                     <div className="flex items-center gap-2">
                       <p className="text-sm text-gray-400">{new Date(receipt.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
@@ -686,7 +708,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                     <div className={`text-2xl font-bold ${isProcessing ? 'text-gray-500' : 'text-white'}`}>
                       £{receipt.amount_gbp.toFixed(2)}
                     </div>
-                    {receipt.currency && receipt.currency.toUpperCase() !== 'GBP' && (
+                    {receipt.amount !== receipt.amount_gbp && receipt.currency && receipt.currency.toUpperCase() !== 'GBP' && (
                       <div className={`text-xs pt-1 ${isProcessing ? 'text-gray-600' : 'text-gray-400'}`}>
                         {receipt.currencySymbol || receipt.currency}{receipt.amount.toFixed(2)}
                       </div>
