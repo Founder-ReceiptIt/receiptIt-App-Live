@@ -37,7 +37,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     if (!receipt) return;
 
     if (deleteOption === 'now') {
-      if (!confirm(`Delete receipt from ${receipt.merchant}?`)) return;
+      if (!confirm(`Delete receipt from ${receipt.merchant || 'seller unknown'}?`)) return;
 
       setIsDeleting(true);
       try {
@@ -259,15 +259,14 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
               <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6">
                 <div className="flex items-start gap-4 mb-6">
                   <div className="w-16 h-16 flex-shrink-0 rounded-xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 flex items-center justify-center">
-                    {/* Fallback for icon if missing */}
                     {receipt.merchantIcon ? (
                        <receipt.merchantIcon className="w-8 h-8 text-teal-400" strokeWidth={1.5} />
                     ) : (
-                       <span className="text-2xl font-bold text-teal-400">{receipt.merchant.charAt(0)}</span>
+                       <span className="text-2xl font-bold text-teal-400">{(receipt.merchant || 'R').charAt(0)}</span>
                     )}
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-2xl font-bold text-white mb-1">{receipt.merchant}</h3>
+                    <h3 className="text-2xl font-bold text-white mb-1">{receipt.merchant || 'Receipt (Seller Unknown)'}</h3>
                     {receipt.summary && (
                       <p className="text-teal-400 text-sm mb-2">{receipt.summary}</p>
                     )}

@@ -207,6 +207,19 @@ export function InsightsTab() {
           <h1 className="text-3xl font-bold text-white">Spending Insights</h1>
         </div>
 
+        {receipts.length === 0 ? (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-16 text-center"
+          >
+            <BarChart3 className="w-16 h-16 text-gray-500 mx-auto mb-6" />
+            <h2 className="text-2xl font-bold text-white mb-3">Your spending insights will appear once receipts are captured</h2>
+            <p className="text-gray-400 max-w-md mx-auto">Track purchases to unlock trends, averages and category breakdowns</p>
+          </motion.div>
+        ) : (
+          <>
         <div className="grid grid-cols-2 gap-3 mb-8">
           {insights.map((insight, index) => (
             <motion.div
@@ -384,6 +397,8 @@ export function InsightsTab() {
             ))}
           </div>
         </motion.div>
+          </>
+        )}
       </motion.div>
     </div>
   );

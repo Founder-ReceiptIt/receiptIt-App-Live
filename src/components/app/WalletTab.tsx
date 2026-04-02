@@ -305,6 +305,41 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
     }
   };
 
+  const handleBulkMove = async (targetFolder: 'work' | 'personal' | null) => {
+    if (selectedReceipts.size === 0) return;
+
+    setIsDeleting(true);
+    try {
+      const receiptIds = Array.from(selectedReceipts);
+      const { error } = await supabase
+        .from('receipts')
+        .update({ folder: targetFolder })
+        .in('id', receiptIds);
+
+      if (error) {
+        console.error('[WalletTab] Move error:', error);
+        showToast('Failed to move receipts', 'error');
+        setIsDeleting(false);
+        return;
+      }
+
+      const updatedReceipts = receipts.map(r =>
+        selectedReceipts.has(r.id) ? { ...r, folder: targetFolder } : r
+      );
+      setReceipts(updatedReceipts);
+      setSelectedReceipts(new Set());
+      setSelectMode(false);
+
+      const folderName = targetFolder === 'work' ? 'Work' : targetFolder === 'personal' ? 'Personal' : 'All';
+      showToast(`Moved ${receiptIds.length} receipt${receiptIds.length > 1 ? 's' : ''} to ${folderName}`, 'success');
+    } catch (error) {
+      console.error('[WalletTab] Unexpected error during move:', error);
+      showToast('Failed to move receipts', 'error');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="pb-32 px-6 pt-8 max-w-7xl mx-auto">
       <motion.div
@@ -357,60 +392,35 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           </p>
         </div>
 
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => setSelectedFolder('all')}
-            className={`backdrop-blur-xl border rounded-xl p-3 transition-all ${
-              selectedFolder === 'all'
-                ? 'bg-teal-400/20 border-teal-400/40'
-                : 'bg-white/5 border-white/10 hover:bg-white/10'
-            }`}
-          >
-            <div className="text-xl font-bold text-white mb-0.5">{receipts.length}</div>
-            <div className={`text-xs font-semibold ${
-              selectedFolder === 'all' ? 'text-teal-400' : 'text-gray-400'
-            }`}>
-              All Receipts
-            </div>
-          </motion.button>
+        <div className="mb-6">
+          <div className="inline-flex w-full backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-1">
+            {[
+              { value: 'all', label: 'All', count: receipts.length },
+              { value: 'work', label: 'Work', count: workReceipts.length },
+              { value: 'personal', label: 'Personal', count: personalReceipts.length }
+            ].map((option) => {
+              const isSelected = selectedFolder === option.value;
+              const tabWidth = isSelected ? 'flex-[2]' : 'flex-1';
 
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => setSelectedFolder('work')}
-            className={`backdrop-blur-xl border rounded-xl p-3 transition-all ${
-              selectedFolder === 'work'
-                ? 'bg-blue-400/20 border-blue-400/40'
-                : 'bg-white/5 border-white/10 hover:bg-white/10'
-            }`}
-          >
-            <div className="text-xl font-bold text-white mb-0.5">{workReceipts.length}</div>
-            <div className={`text-xs font-semibold ${
-              selectedFolder === 'work' ? 'text-blue-400' : 'text-gray-400'
-            }`}>
-              Work
-            </div>
-          </motion.button>
-
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => setSelectedFolder('personal')}
-            className={`backdrop-blur-xl border rounded-xl p-3 transition-all ${
-              selectedFolder === 'personal'
-                ? 'bg-purple-400/20 border-purple-400/40'
-                : 'bg-white/5 border-white/10 hover:bg-white/10'
-            }`}
-          >
-            <div className="text-xl font-bold text-white mb-0.5">{personalReceipts.length}</div>
-            <div className={`text-xs font-semibold ${
-              selectedFolder === 'personal' ? 'text-purple-400' : 'text-gray-400'
-            }`}>
-              Personal
-            </div>
-          </motion.button>
+              return (
+                <motion.button
+                  key={option.value}
+                  onClick={() => setSelectedFolder(option.value as 'all' | 'work' | 'personal')}
+                  layout
+                  className={`${tabWidth} rounded-lg p-3 text-center font-semibold transition-all ${
+                    isSelected
+                      ? 'bg-teal-400/30 text-teal-100 shadow-[0_0_20px_rgba(94,234,212,0.3)]'
+                      : 'bg-transparent text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  <div className="text-lg font-bold leading-none mb-1">{option.count}</div>
+                  <div className={`text-xs font-semibold ${isSelected ? 'text-teal-300' : 'text-gray-400'}`}>
+                    {option.label}
+                  </div>
+                </motion.button>
+              );
+            })}
+          </div>
         </div>
 
         {warrantyReceipts.length > 0 && (
@@ -489,19 +499,54 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           <h2 className="text-xl font-bold text-white">
             {filteredReceipts.length} {filteredReceipts.length === 1 ? 'Transaction' : 'Transactions'}
           </h2>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {selectedReceipts.size > 0 && (
-              <motion.button
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.8 }}
-                onClick={() => setDeleteConfirmOpen(true)}
-                disabled={isDeleting}
-                className="flex items-center gap-2 px-3 py-1.5 bg-red-500/20 border border-red-500/50 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-red-400 text-sm font-semibold transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-                Delete ({selectedReceipts.size})
-              </motion.button>
+              <>
+                <motion.button
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  onClick={() => handleBulkMove('work')}
+                  disabled={isDeleting}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/20 border border-blue-500/50 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-blue-400 text-sm font-semibold transition-colors"
+                  title="Move to Work folder"
+                >
+                  Work
+                </motion.button>
+                <motion.button
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  onClick={() => handleBulkMove('personal')}
+                  disabled={isDeleting}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 border border-purple-500/50 hover:bg-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-purple-400 text-sm font-semibold transition-colors"
+                  title="Move to Personal folder"
+                >
+                  Personal
+                </motion.button>
+                <motion.button
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  onClick={() => handleBulkMove(null)}
+                  disabled={isDeleting}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-teal-500/20 border border-teal-500/50 hover:bg-teal-500/30 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-teal-400 text-sm font-semibold transition-colors"
+                  title="Move to All folder"
+                >
+                  All
+                </motion.button>
+                <motion.button
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  onClick={() => setDeleteConfirmOpen(true)}
+                  disabled={isDeleting}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-red-500/20 border border-red-500/50 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-red-400 text-sm font-semibold transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete
+                </motion.button>
+              </>
             )}
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -530,9 +575,19 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
               exit={{ opacity: 0, y: -20 }}
               className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-12 text-center"
             >
-              <Search className="w-12 h-12 text-gray-500 mx-auto mb-4" />
-              <h3 className="text-lg font-bold text-white mb-2">No receipts found</h3>
-              <p className="text-gray-400">Try adjusting your search or filters</p>
+              {searchQuery || selectedCategory || warrantyFilterActive ? (
+                <>
+                  <Search className="w-12 h-12 text-gray-500 mx-auto mb-4" />
+                  <h3 className="text-lg font-bold text-white mb-2">No receipts found</h3>
+                  <p className="text-gray-400">Try adjusting your search or filters</p>
+                </>
+              ) : (
+                <>
+                  <ReceiptIcon className="w-12 h-12 text-gray-500 mx-auto mb-4" />
+                  <h3 className="text-lg font-bold text-white mb-2">No receipts here yet</h3>
+                  <p className="text-gray-400">Capture purchases or move receipts into this folder</p>
+                </>
+              )}
             </motion.div>
           ) : (
             <div className="space-y-3">
@@ -591,7 +646,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                   )}
                   <div className="flex-1 min-w-0">
                     <h3 className={`text-lg font-bold mb-1 ${isProcessing ? 'text-teal-400 animate-pulse' : 'text-white'}`}>
-                      {receipt.merchant}
+                      {receipt.merchant || 'Receipt (Seller Unknown)'}
                     </h3>
                     <div className="flex items-center gap-2">
                       <p className="text-sm text-gray-400">{new Date(receipt.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
@@ -631,6 +686,11 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                     <div className={`text-2xl font-bold ${isProcessing ? 'text-gray-500' : 'text-white'}`}>
                       £{receipt.amount_gbp.toFixed(2)}
                     </div>
+                    {receipt.currency && receipt.currency.toUpperCase() !== 'GBP' && (
+                      <div className={`text-xs pt-1 ${isProcessing ? 'text-gray-600' : 'text-gray-400'}`}>
+                        {receipt.currencySymbol || receipt.currency}{receipt.amount.toFixed(2)}
+                      </div>
+                    )}
                   </div>
                 </div>
 
