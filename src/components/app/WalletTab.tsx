@@ -44,6 +44,7 @@ export interface Receipt {
   merchantIcon: LucideIcon;
   merchantLogo?: string;
   amount: number;
+  amount_gbp: number;
   currency: string;
   currencySymbol?: string;
   date: string;
@@ -105,15 +106,17 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
 
         const currencySymbol = '£';
         const total = parseFloat(row.amount) || 0;
-        const merchantName = row.merchant || 'Unknown Merchant';
+        const totalGbp = parseFloat(row.amount_gbp) || total;
+        const merchantName = row.merchant || row.short_summary || 'Receipt';
         const category = row.category || 'Other';
-        const isProcessing = row.status === 'processing' || total === 0;
+        const isProcessing = row.status === 'processing' || totalGbp === 0;
 
         return {
           id: row.id,
           merchant: merchantName,
           merchantIcon: getCategoryIcon(category),
           amount: total,
+          amount_gbp: totalGbp,
           currency: row.currency || 'GBP',
           currencySymbol: currencySymbol,
           date: row.transaction_date || new Date().toISOString(),
@@ -223,7 +226,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
     };
   }, [user, showToast]);
 
-  const totalSpent = receipts.reduce((sum, receipt) => sum + receipt.amount, 0);
+  const totalSpent = receipts.reduce((sum, receipt) => sum + receipt.amount_gbp, 0);
   const budget = {
     currency: receipts.length > 0 ? (receipts[0].currencySymbol || '£') : '£',
     spent: totalSpent,
@@ -525,7 +528,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                   </div>
                   <div className="text-right">
                     <div className={`text-2xl font-bold ${isProcessing ? 'text-gray-500' : 'text-white'}`}>
-                      {receipt.currencySymbol || '£'}{receipt.amount.toFixed(2)}
+                      £{receipt.amount_gbp.toFixed(2)}
                     </div>
                   </div>
                 </div>
