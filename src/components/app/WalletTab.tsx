@@ -112,7 +112,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         const currencySymbol = '£';
         const total = parseFloat(row.amount) || 0;
         const totalGbp = parseFloat(row.amount_gbp) || total;
-        const merchantName = row.merchant || 'Receipt';
+        const merchantName = row.merchant || 'Receipt (Unknown Seller)';
         const category = row.category || 'Other';
         const isProcessing = row.status === 'processing' || totalGbp === 0;
 
@@ -668,7 +668,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                   )}
                   <div className="flex-1 min-w-0">
                     <h3 className={`text-lg font-bold mb-1 ${isProcessing ? 'text-teal-400 animate-pulse' : 'text-white'}`}>
-                      {receipt.merchant ? receipt.merchant : 'Receipt (Unknown Seller)'}
+                      {receipt.merchant}
                     </h3>
                     <div className="flex items-center gap-2">
                       <p className="text-sm text-gray-400">{new Date(receipt.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>

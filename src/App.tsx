@@ -10,50 +10,67 @@ import { ReceiptModal } from './components/app/ReceiptModal';
 import { InsightsTab } from './components/app/InsightsTab';
 import { SettingsTab } from './components/app/SettingsTab';
 import { AuthForm } from './components/auth/AuthForm';
+import { AliasSetupModal } from './components/auth/AliasSetupModal';
 import { Toast } from './components/app/Toast';
 import { ToastProvider } from './contexts/ToastContext';
 import { useAuth } from './contexts/AuthContext';
 
 function App() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, session, loading: authLoading, needsAliasSetup, forceRefresh } = useAuth();
   const [showApp, setShowApp] = useState(false);
   const [activeTab, setActiveTab] = useState('wallet');
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // ANDROID FIX: Check if user was scanning when tab was killed
+  useEffect(() => {
+    const checkAuthState = async () => {
+      if (!authLoading && user && session) {
+        console.log('[App] Auth state check: user exists, validating profile');
+        await forceRefresh();
+      }
+    };
+    checkAuthState();
+  }, [authLoading]);
+
   useEffect(() => {
     const isScanning = localStorage.getItem('isScanning');
-    if (isScanning === 'true') {
+    if (isScanning === 'true' && user && session) {
       console.log('[App] Detected scanning flag in localStorage, forcing scan tab');
       setActiveTab('scan');
     }
-  }, []);
+  }, [user, session]);
 
   useEffect(() => {
-    if (!authLoading && user) {
-      // Don't override activeTab if we're restoring scan state
-      const isScanning = localStorage.getItem('isScanning');
-      if (isScanning !== 'true') {
+    if (!authLoading) {
+      if (user && session) {
+        console.log('[App] User authenticated, showing app');
+        const isScanning = localStorage.getItem('isScanning');
+        if (isScanning !== 'true') {
+          setActiveTab('wallet');
+        }
+        const timer = setTimeout(() => {
+          setShowApp(true);
+        }, 2000);
+
+        return () => clearTimeout(timer);
+      } else {
+        console.log('[App] User not authenticated, showing auth screen');
+        setShowApp(false);
         setActiveTab('wallet');
       }
-      const timer = setTimeout(() => {
-        setShowApp(true);
-      }, 2000);
-
-      return () => clearTimeout(timer);
-    } else if (!authLoading && !user) {
-      setShowApp(false);
-      setActiveTab('wallet');
     }
-  }, [authLoading, user]);
+  }, [authLoading, user, session]);
 
   if (authLoading) {
     return <LoadingScreen />;
   }
 
-  if (!user) {
+  if (!user || !session) {
     return <AuthForm />;
+  }
+
+  if (needsAliasSetup) {
+    return <AliasSetupModal />;
   }
 
   return (

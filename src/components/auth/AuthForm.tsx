@@ -10,6 +10,7 @@ export function AuthForm() {
   const [aliasUsername, setAliasUsername] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showAliasSuggestion, setShowAliasSuggestion] = useState(false);
 
   const { signIn, signUp } = useAuth();
 
@@ -21,6 +22,13 @@ export function AuthForm() {
   const handleAliasChange = (value: string) => {
     const sanitized = value.toLowerCase().replace(/[^a-z0-9-]/g, '');
     setAliasUsername(sanitized);
+  };
+
+  const handleEmailChange = (newEmail: string) => {
+    setEmail(newEmail);
+    if (isSignUp && !aliasUsername) {
+      setShowAliasSuggestion(true);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -36,10 +44,28 @@ export function AuthForm() {
         }
         const finalAlias = `${username}@receiptit.app`;
         const { error } = await signUp(email, password, finalAlias, '');
-        if (error) throw error;
+        if (error) {
+          const errorMessage = error.message || 'Signup failed';
+          if (errorMessage.includes('already registered')) {
+            throw new Error('This email is already registered. Please sign in instead.');
+          }
+          if (errorMessage.includes('weak password')) {
+            throw new Error('Password must be at least 6 characters.');
+          }
+          if (errorMessage.includes('invalid') || errorMessage.includes('user_already_exists')) {
+            throw new Error('This email is already registered. Please sign in instead.');
+          }
+          throw new Error(errorMessage);
+        }
       } else {
         const { error } = await signIn(email, password);
-        if (error) throw error;
+        if (error) {
+          const errorMessage = error.message || 'Login failed';
+          if (errorMessage.includes('Invalid login credentials') || errorMessage.includes('invalid')) {
+            throw new Error('Invalid email or password.');
+          }
+          throw new Error(errorMessage);
+        }
       }
     } catch (err: any) {
       setError(err.message || 'An error occurred');
@@ -107,14 +133,7 @@ export function AuthForm() {
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => {
-                    const newEmail = e.target.value;
-                    setEmail(newEmail);
-                    if (isSignUp && !aliasUsername) {
-                      const username = newEmail.split('@')[0] || 'user';
-                      setAliasUsername(username.toLowerCase().replace(/[^a-z0-9-]/g, ''));
-                    }
-                  }}
+                  onChange={(e) => handleEmailChange(e.target.value)}
                   placeholder="you@example.com"
                   required
                   className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-teal-400/50 transition-colors"
@@ -150,7 +169,7 @@ export function AuthForm() {
                     type="text"
                     value={aliasUsername}
                     onChange={(e) => handleAliasChange(e.target.value)}
-                    placeholder="john"
+                    placeholder={showAliasSuggestion ? generateAliasUsername() : 'john'}
                     required
                     pattern="[a-z0-9-]+"
                     className="flex-1 pl-4 pr-2 py-3 bg-transparent text-white placeholder-gray-500 focus:outline-none"
