@@ -70,8 +70,17 @@ export interface Receipt {
 }
 
 export function WalletTab({ onReceiptClick }: WalletTabProps) {
-  const { user, username } = useAuth();
+  const { user, username, emailAlias, fullName } = useAuth();
   const { showToast } = useToast();
+
+  const getWelcomeName = () => {
+    // Fallback order: alias name > username > full name > email prefix as last fallback
+    if (emailAlias) return emailAlias;
+    if (fullName) return fullName;
+    if (username) return username;
+    return '';
+  };
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<'all' | 'work' | 'personal'>('all');
@@ -351,7 +360,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
       >
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-white">
-            Welcome back{username && `, ${username}`}
+            Welcome back{getWelcomeName() && `, ${getWelcomeName()}`}
           </h1>
         </div>
 

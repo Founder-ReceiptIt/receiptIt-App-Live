@@ -9,6 +9,7 @@ interface AuthContextType {
   profileLoading: boolean;
   username: string;
   emailAlias: string;
+  fullName: string;
   needsAliasSetup: boolean;
   signUp: (email: string, password: string, alias: string, fullName: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
@@ -27,6 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profileLoading, setProfileLoading] = useState(false);
   const [username, setUsername] = useState('');
   const [emailAlias, setEmailAlias] = useState('');
+  const [fullName, setFullName] = useState('');
   const [needsAliasSetup, setNeedsAliasSetup] = useState(false);
 
   const validateUserExists = async (): Promise<boolean> => {
@@ -68,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('Profile recovered successfully');
       setNeedsAliasSetup(true);
       setUsername(authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'user');
+      setFullName(authUser.user_metadata?.full_name || '');
       setEmailAlias('');
     } catch (err) {
       console.error('Unexpected error during profile recovery:', err);
@@ -86,6 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(null);
         setUsername('');
         setEmailAlias('');
+        setFullName('');
         setNeedsAliasSetup(false);
         await supabase.auth.signOut();
         setProfileLoading(false);
@@ -111,6 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setUsername(data.username || '');
         setEmailAlias(data.email_alias || '');
+        setFullName(data.full_name || '');
 
         if (!data.email_alias) {
           console.log('User profile exists but has no alias - needs setup');
@@ -185,6 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.log('Auth state change - no user, clearing profile data');
           setUsername('');
           setEmailAlias('');
+          setFullName('');
           setNeedsAliasSetup(false);
         }
 
@@ -246,6 +252,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setUsername(profileData.username || '');
       setEmailAlias(profileData.email_alias || '');
+      setFullName(profileData.full_name || '');
       setNeedsAliasSetup(false);
 
       return { error: null };
@@ -289,6 +296,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(null);
       setUsername('');
       setEmailAlias('');
+      setFullName('');
       setNeedsAliasSetup(false);
       await supabase.auth.signOut();
       return;
@@ -327,6 +335,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     setEmailAlias(profileData.email_alias || '');
+    setFullName(profileData.full_name || '');
     setNeedsAliasSetup(false);
 
     return { error: null };
@@ -337,6 +346,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
     setUsername('');
     setEmailAlias('');
+    setFullName('');
     setNeedsAliasSetup(false);
     localStorage.removeItem('isScanning');
     localStorage.removeItem('scanningSource');
@@ -350,6 +360,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      if (!supabaseUrl) {
+        return { error: new Error('Supabase URL not configured') };
+      }
+
       const response = await fetch(
         `${supabaseUrl}/functions/v1/delete-account`,
         {
@@ -363,17 +377,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
 
       if (!response.ok) {
-        const errorData = await response.json();
-        const errorMessage = errorData.details || errorData.error || 'Failed to delete account';
+        let errorMessage = 'Failed to delete account';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.details || errorData.error || errorMessage;
+        } catch (e) {
+          // If response is not JSON, use status text
+          errorMessage = response.statusText || errorMessage;
+        }
         console.error('Delete account error:', errorMessage);
         return { error: new Error(errorMessage) };
       }
+
+      const responseData = await response.json();
+      console.log('Delete account success:', responseData);
 
       await signOut();
       return { error: null };
     } catch (err: any) {
       console.error('Unexpected delete account error:', err);
-      return { error: err };
+      return { error: err || new Error('Failed to delete account') };
     }
   };
 
@@ -384,6 +407,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profileLoading,
     username,
     emailAlias,
+    fullName,
     needsAliasSetup,
     signUp,
     signIn,
