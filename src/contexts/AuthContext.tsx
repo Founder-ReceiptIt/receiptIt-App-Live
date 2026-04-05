@@ -230,6 +230,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (profileError) {
         console.error('[signUp] Profile creation error:', profileError);
         console.log('[signUp] Cleaning up orphaned auth user');
+        await supabase.auth.admin?.deleteUser(data.user.id).catch(() => {});
         return { error: new Error('Failed to create account profile') };
       }
 

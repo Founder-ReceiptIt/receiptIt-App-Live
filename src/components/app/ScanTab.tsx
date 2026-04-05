@@ -209,16 +209,17 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
         throw err;
       }
 
-      console.log('[ScanTab] Showing processing state briefly before returning to wallet');
-      await new Promise(resolve => setTimeout(resolve, 1200));
+      console.log('[ScanTab] Showing processing state for 3.5 seconds');
+      // Stay in processing state to show the scanning animation
+      await new Promise(resolve => setTimeout(resolve, 3500));
 
-      console.log('[ScanTab] Showing success message briefly');
+      console.log('[ScanTab] Showing success message for 2.5 seconds');
       setScanState('success');
       // ANDROID FIX: Clear localStorage on success
       localStorage.removeItem('isScanning');
       localStorage.removeItem('scanningSource');
 
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise(resolve => setTimeout(resolve, 2500));
 
       console.log('[ScanTab] Navigating to wallet...');
       isScanningRef.current = false;
