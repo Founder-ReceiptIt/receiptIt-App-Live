@@ -16,21 +16,12 @@ import { ToastProvider } from './contexts/ToastContext';
 import { useAuth } from './contexts/AuthContext';
 
 function App() {
-  const { user, session, loading: authLoading, needsAliasSetup, forceRefresh } = useAuth();
+  const { user, session, loading: authLoading, needsAliasSetup } = useAuth();
   const [showApp, setShowApp] = useState(false);
   const [activeTab, setActiveTab] = useState('wallet');
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  useEffect(() => {
-    const checkAuthState = async () => {
-      if (!authLoading && user && session) {
-        console.log('[App] Auth state check: user exists, validating profile');
-        await forceRefresh();
-      }
-    };
-    checkAuthState();
-  }, [authLoading]);
 
   useEffect(() => {
     const isScanning = localStorage.getItem('isScanning');

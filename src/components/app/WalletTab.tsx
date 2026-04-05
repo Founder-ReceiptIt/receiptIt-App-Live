@@ -140,7 +140,9 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         console.log('[WalletTab] Processing row:', row);
 
         const total = parseFloat(row.amount) || 0;
-        const totalGbp = row.amount_gbp !== null && row.amount_gbp !== undefined ? parseFloat(row.amount_gbp) : 0;
+        const totalGbp = currencyCode && currencyCode.toUpperCase() === 'GBP'
+          ? total
+          : (row.amount_gbp !== null && row.amount_gbp !== undefined ? parseFloat(row.amount_gbp) : total);
         const currencyCode = row.currency || 'GBP';
         const currencySymbol = getCurrencySymbol(currencyCode);
         const merchantName = row.merchant && row.merchant.trim() ? row.merchant : 'Receipt (Seller Unknown)';
@@ -264,7 +266,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
     };
   }, [user, showToast]);
 
-  const totalSpent = receipts.reduce((sum, receipt) => sum + receipt.amount_gbp, 0);
+  const totalSpent = receipts.reduce((sum, receipt) => sum + (receipt.currency && receipt.currency.toUpperCase() === 'GBP' ? receipt.amount : receipt.amount_gbp), 0);
   const budget = {
     currency: '£',
     spent: totalSpent,
