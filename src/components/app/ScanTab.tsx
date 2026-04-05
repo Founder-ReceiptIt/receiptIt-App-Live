@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, X, Camera, CheckCircle, Loader2, FileImage } from 'lucide-react';
+import { Upload, X, Camera, CheckCircle, Loader2, FileImage, File } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { flushSync } from 'react-dom';
 import { supabase } from '../../lib/supabase';
@@ -228,13 +228,13 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       // Stay in processing state to show the scanning animation
       await new Promise(resolve => setTimeout(resolve, 3500));
 
-      console.log('[ScanTab] Showing success message for 1 second');
+      console.log('[ScanTab] Showing success message for 2.5 seconds');
       setScanState('success');
       // ANDROID FIX: Clear localStorage on success
       localStorage.removeItem('isScanning');
       localStorage.removeItem('scanningSource');
 
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 2500));
 
       console.log('[ScanTab] Navigating to wallet...');
       isScanningRef.current = false;
@@ -383,14 +383,29 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                 className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8"
               >
                 <div className="text-center mb-6">
-                  {previewUrl && (
+                  {previewUrl && selectedFile && (
                     <div className="relative mb-6 rounded-xl overflow-hidden border border-white/10">
-                      <img
-                        src={previewUrl}
-                        alt="Receipt preview"
-                        className="w-full h-64 object-cover"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                      {selectedFile.type === 'application/pdf' ? (
+                        <div className="flex flex-col items-center justify-center w-full h-64 bg-gradient-to-br from-white/10 to-white/5">
+                          <File className="w-16 h-16 text-teal-400 mb-3" strokeWidth={1.5} />
+                          <div className="text-center px-4">
+                            <p className="text-sm text-teal-400 font-semibold mb-1">PDF Document</p>
+                            <p className="text-xs text-gray-400 truncate">{selectedFile.name}</p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {(selectedFile.size / 1024).toFixed(1)} KB
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <img
+                            src={previewUrl}
+                            alt="Receipt preview"
+                            className="w-full h-64 object-cover"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                        </>
+                      )}
 
                       {scanState === 'uploading' && (
                         <motion.div

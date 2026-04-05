@@ -124,7 +124,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         const currencySymbol = '£';
         const total = parseFloat(row.amount) || 0;
         const totalGbp = parseFloat(row.amount_gbp) || total;
-        const merchantName = row.merchant || 'Receipt (Unknown Seller)';
+        const merchantName = row.merchant && row.merchant.trim() ? row.merchant : 'Receipt (Seller Unknown)';
         const category = row.category || 'Other';
         const isProcessing = row.status === 'processing' || totalGbp === 0;
 
