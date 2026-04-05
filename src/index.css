@@ -52,3 +52,20 @@ body::before {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(45, 212, 191, 0.5);
 }
+
+@keyframes processingDots {
+  0%, 20% {
+    content: '.';
+  }
+  40% {
+    content: '..';
+  }
+  60%, 100% {
+    content: '...';
+  }
+}
+
+.processing-dots::after {
+  content: '.';
+  animation: processingDots 1.5s steps(4, end) infinite;
+}

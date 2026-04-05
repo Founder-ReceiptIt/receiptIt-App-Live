@@ -266,7 +266,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
 
   const totalSpent = receipts.reduce((sum, receipt) => sum + receipt.amount_gbp, 0);
   const budget = {
-    currency: receipts.length > 0 ? (receipts[0].currencySymbol || '£') : '£',
+    currency: '£',
     spent: totalSpent,
     limit: 2500,
   };
@@ -700,9 +700,36 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <h3 className={`text-lg font-bold mb-1 ${isProcessing ? 'text-teal-400 animate-pulse' : 'text-white'}`}>
-                      {isProcessing ? 'Processing...' : receipt.merchant}
-                    </h3>
+                    {isProcessing ? (
+                      <motion.h3 className="text-lg font-bold mb-1 text-teal-400">
+                        Processing<motion.span
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: [0, 1, 1, 0] }}
+                          transition={{ duration: 1.5, repeat: Infinity }}
+                        >
+                          .
+                        </motion.span>
+                        <motion.span
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: [0, 0, 1, 0] }}
+                          transition={{ duration: 1.5, repeat: Infinity }}
+                        >
+                          .
+                        </motion.span>
+                        <motion.span
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: [0, 0, 1, 0] }}
+                          transition={{ duration: 1.5, repeat: Infinity, delay: 0.1 }}
+                        >
+                          .
+                        </motion.span>
+                      </motion.h3>
+                    ) : (
+                      <h3 className="text-lg font-bold mb-1 text-white">
+                        {receipt.merchant}
+                      </h3>
+                    )}
+
                     <div className="flex items-center gap-2">
                       <p className="text-sm text-gray-400">{new Date(receipt.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                       {hasActiveWarranty && !isProcessing && (
@@ -737,16 +764,18 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                       )}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className={`text-2xl font-bold ${isProcessing ? 'text-gray-500' : 'text-white'}`}>
-                      £{receipt.amount_gbp.toFixed(2)}
-                    </div>
-                    {receipt.amount !== receipt.amount_gbp && receipt.currency && receipt.currency.toUpperCase() !== 'GBP' && (
-                      <div className={`text-xs pt-1 ${isProcessing ? 'text-gray-600' : 'text-gray-400'}`}>
-                        {receipt.currencySymbol || receipt.currency}{receipt.amount.toFixed(2)}
+                  {!isProcessing && (
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-white">
+                        £{receipt.amount_gbp.toFixed(2)}
                       </div>
-                    )}
-                  </div>
+                      {receipt.amount !== receipt.amount_gbp && receipt.currency && receipt.currency.toUpperCase() !== 'GBP' && (
+                        <div className="text-xs pt-1 text-gray-400">
+                          {getCurrencySymbol(receipt.currency)}{receipt.amount.toFixed(2)}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">

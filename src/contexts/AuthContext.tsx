@@ -287,8 +287,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!profileData) {
-        console.log('[signIn] No profile found for authenticated user - will trigger recovery');
-        setNeedsProfileRecovery(true);
+        console.log('[signIn] No profile found for authenticated user');
+        setNeedsProfileRecovery(false);
         setNeedsAliasSetup(false);
         return { error: null };
       }
