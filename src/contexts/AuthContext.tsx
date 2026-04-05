@@ -287,10 +287,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!profileData) {
-        console.log('[signIn] No profile found for authenticated user');
+        console.error('[signIn] No profile found for authenticated user - signing out');
         setNeedsProfileRecovery(false);
         setNeedsAliasSetup(false);
-        return { error: null };
+        await supabase.auth.signOut();
+        return { error: new Error('Account profile is missing. Please contact support or recreate your account.') };
       }
 
       setUsername(profileData.username || '');

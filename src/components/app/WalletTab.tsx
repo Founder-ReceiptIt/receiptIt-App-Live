@@ -140,12 +140,12 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         console.log('[WalletTab] Processing row:', row);
 
         const total = parseFloat(row.amount) || 0;
-        const totalGbp = parseFloat(row.amount_gbp) || total;
+        const totalGbp = row.amount_gbp !== null && row.amount_gbp !== undefined ? parseFloat(row.amount_gbp) : 0;
         const currencyCode = row.currency || 'GBP';
         const currencySymbol = getCurrencySymbol(currencyCode);
         const merchantName = row.merchant && row.merchant.trim() ? row.merchant : 'Receipt (Seller Unknown)';
         const category = row.category || 'Other';
-        const isProcessing = row.status === 'processing' || totalGbp === 0;
+        const isProcessing = row.status === 'processing';
 
         return {
           id: row.id,

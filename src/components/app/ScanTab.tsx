@@ -204,21 +204,6 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
         const merchant = insertData[0]?.merchant || undefined;
         const receiptId = insertData[0]?.id;
         showToast('New receipt received', merchant !== 'Analyzing...' ? merchant : undefined);
-
-        // Simulate AI processing by updating the receipt after a delay
-        if (receiptId) {
-          setTimeout(async () => {
-            await supabase
-              .from('receipts')
-              .update({
-                status: 'completed',
-                merchant: 'Receipt (Seller Unknown)',
-                amount: 0.00,
-                category: 'Uncategorized',
-              })
-              .eq('id', receiptId);
-          }, 2000);
-        }
       } catch (err) {
         console.error('Scan error:', err);
         throw err;
