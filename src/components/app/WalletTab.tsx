@@ -74,8 +74,11 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
   const { showToast } = useToast();
 
   const getWelcomeName = () => {
-    // Fallback order: alias name > username > full name > email prefix as last fallback
-    if (emailAlias) return emailAlias;
+    // Fallback order: alias name (first part before @) > full name > username > email prefix as last fallback
+    if (emailAlias) {
+      // Extract just the first part of the email alias (before @)
+      return emailAlias.split('@')[0];
+    }
     if (fullName) return fullName;
     if (username) return username;
     return '';
@@ -360,7 +363,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
       >
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-white">
-            Welcome back{getWelcomeName() && `, ${getWelcomeName()}`}
+            Welcome back{getWelcomeName() && ` ${getWelcomeName()}`}
           </h1>
         </div>
 

@@ -360,9 +360,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
       if (!supabaseUrl) {
         return { error: new Error('Supabase URL not configured') };
       }
+
+      console.log('Starting account deletion for user:', user.id);
 
       const response = await fetch(
         `${supabaseUrl}/functions/v1/delete-account`,
@@ -371,10 +374,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           headers: {
             'Authorization': `Bearer ${session.access_token}`,
             'Content-Type': 'application/json',
+            'X-Client-Info': 'supabase-js/2.57.4',
+            ...(anonKey ? { 'apikey': anonKey } : {}),
           },
           body: JSON.stringify({ userId: user.id }),
         }
       );
+
+      console.log('Delete account response status:', response.status);
 
       if (!response.ok) {
         let errorMessage = 'Failed to delete account';
@@ -385,7 +392,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // If response is not JSON, use status text
           errorMessage = response.statusText || errorMessage;
         }
-        console.error('Delete account error:', errorMessage);
+        console.error('Delete account error:', errorMessage, 'Status:', response.status);
         return { error: new Error(errorMessage) };
       }
 
@@ -396,7 +403,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: null };
     } catch (err: any) {
       console.error('Unexpected delete account error:', err);
-      return { error: err || new Error('Failed to delete account') };
+      const errorMessage = err?.message || 'Network error - please check your connection and try again';
+      return { error: new Error(errorMessage) };
     }
   };
 
