@@ -21,8 +21,18 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 
 export function SettingsTab() {
-  const { user, username, emailAlias, signOut, profileLoading, deleteAccount } = useAuth();
+  const { user, username, emailAlias, fullName, signOut, profileLoading, deleteAccount } = useAuth();
   const { showToast } = useToast();
+
+  const getDisplayName = () => {
+    // Fallback order: alias handle before @ > username > full name > email prefix
+    if (emailAlias) {
+      return emailAlias.split('@')[0];
+    }
+    if (username) return username;
+    if (fullName) return fullName;
+    return 'Not set';
+  };
   const [receiptsCount, setReceiptsCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -217,12 +227,12 @@ export function SettingsTab() {
             </div>
             <div className="flex-1">
               <h3 className="text-xl font-bold text-white mb-1">
-                {profileLoading ? 'Loading...' : emailAlias || 'Not set'}
+                {profileLoading ? 'Loading...' : getDisplayName()}
               </h3>
               <p className="text-gray-400 text-sm mb-3">Your privacy-protected alias</p>
               <div className="flex flex-col gap-2">
                 <div className="text-sm text-gray-400">
-                  Username: <span className="text-white font-semibold">{profileLoading ? 'Loading...' : username || 'Not set'}</span>
+                  Email: <span className="text-white font-semibold">{profileLoading ? 'Loading...' : emailAlias || 'Not set'}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md text-green-400 bg-green-400/10 border-green-400/30">
