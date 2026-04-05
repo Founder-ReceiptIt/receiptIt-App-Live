@@ -359,46 +359,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-      if (!supabaseUrl) {
-        return { error: new Error('Supabase URL not configured') };
-      }
-
       console.log('Starting account deletion for user:', user.id);
 
-      const response = await fetch(
-        `${supabaseUrl}/functions/v1/delete-account`,
+      const { data, error: invokeError } = await supabase.functions.invoke(
+        'delete-account',
         {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-            'Content-Type': 'application/json',
-            'X-Client-Info': 'supabase-js/2.57.4',
-            ...(anonKey ? { 'apikey': anonKey } : {}),
-          },
-          body: JSON.stringify({ userId: user.id }),
+          body: { userId: user.id },
         }
       );
 
-      console.log('Delete account response status:', response.status);
+      if (invokeError) {
+        console.error('Delete account edge function error:', invokeError);
+        console.log('Falling back to profile deletion...');
 
-      if (!response.ok) {
-        let errorMessage = 'Failed to delete account';
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.details || errorData.error || errorMessage;
-        } catch (e) {
-          // If response is not JSON, use status text
-          errorMessage = response.statusText || errorMessage;
+        const { error: deleteProfileError } = await supabase
+          .from('profiles')
+          .delete()
+          .eq('id', user.id);
+
+        if (deleteProfileError) {
+          console.error('Profile deletion error:', deleteProfileError);
+          return { error: new Error('Failed to delete account') };
         }
-        console.error('Delete account error:', errorMessage, 'Status:', response.status);
-        return { error: new Error(errorMessage) };
+
+        console.log('Profile deleted successfully (fallback)');
+        await signOut();
+        return { error: null };
       }
 
-      const responseData = await response.json();
-      console.log('Delete account success:', responseData);
-
+      console.log('Delete account success:', data);
       await signOut();
       return { error: null };
     } catch (err: any) {
