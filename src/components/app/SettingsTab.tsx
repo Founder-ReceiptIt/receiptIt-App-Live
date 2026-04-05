@@ -11,16 +11,22 @@ import {
   Globe,
   Eye,
   ChevronRight,
-  Check
+  Check,
+  AlertTriangle,
+  X
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 
 export function SettingsTab() {
-  const { user, username, emailAlias, signOut, profileLoading } = useAuth();
+  const { user, username, emailAlias, signOut, profileLoading, deleteAccount } = useAuth();
+  const { showToast } = useToast();
   const [receiptsCount, setReceiptsCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   console.log('SettingsTab - emailAlias:', emailAlias, 'username:', username, 'profileLoading:', profileLoading);
   const [notifications, setNotifications] = useState({
@@ -88,6 +94,19 @@ export function SettingsTab() {
 
   const handleSignOut = async () => {
     await signOut();
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeleteLoading(true);
+    const { error } = await deleteAccount();
+    setDeleteLoading(false);
+
+    if (error) {
+      showToast(error.message || 'Failed to delete account');
+    } else {
+      showToast('Account deleted successfully');
+      setShowDeleteModal(false);
+    }
   };
 
   const settingsSections = [
@@ -326,8 +345,67 @@ export function SettingsTab() {
             >
               Sign Out
             </button>
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="w-full text-left px-4 py-3 min-h-[44px] rounded-lg hover:bg-white/5 transition-colors text-red-500 hover:text-red-400 relative z-50 touch-manipulation"
+            >
+              Delete Account
+            </button>
           </div>
         </motion.div>
+
+        {showDeleteModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+            onClick={() => !deleteLoading && setShowDeleteModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white/10 border border-white/20 rounded-2xl p-6 max-w-sm w-full backdrop-blur-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start gap-4 mb-4">
+                <div className="w-10 h-10 rounded-lg bg-red-500/20 border border-red-500/30 flex items-center justify-center flex-shrink-0">
+                  <AlertTriangle className="w-6 h-6 text-red-400" strokeWidth={1.5} />
+                </div>
+                <button
+                  onClick={() => setShowDeleteModal(false)}
+                  disabled={deleteLoading}
+                  className="ml-auto p-1 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <X className="w-5 h-5 text-gray-400" strokeWidth={1.5} />
+                </button>
+              </div>
+
+              <h2 className="text-xl font-bold text-white mb-2">Delete Account?</h2>
+              <p className="text-gray-400 text-sm mb-6">
+                This will permanently delete your account and all associated data. This action cannot be undone.
+              </p>
+
+              <div className="space-y-3">
+                <button
+                  onClick={handleDeleteAccount}
+                  disabled={deleteLoading}
+                  className="w-full px-4 py-3 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 font-semibold hover:bg-red-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {deleteLoading ? 'Deleting...' : 'Delete Account'}
+                </button>
+                <button
+                  onClick={() => setShowDeleteModal(false)}
+                  disabled={deleteLoading}
+                  className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white font-semibold hover:bg-white/10 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
       </motion.div>
     </div>
   );

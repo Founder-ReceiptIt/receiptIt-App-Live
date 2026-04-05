@@ -15,6 +15,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   createAlias: (alias: string) => Promise<{ error: any }>;
   forceRefresh: () => Promise<void>;
+  deleteAccount: () => Promise<{ error: any }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -342,6 +343,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   };
 
+  const deleteAccount = async () => {
+    if (!user || !session) {
+      return { error: new Error('No authenticated user') };
+    }
+
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const response = await fetch(
+        `${supabaseUrl}/functions/v1/delete-account`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ userId: user.id }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        const errorMessage = errorData.details || errorData.error || 'Failed to delete account';
+        console.error('Delete account error:', errorMessage);
+        return { error: new Error(errorMessage) };
+      }
+
+      await signOut();
+      return { error: null };
+    } catch (err: any) {
+      console.error('Unexpected delete account error:', err);
+      return { error: err };
+    }
+  };
+
   const value = {
     user,
     session,
@@ -355,6 +390,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signOut,
     createAlias,
     forceRefresh,
+    deleteAccount,
   };
 
   // Debug: log whenever context value changes
