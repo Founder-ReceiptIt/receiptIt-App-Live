@@ -210,7 +210,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             console.log('[WalletTab] New receipt inserted:', newRow);
 
             // Always show notification for new receipts
-            const merchantName = newRow.merchant || newRow.store_name || 'Receipt (Seller Unknown)';
+            const merchantName = newRow.merchant && newRow.merchant.trim() ? newRow.merchant : 'Receipt (Seller Unknown)';
             const amount = parseFloat(newRow.amount) || parseFloat(newRow.total) || 0;
             const currencyCode = newRow.currency || 'GBP';
             const currencySymbol = getCurrencySymbol(currencyCode);
@@ -231,7 +231,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             const newAmount = parseFloat(updatedRow.amount) || parseFloat(updatedRow.total) || 0;
 
             if (oldAmount === 0 && newAmount > 0) {
-              const merchantName = updatedRow.merchant || updatedRow.store_name || 'Receipt (Seller Unknown)';
+              const merchantName = updatedRow.merchant && updatedRow.merchant.trim() ? updatedRow.merchant : 'Receipt (Seller Unknown)';
               const currencyCode = updatedRow.currency || 'GBP';
               const currencySymbol = getCurrencySymbol(currencyCode);
               showToast('Receipt processed', `${merchantName} - ${currencySymbol}${newAmount.toFixed(2)}`);
@@ -767,7 +767,10 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                   {!isProcessing && (
                     <div className="text-right">
                       <div className="text-2xl font-bold text-white">
-                        £{receipt.amount_gbp.toFixed(2)}
+                        {receipt.currency && receipt.currency.toUpperCase() === 'GBP'
+                          ? `£${receipt.amount.toFixed(2)}`
+                          : `£${receipt.amount_gbp.toFixed(2)}`
+                        }
                       </div>
                       {receipt.amount !== receipt.amount_gbp && receipt.currency && receipt.currency.toUpperCase() !== 'GBP' && (
                         <div className="text-xs pt-1 text-gray-400">

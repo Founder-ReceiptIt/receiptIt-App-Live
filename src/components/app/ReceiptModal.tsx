@@ -300,7 +300,10 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   </div>
                   <div className="text-right">
                     <div className="text-3xl font-bold text-white">
-                      £{receipt.amount_gbp.toFixed(2)}
+                      {receipt.currency && receipt.currency.toUpperCase() === 'GBP'
+                        ? `£${receipt.amount.toFixed(2)}`
+                        : `£${receipt.amount_gbp.toFixed(2)}`
+                      }
                     </div>
                     {receipt.amount !== receipt.amount_gbp && receipt.currency && receipt.currency.toUpperCase() !== 'GBP' && (
                       <div className="text-sm pt-1 text-gray-400">

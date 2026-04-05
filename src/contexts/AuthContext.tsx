@@ -33,6 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [fullName, setFullName] = useState('');
   const [needsAliasSetup, setNeedsAliasSetup] = useState(false);
   const [needsProfileRecovery, setNeedsProfileRecovery] = useState(false);
+  const [isSigningUp, setIsSigningUp] = useState(false);
 
   const validateUserExists = async (): Promise<boolean> => {
     try {
@@ -50,6 +51,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchProfile = async (userId: string) => {
     console.log('[fetchProfile] Fetching profile for id:', userId);
+
+    if (isSigningUp) {
+      console.log('[fetchProfile] Skipping fetchProfile during signup - will be handled by signUp');
+      return;
+    }
+
     setProfileLoading(true);
 
     try {
@@ -100,12 +107,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('[fetchProfile] State set - username:', data.username || '', 'emailAlias:', data.email_alias || '');
       } else {
         console.error('[fetchProfile] No profile found for authenticated user:', userId);
-        console.log('[fetchProfile] User is authenticated but profile missing - initiating recovery mode');
         setUsername('');
         setEmailAlias('');
         setFullName('');
         setNeedsAliasSetup(false);
-        setNeedsProfileRecovery(true);
+        setNeedsProfileRecovery(false);
       }
     } finally {
       setProfileLoading(false);
@@ -185,6 +191,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp = async (email: string, password: string, alias: string, fullName: string) => {
     try {
       console.log('[signUp] Starting new account creation for email:', email);
+      setIsSigningUp(true);
 
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -243,12 +250,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUsername(profileData.username || '');
       setEmailAlias(profileData.email_alias || '');
       setFullName(profileData.full_name || '');
-      setNeedsAliasSetup(false);
+      setNeedsProfileRecovery(false);
+      setNeedsAliasSetup(!profileData.email_alias);
 
       console.log('[signUp] Account created successfully');
+      setIsSigningUp(false);
       return { error: null };
     } catch (err: any) {
       console.error('[signUp] Unexpected signup error:', err);
+      setIsSigningUp(false);
       return { error: err };
     }
   };
