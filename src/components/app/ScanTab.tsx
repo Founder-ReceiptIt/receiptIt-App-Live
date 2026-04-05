@@ -212,7 +212,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
               .from('receipts')
               .update({
                 status: 'completed',
-                merchant: 'Receipt Scanned',
+                merchant: 'Receipt (Seller Unknown)',
                 amount: 0.00,
                 category: 'Uncategorized',
               })

@@ -38,6 +38,24 @@ const getTagColor = (tag: string): string => {
   return 'text-gray-400 bg-gray-400/10 border-gray-400/30';
 };
 
+const getCurrencySymbol = (currencyCode: string): string => {
+  const code = (currencyCode || 'GBP').toUpperCase();
+  const symbols: { [key: string]: string } = {
+    'GBP': '£',
+    'EUR': '€',
+    'USD': '$',
+    'JPY': '¥',
+    'CNY': '¥',
+    'INR': '₹',
+    'AUD': 'A$',
+    'CAD': 'C$',
+    'CHF': 'CHF',
+    'SEK': 'kr',
+    'NZD': 'NZ$',
+  };
+  return symbols[code] || code;
+};
+
 export interface Receipt {
   id: string;
   merchant: string;
@@ -121,9 +139,10 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
       const formattedReceipts: Receipt[] = (data || []).map((row) => {
         console.log('[WalletTab] Processing row:', row);
 
-        const currencySymbol = '£';
         const total = parseFloat(row.amount) || 0;
         const totalGbp = parseFloat(row.amount_gbp) || total;
+        const currencyCode = row.currency || 'GBP';
+        const currencySymbol = getCurrencySymbol(currencyCode);
         const merchantName = row.merchant && row.merchant.trim() ? row.merchant : 'Receipt (Seller Unknown)';
         const category = row.category || 'Other';
         const isProcessing = row.status === 'processing' || totalGbp === 0;
@@ -134,7 +153,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           merchantIcon: getCategoryIcon(category),
           amount: total,
           amount_gbp: totalGbp,
-          currency: row.currency || 'GBP',
+          currency: currencyCode,
           currencySymbol: currencySymbol,
           date: row.transaction_date || new Date().toISOString(),
           category: category,
@@ -191,9 +210,10 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             console.log('[WalletTab] New receipt inserted:', newRow);
 
             // Always show notification for new receipts
-            const merchantName = newRow.merchant || newRow.store_name || 'Unknown Merchant';
+            const merchantName = newRow.merchant || newRow.store_name || 'Receipt (Seller Unknown)';
             const amount = parseFloat(newRow.amount) || parseFloat(newRow.total) || 0;
-            const currencySymbol = newRow.currency_symbol || '£';
+            const currencyCode = newRow.currency || 'GBP';
+            const currencySymbol = getCurrencySymbol(currencyCode);
 
             const formattedAmount = amount > 0 ? `${currencySymbol}${amount.toFixed(2)}` : 'Processing...';
             showToast('New Receipt Processed', `${merchantName} - ${formattedAmount}`);
@@ -211,8 +231,9 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             const newAmount = parseFloat(updatedRow.amount) || parseFloat(updatedRow.total) || 0;
 
             if (oldAmount === 0 && newAmount > 0) {
-              const merchantName = updatedRow.merchant || updatedRow.store_name || 'Unknown Merchant';
-              const currencySymbol = updatedRow.currency_symbol || '£';
+              const merchantName = updatedRow.merchant || updatedRow.store_name || 'Receipt (Seller Unknown)';
+              const currencyCode = updatedRow.currency || 'GBP';
+              const currencySymbol = getCurrencySymbol(currencyCode);
               showToast('Receipt processed', `${merchantName} - ${currencySymbol}${newAmount.toFixed(2)}`);
             }
 
@@ -680,7 +701,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                   )}
                   <div className="flex-1 min-w-0">
                     <h3 className={`text-lg font-bold mb-1 ${isProcessing ? 'text-teal-400 animate-pulse' : 'text-white'}`}>
-                      {receipt.merchant}
+                      {isProcessing ? 'Processing...' : receipt.merchant}
                     </h3>
                     <div className="flex items-center gap-2">
                       <p className="text-sm text-gray-400">{new Date(receipt.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>

@@ -8,6 +8,24 @@ import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
+const getCurrencySymbol = (currencyCode: string): string => {
+  const code = (currencyCode || 'GBP').toUpperCase();
+  const symbols: { [key: string]: string } = {
+    'GBP': '£',
+    'EUR': '€',
+    'USD': '$',
+    'JPY': '¥',
+    'CNY': '¥',
+    'INR': '₹',
+    'AUD': 'A$',
+    'CAD': 'C$',
+    'CHF': 'CHF',
+    'SEK': 'kr',
+    'NZD': 'NZ$',
+  };
+  return symbols[code] || code;
+};
+
 interface ReceiptModalProps {
   receipt: Receipt | null;
   onClose: () => void;
@@ -37,7 +55,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     if (!receipt) return;
 
     if (deleteOption === 'now') {
-      if (!confirm(`Delete receipt from ${receipt.merchant || 'seller unknown'}?`)) return;
+      if (!confirm(`Delete receipt from ${receipt.merchant || 'Receipt (Seller Unknown)'}?`)) return;
 
       setIsDeleting(true);
       try {
@@ -517,7 +535,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                             <div className="text-xs text-gray-400 mt-0.5">Quantity: {item.quantity}</div>
                           </div>
                           <div className="text-white font-bold">
-                            {receipt.currencySymbol || '£'}{item.price.toFixed(2)}
+                            {getCurrencySymbol(receipt.currency)}{item.price.toFixed(2)}
                           </div>
                         </div>
                       ))}
@@ -534,7 +552,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   {receipt.currency && receipt.currency.toUpperCase() !== 'GBP' && (
                     <div className="flex items-center justify-between text-gray-400 text-sm pt-2 border-t border-white/10">
                       <span>Original total</span>
-                      <span>{receipt.currency}{receipt.amount.toFixed(2)}</span>
+                      <span>{getCurrencySymbol(receipt.currency)}{receipt.amount.toFixed(2)}</span>
                     </div>
                   )}
                 </div>

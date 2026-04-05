@@ -11,10 +11,12 @@ interface AuthContextType {
   emailAlias: string;
   fullName: string;
   needsAliasSetup: boolean;
+  needsProfileRecovery: boolean;
   signUp: (email: string, password: string, alias: string, fullName: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   createAlias: (alias: string) => Promise<{ error: any }>;
+  recoverProfile: (username: string, fullName: string, alias: string) => Promise<{ error: any }>;
   forceRefresh: () => Promise<void>;
   deleteAccount: () => Promise<{ error: any }>;
 }
@@ -30,67 +32,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [emailAlias, setEmailAlias] = useState('');
   const [fullName, setFullName] = useState('');
   const [needsAliasSetup, setNeedsAliasSetup] = useState(false);
+  const [needsProfileRecovery, setNeedsProfileRecovery] = useState(false);
 
   const validateUserExists = async (): Promise<boolean> => {
     try {
       const { data: { user: authUser }, error } = await supabase.auth.getUser();
       if (error || !authUser) {
-        console.warn('User not found in auth or auth check failed');
+        console.warn('[validateUserExists] User not found in auth or auth check failed');
         return false;
       }
       return true;
     } catch (err) {
-      console.error('Error validating user existence:', err);
+      console.error('[validateUserExists] Error validating user existence:', err);
       return true;
     }
   };
 
-  const recoverProfile = async (userId: string) => {
-    try {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (!authUser) return;
-
-      console.log('Recovering profile for user:', userId);
-      const { error } = await supabase
-        .from('profiles')
-        .insert({
-          id: userId,
-          email: authUser.email || '',
-          username: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'user',
-          full_name: authUser.user_metadata?.full_name || '',
-          email_alias: null,
-          plan: 'free',
-        });
-
-      if (error) {
-        console.error('Profile recovery error:', error);
-        return;
-      }
-
-      console.log('Profile recovered successfully');
-      setNeedsAliasSetup(true);
-      setUsername(authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'user');
-      setFullName(authUser.user_metadata?.full_name || '');
-      setEmailAlias('');
-    } catch (err) {
-      console.error('Unexpected error during profile recovery:', err);
-    }
-  };
-
   const fetchProfile = async (userId: string) => {
-    console.log('Fetching profile for id:', userId);
+    console.log('[fetchProfile] Fetching profile for id:', userId);
     setProfileLoading(true);
 
     try {
       const userExists = await validateUserExists();
       if (!userExists) {
-        console.warn('User was deleted - signing out');
+        console.warn('[fetchProfile] User was deleted - signing out');
         setUser(null);
         setSession(null);
         setUsername('');
         setEmailAlias('');
         setFullName('');
         setNeedsAliasSetup(false);
+        setNeedsProfileRecovery(false);
         await supabase.auth.signOut();
         setProfileLoading(false);
         return;
@@ -103,31 +75,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
 
       if (error) {
-        console.error('Profile fetch error:', error);
+        console.error('[fetchProfile] Profile fetch error:', error);
         setProfileLoading(false);
         return;
       }
 
       if (data) {
-        console.log('PROFILE DATA:', data);
-        console.log('email_alias value:', data.email_alias, 'type:', typeof data.email_alias);
-        console.log('username value:', data.username, 'type:', typeof data.username);
+        console.log('[fetchProfile] PROFILE DATA:', data);
+        console.log('[fetchProfile] email_alias value:', data.email_alias, 'type:', typeof data.email_alias);
+        console.log('[fetchProfile] username value:', data.username, 'type:', typeof data.username);
 
         setUsername(data.username || '');
         setEmailAlias(data.email_alias || '');
         setFullName(data.full_name || '');
+        setNeedsProfileRecovery(false);
 
         if (!data.email_alias) {
-          console.log('User profile exists but has no alias - needs setup');
+          console.log('[fetchProfile] User profile exists but has no alias - needs setup');
           setNeedsAliasSetup(true);
         } else {
           setNeedsAliasSetup(false);
         }
 
-        console.log('State set - username:', data.username || '', 'emailAlias:', data.email_alias || '');
+        console.log('[fetchProfile] State set - username:', data.username || '', 'emailAlias:', data.email_alias || '');
       } else {
-        console.warn('No profile found for user:', userId, '- attempting to recover');
-        await recoverProfile(userId);
+        console.error('[fetchProfile] No profile found for authenticated user:', userId);
+        console.log('[fetchProfile] User is authenticated but profile missing - initiating recovery mode');
+        setUsername('');
+        setEmailAlias('');
+        setFullName('');
+        setNeedsAliasSetup(false);
+        setNeedsProfileRecovery(true);
       }
     } finally {
       setProfileLoading(false);
@@ -137,18 +115,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
 
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      console.log('Session retrieved:', session?.user?.id);
+      console.log('[Auth] Session retrieved:', session?.user?.id);
 
       if (session?.user) {
         try {
           const { data: { user: authUser }, error } = await supabase.auth.getUser();
           if (error || !authUser) {
-            console.warn('Session exists but user not found in auth - clearing stale session');
+            console.warn('[Auth] Session exists but user not found in auth - clearing stale session');
             setSession(null);
             setUser(null);
             setUsername('');
             setEmailAlias('');
             setNeedsAliasSetup(false);
+            setNeedsProfileRecovery(false);
             await supabase.auth.signOut();
             setLoading(false);
             return;
@@ -156,18 +135,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           setSession(session);
           setUser(authUser);
-          console.log('Session validated, calling fetchProfile for user:', authUser.id);
+          console.log('[Auth] Session validated, calling fetchProfile for user:', authUser.id);
           await fetchProfile(authUser.id);
         } catch (err) {
-          console.error('Error validating session:', err);
+          console.error('[Auth] Error validating session:', err);
           setSession(null);
           setUser(null);
           setUsername('');
           setEmailAlias('');
           setNeedsAliasSetup(false);
+          setNeedsProfileRecovery(false);
         }
       } else {
-        console.log('No session user found');
+        console.log('[Auth] No session user found');
         setSession(null);
         setUser(null);
       }
@@ -179,19 +159,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       (async () => {
-        console.log('Auth state changed, event:', _event, 'user:', session?.user?.id);
+        console.log('[onAuthStateChange] Auth state changed, event:', _event, 'user:', session?.user?.id);
         setSession(session);
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          console.log('Auth state change - calling fetchProfile for user:', session.user.id);
+          console.log('[onAuthStateChange] Auth state change - calling fetchProfile for user:', session.user.id);
           await fetchProfile(session.user.id);
         } else {
-          console.log('Auth state change - no user, clearing profile data');
+          console.log('[onAuthStateChange] Auth state change - no user, clearing profile data');
           setUsername('');
           setEmailAlias('');
           setFullName('');
           setNeedsAliasSetup(false);
+          setNeedsProfileRecovery(false);
         }
 
         setLoading(false);
@@ -203,6 +184,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, password: string, alias: string, fullName: string) => {
     try {
+      console.log('[signUp] Starting new account creation for email:', email);
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -214,13 +197,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (error) {
-        console.error('Signup auth error:', error.message);
+        console.error('[signUp] Auth signup error:', error.message);
         return { error };
       }
 
       if (!data.user) {
+        console.error('[signUp] Auth signup returned no user');
         return { error: new Error('User creation failed') };
       }
+
+      console.log('[signUp] Auth user created:', data.user.id);
 
       const displayName = fullName || data.user.email?.split('@')[0] || 'user';
       const { error: profileError } = await supabase
@@ -235,9 +221,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
 
       if (profileError) {
-        console.error('Profile creation error:', profileError);
-        return { error: profileError };
+        console.error('[signUp] Profile creation error:', profileError);
+        console.log('[signUp] Cleaning up orphaned auth user');
+        await supabase.auth.admin?.deleteUser(data.user.id).catch(() => {});
+        return { error: new Error('Failed to create account profile') };
       }
+
+      console.log('[signUp] Profile created successfully');
 
       const { data: profileData, error: fetchError } = await supabase
         .from('profiles')
@@ -246,8 +236,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
 
       if (fetchError || !profileData) {
-        console.error('Profile fetch error:', fetchError);
-        return { error: fetchError || new Error('Profile verification failed') };
+        console.error('[signUp] Profile verification error:', fetchError);
+        return { error: new Error('Failed to verify new account') };
       }
 
       setUsername(profileData.username || '');
@@ -255,61 +245,156 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setFullName(profileData.full_name || '');
       setNeedsAliasSetup(false);
 
+      console.log('[signUp] Account created successfully');
       return { error: null };
     } catch (err: any) {
-      console.error('Unexpected signup error:', err);
+      console.error('[signUp] Unexpected signup error:', err);
       return { error: err };
     }
   };
 
   const signIn = async (email: string, password: string) => {
     try {
+      console.log('[signIn] Attempting sign-in for email:', email);
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) {
-        console.error('Sign-in auth error:', error.message);
+        console.error('[signIn] Auth error:', error.message);
         return { error };
       }
 
-      if (data.user) {
-        console.log('Sign-in successful for user:', data.user.id);
-        await fetchProfile(data.user.id);
+      if (!data.user) {
+        console.error('[signIn] Auth returned no user');
+        return { error: new Error('Sign-in failed') };
+      }
+
+      console.log('[signIn] Auth successful for user:', data.user.id);
+
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, email, email_alias, username, full_name, plan, created_at')
+        .eq('id', data.user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        console.error('[signIn] Profile fetch error:', profileError);
+        await supabase.auth.signOut();
+        return { error: new Error('Failed to load profile') };
+      }
+
+      if (!profileData) {
+        console.log('[signIn] No profile found for authenticated user - will trigger recovery');
+        setNeedsProfileRecovery(true);
+        setNeedsAliasSetup(false);
+        return { error: null };
+      }
+
+      setUsername(profileData.username || '');
+      setEmailAlias(profileData.email_alias || '');
+      setFullName(profileData.full_name || '');
+      setNeedsProfileRecovery(false);
+
+      if (!profileData.email_alias) {
+        console.log('[signIn] Profile exists but missing alias - needs setup');
+        setNeedsAliasSetup(true);
+      } else {
+        setNeedsAliasSetup(false);
       }
 
       return { error: null };
     } catch (err: any) {
-      console.error('Unexpected sign-in error:', err);
+      console.error('[signIn] Unexpected error:', err);
       return { error: err };
     }
   };
 
   const forceRefresh = async () => {
-    console.log('Force refresh triggered');
+    console.log('[forceRefresh] Force refresh triggered');
     const { data: { user: authUser }, error } = await supabase.auth.getUser();
 
     if (error || !authUser) {
-      console.log('No valid user on force refresh - signing out');
+      console.log('[forceRefresh] No valid user on force refresh - signing out');
       setUser(null);
       setSession(null);
       setUsername('');
       setEmailAlias('');
       setFullName('');
       setNeedsAliasSetup(false);
+      setNeedsProfileRecovery(false);
       await supabase.auth.signOut();
       return;
     }
 
-    console.log('Force refresh - fetching profile for user:', authUser.id);
+    console.log('[forceRefresh] Force refresh - fetching profile for user:', authUser.id);
     await fetchProfile(authUser.id);
+  };
+
+  const recoverProfile = async (username: string, fullName: string, alias: string) => {
+    if (!user) {
+      return { error: new Error('No authenticated user') };
+    }
+
+    try {
+      console.log('[recoverProfile] Creating profile for authenticated user:', user.id);
+
+      const { error: insertError } = await supabase
+        .from('profiles')
+        .insert({
+          id: user.id,
+          email: user.email || '',
+          username: username || 'user',
+          full_name: fullName || '',
+          email_alias: alias || null,
+          plan: 'free',
+        });
+
+      if (insertError) {
+        console.error('[recoverProfile] Profile insert error:', insertError);
+        return { error: new Error('Failed to recover profile') };
+      }
+
+      console.log('[recoverProfile] Profile created');
+
+      const { data: profileData, error: fetchError } = await supabase
+        .from('profiles')
+        .select('id, email, email_alias, username, full_name, plan, created_at')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (fetchError || !profileData) {
+        console.error('[recoverProfile] Profile verification error:', fetchError);
+        return { error: new Error('Failed to verify recovered profile') };
+      }
+
+      setUsername(profileData.username || '');
+      setEmailAlias(profileData.email_alias || '');
+      setFullName(profileData.full_name || '');
+      setNeedsProfileRecovery(false);
+
+      if (!profileData.email_alias) {
+        setNeedsAliasSetup(true);
+      } else {
+        setNeedsAliasSetup(false);
+      }
+
+      console.log('[recoverProfile] Profile recovered successfully');
+      return { error: null };
+    } catch (err: any) {
+      console.error('[recoverProfile] Unexpected error:', err);
+      return { error: err };
+    }
   };
 
   const createAlias = async (alias: string) => {
     if (!user) {
       return { error: new Error('No authenticated user') };
     }
+
+    console.log('[createAlias] Setting alias for authenticated user:', user.id);
 
     const { error } = await supabase
       .from('profiles')
@@ -319,7 +404,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq('id', user.id);
 
     if (error) {
-      console.error('Alias creation error:', error);
+      console.error('[createAlias] Alias update error:', error);
       return { error };
     }
 
@@ -330,7 +415,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .maybeSingle();
 
     if (fetchError || !profileData) {
-      console.error('Profile fetch error:', fetchError);
+      console.error('[createAlias] Profile fetch error:', fetchError);
       return { error: fetchError || new Error('Failed to verify alias') };
     }
 
@@ -338,6 +423,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setFullName(profileData.full_name || '');
     setNeedsAliasSetup(false);
 
+    console.log('[createAlias] Alias set successfully');
     return { error: null };
   };
 
@@ -348,6 +434,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setEmailAlias('');
     setFullName('');
     setNeedsAliasSetup(false);
+    setNeedsProfileRecovery(false);
     localStorage.removeItem('isScanning');
     localStorage.removeItem('scanningSource');
     await supabase.auth.signOut();
@@ -359,7 +446,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      console.log('Starting account deletion for user:', user.id);
+      console.log('[deleteAccount] Starting account deletion for user:', user.id);
 
       const { data, error: invokeError } = await supabase.functions.invoke(
         'delete-account',
@@ -369,8 +456,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
 
       if (invokeError) {
-        console.error('Delete account edge function error:', invokeError);
-        console.log('Falling back to profile deletion...');
+        console.error('[deleteAccount] Delete account edge function error:', invokeError);
+        console.log('[deleteAccount] Falling back to profile deletion...');
 
         const { error: deleteProfileError } = await supabase
           .from('profiles')
@@ -378,20 +465,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .eq('id', user.id);
 
         if (deleteProfileError) {
-          console.error('Profile deletion error:', deleteProfileError);
+          console.error('[deleteAccount] Profile deletion error:', deleteProfileError);
           return { error: new Error('Failed to delete account') };
         }
 
-        console.log('Profile deleted successfully (fallback)');
+        console.log('[deleteAccount] Profile deleted successfully (fallback)');
         await signOut();
         return { error: null };
       }
 
-      console.log('Delete account success:', data);
+      console.log('[deleteAccount] Delete account success:', data);
       await signOut();
       return { error: null };
     } catch (err: any) {
-      console.error('Unexpected delete account error:', err);
+      console.error('[deleteAccount] Unexpected delete account error:', err);
       const errorMessage = err?.message || 'Network error - please check your connection and try again';
       return { error: new Error(errorMessage) };
     }
@@ -406,17 +493,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     emailAlias,
     fullName,
     needsAliasSetup,
+    needsProfileRecovery,
     signUp,
     signIn,
     signOut,
     createAlias,
+    recoverProfile,
     forceRefresh,
     deleteAccount,
   };
 
   // Debug: log whenever context value changes
   useEffect(() => {
-    console.log('AuthContext value updated - username:', username, 'emailAlias:', emailAlias);
+    console.log('[AuthContext] Value updated - username:', username, 'emailAlias:', emailAlias);
   }, [username, emailAlias]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
