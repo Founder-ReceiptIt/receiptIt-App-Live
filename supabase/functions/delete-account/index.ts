@@ -10,6 +10,15 @@ interface DeleteAccountRequest {
   userId: string;
 }
 
+const jsonResponse = (body: Record<string, unknown>, status: number) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json",
+    },
+  });
+
 Deno.serve(async (req: Request) => {
   const timestamp = new Date().toISOString();
   console.log(`[${timestamp}] [delete-account] START - Incoming request: ${req.method} ${req.url}`);
@@ -41,16 +50,7 @@ Deno.serve(async (req: Request) => {
     const authHeader = req.headers.get("Authorization");
     console.log("[delete-account] Authorization header present:", !!authHeader);
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Missing authorization header" }),
-        {
-          status: 401,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      return jsonResponse({ error: "Missing authorization header" }, 401);
     }
 
     let body: DeleteAccountRequest;
@@ -58,32 +58,14 @@ Deno.serve(async (req: Request) => {
       body = await req.json();
     } catch (e) {
       console.error("[delete-account] Failed to parse request body:", e);
-      return new Response(
-        JSON.stringify({ error: "Invalid request body" }),
-        {
-          status: 400,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      return jsonResponse({ error: "Invalid request body" }, 400);
     }
 
     const userId = body.userId;
     console.log("[delete-account] Request userId:", userId);
 
     if (!userId) {
-      return new Response(
-        JSON.stringify({ error: "Missing userId in request body" }),
-        {
-          status: 400,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      return jsonResponse({ error: "Missing userId in request body" }, 400);
     }
 
     const token = authHeader.replace("Bearer ", "");
@@ -101,16 +83,7 @@ Deno.serve(async (req: Request) => {
     if (!supabaseUrl || !supabaseServiceKey) {
       const configError = `Missing config - URL: ${!!supabaseUrl}, KEY: ${!!supabaseServiceKey}`;
       console.error(`[delete-account] CRITICAL: ${configError}`);
-      return new Response(
-        JSON.stringify({ error: "Server configuration error", details: configError, code: "CONFIG_ERROR" }),
-        {
-          status: 500,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      return jsonResponse({ error: "Server configuration error", details: configError, code: "CONFIG_ERROR" }, 500);
     }
 
     console.log("[delete-account] Verifying token...");
@@ -130,16 +103,7 @@ Deno.serve(async (req: Request) => {
     if (!verifyTokenResponse.ok) {
       const errorText = await verifyTokenResponse.text();
       console.error("[delete-account] Token verification failed:", errorText);
-      return new Response(
-        JSON.stringify({ error: "Invalid or expired token" }),
-        {
-          status: 401,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      return jsonResponse({ error: "Invalid or expired token" }, 401);
     }
 
     const userData = await verifyTokenResponse.json();
@@ -147,16 +111,7 @@ Deno.serve(async (req: Request) => {
 
     if (userData.id !== userId) {
       console.error("[delete-account] User ID mismatch:", userData.id, "!==", userId);
-      return new Response(
-        JSON.stringify({ error: "User ID mismatch" }),
-        {
-          status: 403,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      return jsonResponse({ error: "User ID mismatch" }, 403);
     }
 
     console.log(`[delete-account] CRITICAL ACTION: Deleting user with ID: ${userId}`);
@@ -168,6 +123,7 @@ Deno.serve(async (req: Request) => {
       method: "DELETE",
       headers: {
         "apikey": supabaseServiceKey,
+        "Authorization": `Bearer ${supabaseServiceKey}`,
         "Content-Type": "application/json",
       },
     });
@@ -189,59 +145,71 @@ Deno.serve(async (req: Request) => {
       } catch {
         errorDetails = errorText || `HTTP ${deleteUserResponse.status}`;
       }
-      return new Response(
-        JSON.stringify({
+      return jsonResponse({
           error: "Failed to delete account",
           details: errorDetails,
           code: "ADMIN_DELETE_FAILED",
           adminStatus: deleteUserResponse.status,
           rawResponse: errorText.substring(0, 200),
-        }),
-        {
-          status: deleteUserResponse.status || 500,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+        }, deleteUserResponse.status || 500);
     }
 
     console.log("[delete-account] SUCCESS: User auth record deleted successfully");
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: "Account deleted successfully",
-        code: "DELETE_SUCCESS",
-        userId: userId,
-      }),
-      {
-        status: 200,
+    const cleanupAttempts = [
+      { label: "profiles.id", query: ["id", `eq.${userId}`] as const },
+      { label: "profiles.user_id", query: ["user_id", `eq.${userId}`] as const },
+    ];
+
+    const cleanupResults: Array<{ label: string; status: number; body: string }> = [];
+
+    for (const attempt of cleanupAttempts) {
+      const cleanupUrl = new URL(`${supabaseUrl}/rest/v1/profiles`);
+      cleanupUrl.searchParams.set(attempt.query[0], attempt.query[1]);
+      cleanupUrl.searchParams.set("select", "id");
+
+      const cleanupResponse = await fetch(cleanupUrl, {
+        method: "DELETE",
         headers: {
-          ...corsHeaders,
+          "apikey": supabaseServiceKey,
+          "Authorization": `Bearer ${supabaseServiceKey}`,
           "Content-Type": "application/json",
+          "Prefer": "return=representation",
         },
+      });
+
+      const cleanupBody = await cleanupResponse.text();
+      cleanupResults.push({
+        label: attempt.label,
+        status: cleanupResponse.status,
+        body: cleanupBody.substring(0, 200),
+      });
+
+      if (!cleanupResponse.ok) {
+        console.warn(
+          `[delete-account] Profile cleanup attempt failed for ${attempt.label}:`,
+          cleanupResponse.status,
+          cleanupBody,
+        );
       }
-    );
+    }
+
+    return jsonResponse({
+      success: true,
+      message: "Account deleted successfully",
+      code: "DELETE_SUCCESS",
+      userId: userId,
+      profileCleanup: cleanupResults,
+    }, 200);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : "";
     console.error(`[delete-account] EXCEPTION: ${errorMessage}`);
     console.error(`[delete-account] STACK: ${errorStack}`);
-    return new Response(
-      JSON.stringify({
-        error: "Internal server error",
-        details: errorMessage,
-        code: "INTERNAL_ERROR",
-        stack: errorStack.substring(0, 200),
-      }),
-      {
-        status: 500,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    return jsonResponse({
+      error: "Internal server error",
+      details: errorMessage,
+      code: "INTERNAL_ERROR",
+      stack: errorStack.substring(0, 200),
+    }, 500);
   }
 });

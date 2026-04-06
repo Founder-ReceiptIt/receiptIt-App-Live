@@ -468,21 +468,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (invokeError) {
         console.error('[deleteAccount] Delete account edge function error:', invokeError);
-        console.log('[deleteAccount] Falling back to profile deletion...');
+        let errorMessage = 'Failed to delete account';
+        const errorResponse = (invokeError as any)?.context;
 
-        const { error: deleteProfileError } = await supabase
-          .from('profiles')
-          .delete()
-          .eq('id', user.id);
-
-        if (deleteProfileError) {
-          console.error('[deleteAccount] Profile deletion error:', deleteProfileError);
-          return { error: new Error('Failed to delete account') };
+        if (errorResponse) {
+          try {
+            const errorBody = await errorResponse.json();
+            errorMessage = errorBody?.details || errorBody?.error || errorMessage;
+          } catch (parseError) {
+            console.error('[deleteAccount] Failed to parse edge function error response:', parseError);
+          }
         }
 
-        console.log('[deleteAccount] Profile deleted successfully (fallback)');
-        await signOut();
-        return { error: null };
+        return { error: new Error(errorMessage) };
+      }
+
+      if (!data?.success) {
+        console.error('[deleteAccount] Delete account returned unsuccessful response:', data);
+        return {
+          error: new Error(data?.details || data?.error || 'Failed to delete account'),
+        };
       }
 
       console.log('[deleteAccount] Delete account success:', data);
