@@ -43,6 +43,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .or(`id.eq.${authUserId},user_id.eq.${authUserId}`)
       .maybeSingle();
 
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const waitForProfile = async (authUserId: string, attempts = 5, delayMs = 250) => {
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      const { data, error } = await profileQueryForUser(authUserId);
+
+      if (data) {
+        return { data, error: null };
+      }
+
+      if (error) {
+        return { data: null, error };
+      }
+
+      if (attempt < attempts) {
+        await sleep(delayMs);
+      }
+    }
+
+    return { data: null, error: null };
+  };
+
+  const applyProfileState = (profileData: any, fallbackFullName = '') => {
+    setUsername(profileData?.username || '');
+    setEmailAlias(profileData?.email_alias || '');
+    setFullName(fallbackFullName || profileData?.username || '');
+    setNeedsProfileRecovery(false);
+    setNeedsAliasSetup(!profileData?.email_alias);
+  };
+
   const cleanupOrphanedAuthUser = async (userId: string, accessToken?: string) => {
     try {
       if (!accessToken) {
@@ -223,6 +253,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         options: {
           data: {
             full_name: fullName,
+            username: fullName || email.split('@')[0] || 'user',
+            email_alias: alias,
           },
         },
       });
@@ -240,10 +272,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('[signUp] Auth user created:', data.user.id);
 
       const displayName = fullName || data.user.email?.split('@')[0] || 'user';
+      const existingProfile = await waitForProfile(data.user.id);
+
+      if (existingProfile.data) {
+        console.log('[signUp] Found existing profile immediately after auth signup');
+        applyProfileState(existingProfile.data, displayName);
+        console.log('[signUp] Account created successfully');
+        return { error: null };
+      }
+
       const { error: profileError } = await supabase
         .from('profiles')
         .insert({
-          id: data.user.id,
           user_id: data.user.id,
           email: data.user.email,
           username: displayName,
@@ -254,6 +294,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (profileError) {
         console.error('[signUp] Profile creation error:', profileError);
         const profileErrorMessage = `${profileError.message || ''} ${profileError.details || ''}`.toLowerCase();
+        const recoveredProfile = await waitForProfile(data.user.id);
+
+        if (recoveredProfile.data) {
+          console.log('[signUp] Profile exists after insert error, treating signup as successful');
+          applyProfileState(recoveredProfile.data, displayName);
+          return { error: null };
+        }
 
         if (
           profileError.code === '23505' &&
@@ -271,7 +318,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       console.log('[signUp] Profile created successfully');
 
-      const { data: profileData, error: fetchError } = await profileQueryForUser(data.user.id);
+      const { data: profileData, error: fetchError } = await waitForProfile(data.user.id);
 
       if (fetchError || !profileData) {
         console.error('[signUp] Profile verification error:', fetchError);
@@ -279,11 +326,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: new Error('Failed to verify new account') };
       }
 
-      setUsername(profileData.username || '');
-      setEmailAlias(profileData.email_alias || '');
-      setFullName(profileData.username || '');
-      setNeedsProfileRecovery(false);
-      setNeedsAliasSetup(!profileData.email_alias);
+      applyProfileState(profileData, displayName);
 
       console.log('[signUp] Account created successfully');
       return { error: null };
@@ -382,7 +425,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { error: insertError } = await supabase
         .from('profiles')
         .insert({
-          id: user.id,
           user_id: user.id,
           email: user.email || '',
           username: username || 'user',
