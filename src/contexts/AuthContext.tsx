@@ -462,6 +462,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data, error: invokeError } = await supabase.functions.invoke(
         'delete-account',
         {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
           body: { userId: user.id },
         }
       );
