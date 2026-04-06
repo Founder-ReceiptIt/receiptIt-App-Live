@@ -118,7 +118,7 @@ Deno.serve(async (req: Request) => {
 
     console.log(`[delete-account] CRITICAL ACTION: Deleting user with ID: ${userId}`);
     console.log("[delete-account] Using SUPABASE_SERVICE_ROLE_KEY for admin deletion");
-    const { error: deleteUserError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+    const { error: deleteUserError } = await supabaseAdmin.auth.admin.deleteUser(userId, false);
 
     if (deleteUserError) {
       console.error("[delete-account] FAILURE: deleteUser failed", deleteUserError);
@@ -126,6 +126,17 @@ Deno.serve(async (req: Request) => {
         error: "Failed to delete account",
         details: deleteUserError.message || "Auth user deletion failed",
         code: "ADMIN_DELETE_FAILED",
+      }, 500);
+    }
+
+    const { data: deletedUserLookup, error: deletedUserLookupError } = await supabaseAdmin.auth.admin.getUserById(userId);
+
+    if (!deletedUserLookupError && deletedUserLookup?.user) {
+      console.error("[delete-account] Auth user still exists after deleteUser call:", deletedUserLookup.user.id);
+      return jsonResponse({
+        error: "Failed to delete account",
+        details: "Auth user still exists after deletion attempt",
+        code: "AUTH_USER_STILL_EXISTS",
       }, 500);
     }
 

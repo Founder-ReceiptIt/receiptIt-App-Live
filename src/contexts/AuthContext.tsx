@@ -34,6 +34,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [needsAliasSetup, setNeedsAliasSetup] = useState(false);
   const [needsProfileRecovery, setNeedsProfileRecovery] = useState(false);
   const [isSigningUp, setIsSigningUp] = useState(false);
+  const profileSelect = 'id, user_id, email, email_alias, username, full_name, plan, created_at';
+
+  const profileQueryForUser = (authUserId: string) =>
+    supabase
+      .from('profiles')
+      .select(profileSelect)
+      .or(`id.eq.${authUserId},user_id.eq.${authUserId}`)
+      .maybeSingle();
+
+  const cleanupOrphanedAuthUser = async (userId: string, accessToken?: string) => {
+    try {
+      if (!accessToken) {
+        return;
+      }
+
+      await supabase.functions.invoke('delete-account', {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: {
+          userId,
+          accessToken,
+        },
+      });
+    } catch (cleanupError) {
+      console.error('[cleanupOrphanedAuthUser] Failed to remove orphaned auth user:', cleanupError);
+    }
+  };
 
   const validateUserExists = async (): Promise<boolean> => {
     try {
@@ -75,11 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, email, email_alias, username, full_name, plan, created_at')
-        .eq('id', userId)
-        .maybeSingle();
+      const { data, error } = await profileQueryForUser(userId);
 
       if (error) {
         console.error('[fetchProfile] Profile fetch error:', error);
@@ -111,7 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setEmailAlias('');
         setFullName('');
         setNeedsAliasSetup(false);
-        setNeedsProfileRecovery(false);
+        setNeedsProfileRecovery(true);
       }
     } finally {
       setProfileLoading(false);
@@ -220,6 +244,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .from('profiles')
         .insert({
           id: data.user.id,
+          user_id: data.user.id,
           email: data.user.email,
           username: displayName,
           email_alias: alias,
@@ -229,21 +254,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (profileError) {
         console.error('[signUp] Profile creation error:', profileError);
+        const profileErrorMessage = `${profileError.message || ''} ${profileError.details || ''}`.toLowerCase();
+
+        if (
+          profileError.code === '23505' &&
+          (profileErrorMessage.includes('email_alias') ||
+            profileErrorMessage.includes('profiles_email_alias_unique'))
+        ) {
+          await cleanupOrphanedAuthUser(data.user.id, data.session?.access_token);
+          return { error: new Error('This alias is already taken. Please choose another one.') };
+        }
+
         console.log('[signUp] Cleaning up orphaned auth user');
-        await supabase.auth.admin?.deleteUser(data.user.id).catch(() => {});
+        await cleanupOrphanedAuthUser(data.user.id, data.session?.access_token);
         return { error: new Error('Failed to create account profile') };
       }
 
       console.log('[signUp] Profile created successfully');
 
-      const { data: profileData, error: fetchError } = await supabase
-        .from('profiles')
-        .select('id, email, email_alias, username, full_name, plan, created_at')
-        .eq('id', data.user.id)
-        .maybeSingle();
+      const { data: profileData, error: fetchError } = await profileQueryForUser(data.user.id);
 
       if (fetchError || !profileData) {
         console.error('[signUp] Profile verification error:', fetchError);
+        await cleanupOrphanedAuthUser(data.user.id, data.session?.access_token);
         return { error: new Error('Failed to verify new account') };
       }
 
@@ -254,12 +287,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setNeedsAliasSetup(!profileData.email_alias);
 
       console.log('[signUp] Account created successfully');
-      setIsSigningUp(false);
       return { error: null };
     } catch (err: any) {
       console.error('[signUp] Unexpected signup error:', err);
-      setIsSigningUp(false);
       return { error: err };
+    } finally {
+      setIsSigningUp(false);
     }
   };
 
@@ -284,11 +317,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       console.log('[signIn] Auth successful for user:', data.user.id);
 
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, email, email_alias, username, full_name, plan, created_at')
-        .eq('id', data.user.id)
-        .maybeSingle();
+      const { data: profileData, error: profileError } = await profileQueryForUser(data.user.id);
 
       if (profileError) {
         console.error('[signIn] Profile fetch error:', profileError);
@@ -297,11 +326,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!profileData) {
-        console.error('[signIn] No profile found for authenticated user - signing out');
-        setNeedsProfileRecovery(false);
+        console.error('[signIn] No profile found for authenticated user');
+        setNeedsProfileRecovery(true);
         setNeedsAliasSetup(false);
-        await supabase.auth.signOut();
-        return { error: new Error('Account profile is missing. Please contact support or recreate your account.') };
+        return { error: null };
       }
 
       setUsername(profileData.username || '');
@@ -356,6 +384,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .from('profiles')
         .insert({
           id: user.id,
+          user_id: user.id,
           email: user.email || '',
           username: username || 'user',
           full_name: fullName || '',
@@ -370,11 +399,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       console.log('[recoverProfile] Profile created');
 
-      const { data: profileData, error: fetchError } = await supabase
-        .from('profiles')
-        .select('id, email, email_alias, username, full_name, plan, created_at')
-        .eq('id', user.id)
-        .maybeSingle();
+      const { data: profileData, error: fetchError } = await profileQueryForUser(user.id);
 
       if (fetchError || !profileData) {
         console.error('[recoverProfile] Profile verification error:', fetchError);
@@ -412,18 +437,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .update({
         email_alias: alias,
       })
-      .eq('id', user.id);
+      .or(`id.eq.${user.id},user_id.eq.${user.id}`);
 
     if (error) {
       console.error('[createAlias] Alias update error:', error);
       return { error };
     }
 
-    const { data: profileData, error: fetchError } = await supabase
-      .from('profiles')
-      .select('id, email, email_alias, username, full_name, plan, created_at')
-      .eq('id', user.id)
-      .maybeSingle();
+    const { data: profileData, error: fetchError } = await profileQueryForUser(user.id);
 
     if (fetchError || !profileData) {
       console.error('[createAlias] Profile fetch error:', fetchError);
