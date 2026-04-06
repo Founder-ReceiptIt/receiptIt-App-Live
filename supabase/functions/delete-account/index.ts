@@ -9,6 +9,7 @@ const corsHeaders = {
 
 interface DeleteAccountRequest {
   userId: string;
+  accessToken?: string;
 }
 
 const jsonResponse = (body: Record<string, unknown>, status: number) =>
@@ -50,9 +51,6 @@ Deno.serve(async (req: Request) => {
 
     const authHeader = req.headers.get("Authorization");
     console.log("[delete-account] Authorization header present:", !!authHeader);
-    if (!authHeader) {
-      return jsonResponse({ error: "Missing authorization header" }, 401);
-    }
 
     let body: DeleteAccountRequest;
     try {
@@ -63,13 +61,21 @@ Deno.serve(async (req: Request) => {
     }
 
     const userId = body.userId;
+    const bodyAccessToken = body.accessToken?.trim();
     console.log("[delete-account] Request userId:", userId);
 
     if (!userId) {
       return jsonResponse({ error: "Missing userId in request body" }, 400);
     }
 
-    const token = authHeader.replace("Bearer ", "");
+    const headerToken = authHeader?.startsWith("Bearer ")
+      ? authHeader.slice("Bearer ".length).trim()
+      : authHeader?.trim();
+    const token = bodyAccessToken || headerToken;
+
+    if (!token) {
+      return jsonResponse({ error: "Missing access token" }, 401);
+    }
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 

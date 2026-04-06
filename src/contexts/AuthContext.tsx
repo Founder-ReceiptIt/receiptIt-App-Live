@@ -465,7 +465,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           headers: {
             Authorization: `Bearer ${session.access_token}`,
           },
-          body: { userId: user.id },
+          body: {
+            userId: user.id,
+            accessToken: session.access_token,
+          },
         }
       );
 
