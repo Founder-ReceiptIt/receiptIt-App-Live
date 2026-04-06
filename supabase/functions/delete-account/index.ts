@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -86,27 +87,22 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: "Server configuration error", details: configError, code: "CONFIG_ERROR" }, 500);
     }
 
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+
     console.log("[delete-account] Verifying token...");
-    const verifyTokenResponse = await fetch(
-      `${supabaseUrl}/auth/v1/user`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          apikey: supabaseServiceKey,
-        },
-      }
-    );
+    const { data: userLookup, error: userLookupError } = await supabaseAdmin.auth.getUser(token);
 
-    console.log("[delete-account] Token verification status:", verifyTokenResponse.status);
-
-    if (!verifyTokenResponse.ok) {
-      const errorText = await verifyTokenResponse.text();
-      console.error("[delete-account] Token verification failed:", errorText);
+    if (userLookupError || !userLookup.user) {
+      console.error("[delete-account] Token verification failed:", userLookupError);
       return jsonResponse({ error: "Invalid or expired token" }, 401);
     }
 
-    const userData = await verifyTokenResponse.json();
+    const userData = userLookup.user;
     console.log("[delete-account] Token user ID:", userData.id);
 
     if (userData.id !== userId) {
@@ -115,43 +111,16 @@ Deno.serve(async (req: Request) => {
     }
 
     console.log(`[delete-account] CRITICAL ACTION: Deleting user with ID: ${userId}`);
-    const adminDeleteUrl = `${supabaseUrl}/auth/v1/admin/users/${userId}`;
-    console.log(`[delete-account] DELETE endpoint URL: ${adminDeleteUrl}`);
-    console.log("[delete-account] Using SUPABASE_SERVICE_ROLE_KEY for admin authentication");
+    console.log("[delete-account] Using SUPABASE_SERVICE_ROLE_KEY for admin deletion");
+    const { error: deleteUserError } = await supabaseAdmin.auth.admin.deleteUser(userId);
 
-    const deleteUserResponse = await fetch(adminDeleteUrl, {
-      method: "DELETE",
-      headers: {
-        "apikey": supabaseServiceKey,
-        "Authorization": `Bearer ${supabaseServiceKey}`,
-        "Content-Type": "application/json",
-      },
-    });
-
-    console.log(`[delete-account] RESPONSE: Admin delete returned status ${deleteUserResponse.status}`);
-
-    if (!deleteUserResponse.ok) {
-      const errorText = await deleteUserResponse.text();
-      console.error(
-        `[delete-account] FAILURE: Delete admin call failed`,
-        `Status: ${deleteUserResponse.status}`,
-        `Response: ${errorText}`
-      );
-      let errorDetails = "Unknown error";
-      let parsedError = null;
-      try {
-        parsedError = JSON.parse(errorText);
-        errorDetails = parsedError.message || parsedError.error || errorText;
-      } catch {
-        errorDetails = errorText || `HTTP ${deleteUserResponse.status}`;
-      }
+    if (deleteUserError) {
+      console.error("[delete-account] FAILURE: deleteUser failed", deleteUserError);
       return jsonResponse({
-          error: "Failed to delete account",
-          details: errorDetails,
-          code: "ADMIN_DELETE_FAILED",
-          adminStatus: deleteUserResponse.status,
-          rawResponse: errorText.substring(0, 200),
-        }, deleteUserResponse.status || 500);
+        error: "Failed to delete account",
+        details: deleteUserError.message || "Auth user deletion failed",
+        code: "ADMIN_DELETE_FAILED",
+      }, 500);
     }
 
     console.log("[delete-account] SUCCESS: User auth record deleted successfully");
