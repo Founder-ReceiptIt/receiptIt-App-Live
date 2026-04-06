@@ -230,76 +230,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('[signUp] Starting new account creation for email:', email);
       setIsSigningUp(true);
 
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-            username: fullName || email.split('@')[0] || 'user',
-            email_alias: alias,
-          },
+      const { data: createdAccount, error: invokeError } = await supabase.functions.invoke('create-account', {
+        body: {
+          email,
+          password,
+          alias,
+          fullName,
         },
       });
 
-      if (error) {
-        console.error('[signUp] Auth signup error:', error.message);
-        return { error };
-      }
+      if (invokeError) {
+        console.error('[signUp] Create account edge function error:', invokeError);
+        let errorMessage = 'Failed to create account';
+        const errorResponse = (invokeError as any)?.context;
 
-      if (!data.user) {
-        console.error('[signUp] Auth signup returned no user');
-        return { error: new Error('User creation failed') };
-      }
-
-      console.log('[signUp] Auth user created:', data.user.id);
-
-      const displayName = fullName || data.user.email?.split('@')[0] || 'user';
-      const existingProfile = await waitForProfile(data.user.id);
-
-      if (existingProfile.data) {
-        console.log('[signUp] Found existing profile immediately after auth signup');
-        applyProfileState(existingProfile.data, displayName);
-        console.log('[signUp] Account created successfully');
-        return { error: null };
-      }
-
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          id: data.user.id,
-          email: data.user.email,
-          full_name: fullName,
-          username: displayName,
-          email_alias: alias,
-          plan: 'free',
-        });
-
-      if (profileError) {
-        console.error('[signUp] Profile creation error:', profileError);
-        const profileErrorMessage = `${profileError.message || ''} ${profileError.details || ''}`.toLowerCase();
-        const recoveredProfile = await waitForProfile(data.user.id);
-
-        if (recoveredProfile.data) {
-          console.log('[signUp] Profile exists after insert error, treating signup as successful');
-          applyProfileState(recoveredProfile.data, displayName);
-          return { error: null };
+        if (errorResponse && typeof errorResponse.json === 'function') {
+          try {
+            const errorBody = await errorResponse.json();
+            errorMessage = errorBody?.details || errorBody?.error || errorMessage;
+          } catch (parseError) {
+            console.error('[signUp] Failed to parse create-account error response:', parseError);
+          }
+        } else if (invokeError instanceof Error && invokeError.message) {
+          errorMessage = invokeError.message;
         }
 
-        if (
-          profileError.code === '23505' &&
-          (profileErrorMessage.includes('email_alias') ||
-            profileErrorMessage.includes('profiles_email_alias_unique'))
-        ) {
-          return { error: new Error('This alias is already taken. Please choose another one.') };
-        }
-
-        return { error: new Error('Failed to create account profile') };
+        return { error: new Error(errorMessage) };
       }
 
-      console.log('[signUp] Profile created successfully');
+      if (!createdAccount?.success) {
+        return { error: new Error(createdAccount?.details || createdAccount?.error || 'Failed to create account') };
+      }
 
-      const { data: profileData, error: fetchError } = await waitForProfile(data.user.id);
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (signInError || !signInData.user) {
+        console.error('[signUp] Sign-in after account creation failed:', signInError);
+        return { error: new Error(signInError?.message || 'Account created, but automatic sign-in failed') };
+      }
+
+      const displayName = fullName || signInData.user.email?.split('@')[0] || 'user';
+      const { data: profileData, error: fetchError } = await waitForProfile(signInData.user.id);
 
       if (fetchError || !profileData) {
         console.error('[signUp] Profile verification error:', fetchError);
