@@ -34,7 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [needsAliasSetup, setNeedsAliasSetup] = useState(false);
   const [needsProfileRecovery, setNeedsProfileRecovery] = useState(false);
   const [isSigningUp, setIsSigningUp] = useState(false);
-  const profileSelect = 'id, user_id, email, email_alias, username, full_name, plan, created_at';
+  const profileSelect = 'id, user_id, email, email_alias, username, plan, created_at';
 
   const profileQueryForUser = (authUserId: string) =>
     supabase
@@ -118,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setUsername(data.username || '');
         setEmailAlias(data.email_alias || '');
-        setFullName(data.full_name || '');
+        setFullName(data.username || '');
         setNeedsProfileRecovery(false);
 
         if (!data.email_alias) {
@@ -248,7 +248,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: data.user.email,
           username: displayName,
           email_alias: alias,
-          full_name: displayName,
           plan: 'free',
         });
 
@@ -282,7 +281,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setUsername(profileData.username || '');
       setEmailAlias(profileData.email_alias || '');
-      setFullName(profileData.full_name || '');
+      setFullName(profileData.username || '');
       setNeedsProfileRecovery(false);
       setNeedsAliasSetup(!profileData.email_alias);
 
@@ -334,7 +333,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setUsername(profileData.username || '');
       setEmailAlias(profileData.email_alias || '');
-      setFullName(profileData.full_name || '');
+      setFullName(profileData.username || '');
       setNeedsProfileRecovery(false);
 
       if (!profileData.email_alias) {
@@ -387,7 +386,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           user_id: user.id,
           email: user.email || '',
           username: username || 'user',
-          full_name: fullName || '',
           email_alias: alias || null,
           plan: 'free',
         });
@@ -408,7 +406,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setUsername(profileData.username || '');
       setEmailAlias(profileData.email_alias || '');
-      setFullName(profileData.full_name || '');
+      setFullName(fullName || profileData.username || '');
       setNeedsProfileRecovery(false);
 
       if (!profileData.email_alias) {
@@ -452,7 +450,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     setEmailAlias(profileData.email_alias || '');
-    setFullName(profileData.full_name || '');
+    setFullName(profileData.username || '');
     setNeedsAliasSetup(false);
 
     console.log('[createAlias] Alias set successfully');
