@@ -471,13 +471,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         let errorMessage = 'Failed to delete account';
         const errorResponse = (invokeError as any)?.context;
 
-        if (errorResponse) {
+        if (errorResponse && typeof errorResponse.json === 'function') {
           try {
             const errorBody = await errorResponse.json();
             errorMessage = errorBody?.details || errorBody?.error || errorMessage;
           } catch (parseError) {
             console.error('[deleteAccount] Failed to parse edge function error response:', parseError);
           }
+        } else if (invokeError instanceof Error && invokeError.message) {
+          errorMessage = invokeError.message;
         }
 
         return { error: new Error(errorMessage) };
