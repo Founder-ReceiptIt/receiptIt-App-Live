@@ -34,13 +34,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [needsAliasSetup, setNeedsAliasSetup] = useState(false);
   const [needsProfileRecovery, setNeedsProfileRecovery] = useState(false);
   const [isSigningUp, setIsSigningUp] = useState(false);
-  const profileSelect = 'id, user_id, email, email_alias, username, plan, created_at';
+  const profileSelect = 'id, email, full_name, email_alias, username, plan, created_at';
 
   const profileQueryForUser = (authUserId: string) =>
     supabase
       .from('profiles')
       .select(profileSelect)
-      .or(`id.eq.${authUserId},user_id.eq.${authUserId}`)
+      .eq('id', authUserId)
       .maybeSingle();
 
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -68,29 +68,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const applyProfileState = (profileData: any, fallbackFullName = '') => {
     setUsername(profileData?.username || '');
     setEmailAlias(profileData?.email_alias || '');
-    setFullName(fallbackFullName || profileData?.username || '');
+    setFullName(profileData?.full_name || fallbackFullName || profileData?.username || '');
     setNeedsProfileRecovery(false);
     setNeedsAliasSetup(!profileData?.email_alias);
-  };
-
-  const cleanupOrphanedAuthUser = async (userId: string, accessToken?: string) => {
-    try {
-      if (!accessToken) {
-        return;
-      }
-
-      await supabase.functions.invoke('delete-account', {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: {
-          userId,
-          accessToken,
-        },
-      });
-    } catch (cleanupError) {
-      console.error('[cleanupOrphanedAuthUser] Failed to remove orphaned auth user:', cleanupError);
-    }
   };
 
   const validateUserExists = async (): Promise<boolean> => {
@@ -148,7 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setUsername(data.username || '');
         setEmailAlias(data.email_alias || '');
-        setFullName(data.username || '');
+        setFullName(data.full_name || data.username || '');
         setNeedsProfileRecovery(false);
 
         if (!data.email_alias) {
@@ -165,7 +145,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setEmailAlias('');
         setFullName('');
         setNeedsAliasSetup(false);
-        setNeedsProfileRecovery(true);
+        setNeedsProfileRecovery(false);
+        setUser(null);
+        setSession(null);
+        await supabase.auth.signOut();
       }
     } finally {
       setProfileLoading(false);
@@ -284,8 +267,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { error: profileError } = await supabase
         .from('profiles')
         .insert({
-          user_id: data.user.id,
+          id: data.user.id,
           email: data.user.email,
+          full_name: fullName,
           username: displayName,
           email_alias: alias,
           plan: 'free',
@@ -307,12 +291,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           (profileErrorMessage.includes('email_alias') ||
             profileErrorMessage.includes('profiles_email_alias_unique'))
         ) {
-          await cleanupOrphanedAuthUser(data.user.id, data.session?.access_token);
           return { error: new Error('This alias is already taken. Please choose another one.') };
         }
 
-        console.log('[signUp] Cleaning up orphaned auth user');
-        await cleanupOrphanedAuthUser(data.user.id, data.session?.access_token);
         return { error: new Error('Failed to create account profile') };
       }
 
@@ -322,7 +303,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (fetchError || !profileData) {
         console.error('[signUp] Profile verification error:', fetchError);
-        await cleanupOrphanedAuthUser(data.user.id, data.session?.access_token);
         return { error: new Error('Failed to verify new account') };
       }
 
@@ -369,14 +349,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!profileData) {
         console.error('[signIn] No profile found for authenticated user');
-        setNeedsProfileRecovery(true);
+        setNeedsProfileRecovery(false);
         setNeedsAliasSetup(false);
-        return { error: null };
+        await supabase.auth.signOut();
+        return { error: new Error('No profile found for this account. Please contact support or sign up again.') };
       }
 
       setUsername(profileData.username || '');
       setEmailAlias(profileData.email_alias || '');
-      setFullName(profileData.username || '');
+      setFullName(profileData.full_name || profileData.username || '');
       setNeedsProfileRecovery(false);
 
       if (!profileData.email_alias) {
@@ -425,8 +406,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { error: insertError } = await supabase
         .from('profiles')
         .insert({
-          user_id: user.id,
+          id: user.id,
           email: user.email || '',
+          full_name: fullName || '',
           username: username || 'user',
           email_alias: alias || null,
           plan: 'free',
@@ -448,7 +430,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setUsername(profileData.username || '');
       setEmailAlias(profileData.email_alias || '');
-      setFullName(fullName || profileData.username || '');
+      setFullName(profileData.full_name || fullName || profileData.username || '');
       setNeedsProfileRecovery(false);
 
       if (!profileData.email_alias) {
@@ -477,7 +459,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .update({
         email_alias: alias,
       })
-      .or(`id.eq.${user.id},user_id.eq.${user.id}`);
+      .eq('id', user.id);
 
     if (error) {
       console.error('[createAlias] Alias update error:', error);
@@ -492,7 +474,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     setEmailAlias(profileData.email_alias || '');
-    setFullName(profileData.username || '');
+    setFullName(profileData.full_name || profileData.username || '');
     setNeedsAliasSetup(false);
 
     console.log('[createAlias] Alias set successfully');
