@@ -555,7 +555,12 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-white font-bold text-lg">
                     <span>Total (GBP)</span>
-                    <span>£{receipt.amount_gbp.toFixed(2)}</span>
+                    <span>
+                      {receipt.currency && receipt.currency.toUpperCase() === 'GBP'
+                        ? `£${receipt.amount.toFixed(2)}`
+                        : `£${receipt.amount_gbp.toFixed(2)}`
+                      }
+                    </span>
                   </div>
                   {receipt.currency && receipt.currency.toUpperCase() !== 'GBP' && (
                     <div className="flex items-center justify-between text-gray-400 text-sm pt-2 border-t border-white/10">
