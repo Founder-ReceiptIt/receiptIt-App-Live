@@ -3,7 +3,6 @@ import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, 
 import { Receipt } from './WalletTab';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { deleteMatchingProcessingLogs } from '../../lib/receiptCleanup';
 import { formatDistance } from 'date-fns';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { useAuth } from '../../contexts/AuthContext';
@@ -33,6 +32,18 @@ interface ReceiptModalProps {
   onClose: () => void;
   onDelete?: () => void;
 }
+
+type ReceiptModalData = Receipt & {
+  subtotal?: number | null;
+  vat_amount?: number | null;
+  vatAmount?: number | null;
+  discount?: number | null;
+  redemption?: number | null;
+  adjustment?: number | null;
+  amountGbp?: number | null;
+  userId?: string | null;
+  user_id?: string | null;
+};
 
 export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) {
   const { user } = useAuth();
@@ -93,9 +104,25 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
         }
 
         // Step 3: Delete linked processing logs for this receipt match (non-blocking)
-        if (user?.id) {
+        if (receiptUserId) {
           try {
-            await deleteMatchingProcessingLogs(user.id, [receipt]);
+            const matchingAmountFilters = [
+              originalTotal !== null ? `original_amount.eq.${originalTotal}` : null,
+              gbpAmount !== null ? `amount_gbp.eq.${gbpAmount}` : null,
+            ].filter(Boolean).join(',');
+
+            if (matchingAmountFilters) {
+              const { error: processingLogsError } = await supabase
+                .from('processing_logs')
+                .delete()
+                .eq('user_id', receiptUserId)
+                .eq('transaction_date', String(receipt.date).split('T')[0])
+                .or(matchingAmountFilters);
+
+              if (processingLogsError) {
+                throw processingLogsError;
+              }
+            }
           } catch (processingLogsError) {
             console.warn('[Delete] processing_logs deletion failed (non-critical):', processingLogsError);
           }
@@ -154,11 +181,32 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   if (!receipt) return null;
 
   // --- LOGIC FIX: BETTER DATE HANDLING ---
-  const displayGbpTotal = (
-    typeof receipt.amount_gbp === 'number' && Number.isFinite(receipt.amount_gbp)
-      ? receipt.amount_gbp
-      : receipt.amount
+  const receiptData = receipt as ReceiptModalData;
+  const getValidMoneyValue = (value?: number | null) => (
+    typeof value === 'number' && Number.isFinite(value) ? value : null
   );
+  const formatMoney = (currencySymbol: string, value: number) => `${currencySymbol}${value.toFixed(2)}`;
+  const receiptCurrencyCode = receipt.currency?.toUpperCase() || 'GBP';
+  const receiptCurrencySymbol = getCurrencySymbol(receipt.currency);
+  const subtotal = getValidMoneyValue(receiptData.subtotal);
+  const vatAmount = getValidMoneyValue(receiptData.vat_amount ?? receiptData.vatAmount);
+  const discountAmount = [receiptData.discount, receiptData.redemption, receiptData.adjustment]
+    .map((value) => getValidMoneyValue(value))
+    .find((value): value is number => value !== null && value < 0) ?? null;
+  const originalTotal = getValidMoneyValue(receipt.amount);
+  const gbpAmount = getValidMoneyValue(receipt.amount_gbp ?? receiptData.amountGbp);
+  const displayGbpTotal = receiptCurrencyCode === 'GBP'
+    ? (originalTotal ?? gbpAmount ?? 0)
+    : (gbpAmount ?? originalTotal ?? 0);
+  const receiptUserId = receiptData.userId || receiptData.user_id || user?.id || null;
+  const breakdownRows = [
+    subtotal !== null ? { label: 'Subtotal', value: formatMoney(receiptCurrencySymbol, subtotal) } : null,
+    vatAmount !== null ? { label: 'VAT', value: formatMoney(receiptCurrencySymbol, vatAmount) } : null,
+    discountAmount !== null ? { label: 'Discount / redemption / adjustment', value: formatMoney(receiptCurrencySymbol, discountAmount) } : null,
+    receiptCurrencyCode !== 'GBP' && originalTotal !== null
+      ? { label: 'Original total', value: formatMoney(receiptCurrencySymbol, originalTotal) }
+      : null,
+  ].filter((row): row is { label: string; value: string } => row !== null);
   const warrantyEndDate = receipt.warrantyDate ? new Date(receipt.warrantyDate) : null;
   const today = new Date();
   const isWarrantyActive = warrantyEndDate && warrantyEndDate > today;
@@ -317,7 +365,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   </div>
                   <div className="text-right">
                     <div className="text-3xl font-bold text-white">
-                      £{displayGbpTotal.toFixed(2)}
+                      {formatMoney('£', displayGbpTotal)}
                     </div>
                     {receipt.amount !== receipt.amount_gbp && receipt.currency && receipt.currency.toUpperCase() !== 'GBP' && (
                       <div className="text-sm pt-1 text-gray-400">
@@ -567,16 +615,19 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                 )}
 
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between text-white font-bold text-lg">
-                    <span>Total (GBP)</span>
-                    <span>£{displayGbpTotal.toFixed(2)}</span>
-                  </div>
-                  {receipt.currency && receipt.currency.toUpperCase() !== 'GBP' && (
-                    <div className="flex items-center justify-between text-gray-400 text-sm pt-2 border-t border-white/10">
-                      <span>Original total</span>
-                      <span>{getCurrencySymbol(receipt.currency)}{receipt.amount.toFixed(2)}</span>
+                  {breakdownRows.map((row) => (
+                    <div
+                      key={row.label}
+                      className="flex items-center justify-between text-gray-400 text-sm"
+                    >
+                      <span>{row.label}</span>
+                      <span>{row.value}</span>
                     </div>
-                  )}
+                  ))}
+                  <div className={`flex items-center justify-between text-white font-bold text-lg${breakdownRows.length > 0 ? ' pt-2 border-t border-white/10' : ''}`}>
+                    <span>Total (GBP)</span>
+                    <span>{formatMoney('£', displayGbpTotal)}</span>
+                  </div>
                 </div>
 
               </motion.div>
