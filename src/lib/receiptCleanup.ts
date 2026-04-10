@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 
 type ReceiptCleanupTarget = {
   amount: number;
-  amount_gbp: number;
+  amount_gbp: number | null;
   date: string;
 };
 

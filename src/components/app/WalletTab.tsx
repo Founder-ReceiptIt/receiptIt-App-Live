@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Store, Shield, Loader2, Car, Home, Plane, Zap, Utensils, RotateCcw, Undo2, Trash2, CheckSquare, Square, ChevronDown } from 'lucide-react';
 import { Video as LucideIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
-import { supabase } from '../../lib/supabase';
+import { supabase, ReceiptItem as ReceiptItemRow } from '../../lib/supabase';
 import { deleteMatchingProcessingLogs } from '../../lib/receiptCleanup';
 import { useAuth } from '../../contexts/AuthContext';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
@@ -57,13 +57,57 @@ const getCurrencySymbol = (currencyCode: string): string => {
   return symbols[code] || code;
 };
 
+const formatCurrencyAmount = (currencyCode: string, amount: number): string => (
+  `${getCurrencySymbol(currencyCode)}${amount.toFixed(2)}`
+);
+
+const mapReceiptItem = (item: ReceiptItemRow) => {
+  const quantityValue = typeof item.quantity === 'number'
+    ? item.quantity
+    : parseFloat(String(item.quantity ?? 1));
+  const quantity = Number.isFinite(quantityValue) && quantityValue > 0 ? quantityValue : 1;
+  const unitPriceValue = typeof item.unit_price === 'number'
+    ? item.unit_price
+    : item.unit_price !== null
+      ? parseFloat(String(item.unit_price))
+      : NaN;
+  const lineTotalValue = typeof item.line_total === 'number'
+    ? item.line_total
+    : item.line_total !== null
+      ? parseFloat(String(item.line_total))
+      : NaN;
+  const vatAmountValue = typeof item.vat_amount === 'number'
+    ? item.vat_amount
+    : item.vat_amount !== null
+      ? parseFloat(String(item.vat_amount))
+      : NaN;
+  const vatRateValue = typeof item.vat_rate === 'number'
+    ? item.vat_rate
+    : item.vat_rate !== null
+      ? parseFloat(String(item.vat_rate))
+      : NaN;
+
+  return {
+    lineIndex: item.line_index,
+    description: item.description,
+    quantity,
+    unitPrice: Number.isFinite(unitPriceValue) ? unitPriceValue : undefined,
+    lineTotal: Number.isFinite(lineTotalValue) ? lineTotalValue : 0,
+    vatAmount: Number.isFinite(vatAmountValue) ? vatAmountValue : undefined,
+    vatRate: Number.isFinite(vatRateValue) ? vatRateValue : undefined,
+  };
+};
+
 export interface Receipt {
   id: string;
+  userId: string;
   merchant: string;
   merchantIcon: LucideIcon;
   merchantLogo?: string;
   amount: number;
-  amount_gbp: number;
+  amount_gbp: number | null;
+  subtotal?: number;
+  vatAmount?: number;
   currency: string;
   currencySymbol?: string;
   date: string;
@@ -76,9 +120,13 @@ export interface Receipt {
   summary?: string;
   cardLast4?: string;
   items?: Array<{
-    name: string;
+    lineIndex: number;
+    description: string;
     quantity: number;
-    price: number;
+    unitPrice?: number;
+    lineTotal: number;
+    vatAmount?: number;
+    vatRate?: number;
   }>;
   paymentMethod?: string;
   location?: string;
@@ -126,6 +174,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         const { data, error } = await supabase
           .from('receipts')
           .select('*')
+          .eq('user_id', user.id)
           .order('transaction_date', { ascending: false });
 
         console.log('[WalletTab] Query result:', { data, error, dataLength: data?.length });
@@ -137,6 +186,29 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           return;
         }
 
+        const receiptIds = (data || []).map((row) => row.id).filter(Boolean);
+        const receiptItemsByReceiptId = new Map<string, Receipt['items']>();
+
+        if (receiptIds.length > 0) {
+          const { data: receiptItemsData, error: receiptItemsError } = await supabase
+            .from('receipt_items')
+            .select('*')
+            .in('receipt_id', receiptIds)
+            .order('line_index', { ascending: true });
+
+          if (receiptItemsError) {
+            console.error('[WalletTab] receipt_items query error:', receiptItemsError);
+          } else {
+            (receiptItemsData || []).forEach((item) => {
+              const receiptId = String(item.receipt_id || '');
+              if (!receiptId) return;
+              const existingItems = receiptItemsByReceiptId.get(receiptId) || [];
+              existingItems.push(mapReceiptItem(item as ReceiptItemRow));
+              receiptItemsByReceiptId.set(receiptId, existingItems);
+            });
+          }
+        }
+
       const formattedReceipts: Receipt[] = (data || []).map((row) => {
         console.log('[WalletTab] Processing row:', row);
 
@@ -144,7 +216,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         const parsedAmountGbp = row.amount_gbp !== null && row.amount_gbp !== undefined && row.amount_gbp !== ''
           ? parseFloat(row.amount_gbp)
           : NaN;
-        const totalGbp = Number.isFinite(parsedAmountGbp) ? parsedAmountGbp : total;
+        const totalGbp = Number.isFinite(parsedAmountGbp) ? parsedAmountGbp : null;
         const currencyCode = row.currency || 'GBP';
         const currencySymbol = getCurrencySymbol(currencyCode);
         const merchantName = row.merchant && row.merchant.trim() ? row.merchant : 'Receipt (Seller Unknown)';
@@ -153,10 +225,13 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
 
         return {
           id: row.id,
+          userId: row.user_id,
           merchant: merchantName,
           merchantIcon: getCategoryIcon(category),
           amount: total,
           amount_gbp: totalGbp,
+          subtotal: row.subtotal !== null && row.subtotal !== undefined ? parseFloat(row.subtotal) || 0 : undefined,
+          vatAmount: row.vat_amount !== null && row.vat_amount !== undefined ? parseFloat(row.vat_amount) || 0 : undefined,
           currency: currencyCode,
           currencySymbol: currencySymbol,
           date: row.transaction_date || new Date().toISOString(),
@@ -168,15 +243,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           referenceNumber: row.reference_number || `REF-${row.id.slice(0, 8)}`,
           summary: row.short_summary || '',
           cardLast4: row.card_last_4 || '',
-          items: Array.isArray(row.items)
-            ? row.items.map((item: any) => ({
-                name: item?.name || 'Item',
-                quantity: typeof item?.quantity === 'number' && Number.isFinite(item.quantity) ? item.quantity : 1,
-                price: typeof item?.price === 'number' && Number.isFinite(item.price)
-                  ? item.price
-                  : parseFloat(String(item?.price ?? 0)) || 0,
-              }))
-            : [],
+          items: receiptItemsByReceiptId.get(row.id) || [],
           paymentMethod: '',
           location: '',
           folder: undefined,
@@ -225,9 +292,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             const merchantName = newRow.merchant && newRow.merchant.trim() ? newRow.merchant : 'Receipt (Seller Unknown)';
             const amount = parseFloat(newRow.amount) || parseFloat(newRow.total) || 0;
             const currencyCode = newRow.currency || 'GBP';
-            const currencySymbol = getCurrencySymbol(currencyCode);
-
-            const formattedAmount = amount > 0 ? `${currencySymbol}${amount.toFixed(2)}` : 'Processing...';
+            const formattedAmount = amount > 0 ? formatCurrencyAmount(currencyCode, amount) : 'Processing...';
             showToast('New Receipt Processed', `${merchantName} - ${formattedAmount}`);
 
             // Refresh receipts to show in list
@@ -245,8 +310,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             if (oldAmount === 0 && newAmount > 0) {
               const merchantName = updatedRow.merchant && updatedRow.merchant.trim() ? updatedRow.merchant : 'Receipt (Seller Unknown)';
               const currencyCode = updatedRow.currency || 'GBP';
-              const currencySymbol = getCurrencySymbol(currencyCode);
-              showToast('Receipt processed', `${merchantName} - ${currencySymbol}${newAmount.toFixed(2)}`);
+              showToast('Receipt processed', `${merchantName} - ${formatCurrencyAmount(currencyCode, newAmount)}`);
             }
 
             // Refresh receipts
@@ -276,7 +340,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
     };
   }, [user, showToast]);
 
-  const totalSpent = receipts.reduce((sum, receipt) => sum + receipt.amount_gbp, 0);
+  const totalSpent = receipts.reduce((sum, receipt) => sum + (receipt.amount_gbp ?? 0), 0);
   const budget = {
     currency: '£',
     spent: totalSpent,
@@ -788,14 +852,11 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                   {!isProcessing && (
                     <div className="text-right">
                       <div className="text-2xl font-bold text-white">
-                        {receipt.currency && receipt.currency.toUpperCase() === 'GBP'
-                          ? `£${receipt.amount.toFixed(2)}`
-                          : `£${receipt.amount_gbp.toFixed(2)}`
-                        }
+                        {formatCurrencyAmount(receipt.currency, receipt.amount)}
                       </div>
-                      {receipt.amount !== receipt.amount_gbp && receipt.currency && receipt.currency.toUpperCase() !== 'GBP' && (
+                      {receipt.currency && receipt.currency.toUpperCase() !== 'GBP' && receipt.amount_gbp !== null && (
                         <div className="text-xs pt-1 text-gray-400">
-                          {getCurrencySymbol(receipt.currency)}{receipt.amount.toFixed(2)}
+                          Approx. £{receipt.amount_gbp.toFixed(2)}
                         </div>
                       )}
                     </div>

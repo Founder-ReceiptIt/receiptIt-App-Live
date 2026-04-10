@@ -5,7 +5,6 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { formatDistance } from 'date-fns';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
-import { useAuth } from '../../contexts/AuthContext';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -33,20 +32,7 @@ interface ReceiptModalProps {
   onDelete?: () => void;
 }
 
-type ReceiptModalData = Receipt & {
-  subtotal?: number | null;
-  vat_amount?: number | null;
-  vatAmount?: number | null;
-  discount?: number | null;
-  redemption?: number | null;
-  adjustment?: number | null;
-  amountGbp?: number | null;
-  userId?: string | null;
-  user_id?: string | null;
-};
-
 export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) {
-  const { user } = useAuth();
   const [autoDelete, setAutoDelete] = useState('After Warranty Expires');
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteMenu, setShowDeleteMenu] = useState(false);
@@ -181,28 +167,25 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   if (!receipt) return null;
 
   // --- LOGIC FIX: BETTER DATE HANDLING ---
-  const receiptData = receipt as ReceiptModalData;
   const getValidMoneyValue = (value?: number | null) => (
     typeof value === 'number' && Number.isFinite(value) ? value : null
   );
   const formatMoney = (currencySymbol: string, value: number) => `${currencySymbol}${value.toFixed(2)}`;
   const receiptCurrencyCode = receipt.currency?.toUpperCase() || 'GBP';
   const receiptCurrencySymbol = getCurrencySymbol(receipt.currency);
-  const subtotal = getValidMoneyValue(receiptData.subtotal);
-  const vatAmount = getValidMoneyValue(receiptData.vat_amount ?? receiptData.vatAmount);
-  const discountAmount = [receiptData.discount, receiptData.redemption, receiptData.adjustment]
-    .map((value) => getValidMoneyValue(value))
-    .find((value): value is number => value !== null && value < 0) ?? null;
+  const subtotal = getValidMoneyValue(receipt.subtotal);
+  const vatAmount = getValidMoneyValue(receipt.vatAmount);
   const originalTotal = getValidMoneyValue(receipt.amount);
-  const gbpAmount = getValidMoneyValue(receipt.amount_gbp ?? receiptData.amountGbp);
+  const gbpAmount = getValidMoneyValue(receipt.amount_gbp);
+  const displayOriginalTotal = originalTotal ?? gbpAmount ?? 0;
   const displayGbpTotal = receiptCurrencyCode === 'GBP'
     ? (originalTotal ?? gbpAmount ?? 0)
     : (gbpAmount ?? originalTotal ?? 0);
-  const receiptUserId = receiptData.userId || receiptData.user_id || user?.id || null;
+  const receiptUserId = receipt.userId;
+  const hasReceiptItems = Array.isArray(receipt.items) && receipt.items.length > 0;
   const breakdownRows = [
     subtotal !== null ? { label: 'Subtotal', value: formatMoney(receiptCurrencySymbol, subtotal) } : null,
     vatAmount !== null ? { label: 'VAT', value: formatMoney(receiptCurrencySymbol, vatAmount) } : null,
-    discountAmount !== null ? { label: 'Discount / redemption / adjustment', value: formatMoney(receiptCurrencySymbol, discountAmount) } : null,
     receiptCurrencyCode !== 'GBP' && originalTotal !== null
       ? { label: 'Original total', value: formatMoney(receiptCurrencySymbol, originalTotal) }
       : null,
@@ -365,11 +348,11 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   </div>
                   <div className="text-right">
                     <div className="text-3xl font-bold text-white">
-                      {formatMoney('£', displayGbpTotal)}
+                      {formatMoney(receiptCurrencySymbol, displayOriginalTotal)}
                     </div>
-                    {receipt.amount !== receipt.amount_gbp && receipt.currency && receipt.currency.toUpperCase() !== 'GBP' && (
+                    {receiptCurrencyCode !== 'GBP' && gbpAmount !== null && (
                       <div className="text-sm pt-1 text-gray-400">
-                        {receipt.currencySymbol || receipt.currency}{receipt.amount.toFixed(2)}
+                        Approx. {formatMoney('£', gbpAmount)}
                       </div>
                     )}
                   </div>
@@ -388,6 +371,11 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                     <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md text-gray-400 bg-white/5 border-white/10">
                       <CreditCard className="w-4 h-4" />
                       **** {receipt.cardLast4}
+                    </div>
+                  )}
+                  {vatAmount !== null && (
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md text-gray-400 bg-white/5 border-white/10">
+                      <span>VAT {formatMoney(receiptCurrencySymbol, vatAmount)}</span>
                     </div>
                   )}
                 </div>
@@ -593,24 +581,31 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   Receipt Breakdown
                 </h4>
 
-
-                {receipt.items && receipt.items.length > 0 && (
+                {hasReceiptItems ? (
                   <div className="mb-4">
                     <h5 className="text-sm font-bold text-gray-400 mb-3 uppercase tracking-wide">Items Purchased</h5>
                     <div className="space-y-3">
-                      {receipt.items.map((item, index) => (
-                        <div key={index} className="flex items-start justify-between gap-4 p-3 bg-white/5 rounded-lg">
+                      {receipt.items!.map((item) => (
+                        <div key={`${item.lineIndex}-${item.description}`} className="flex items-start justify-between gap-4 p-3 bg-white/5 rounded-lg">
                           <div className="flex-1">
-                            <div className="text-white font-semibold">{item.name}</div>
-                            <div className="text-xs text-gray-400 mt-0.5">Quantity: {item.quantity}</div>
+                            <div className="text-white font-semibold">{item.description}</div>
+                            <div className="text-xs text-gray-400 mt-0.5">
+                              Qty {item.quantity}
+                              {item.unitPrice !== undefined ? ` x ${formatMoney(receiptCurrencySymbol, item.unitPrice)}` : ''}
+                              {item.vatRate !== undefined ? ` • VAT ${item.vatRate}%` : ''}
+                            </div>
                           </div>
                           <div className="text-white font-bold">
-                            {getCurrencySymbol(receipt.currency)}{item.price.toFixed(2)}
+                            {formatMoney(receiptCurrencySymbol, item.lineTotal)}
                           </div>
                         </div>
                       ))}
                     </div>
                     <div className="h-px bg-white/10 my-4" />
+                  </div>
+                ) : (
+                  <div className="mb-4 rounded-lg bg-white/5 p-4 text-sm text-gray-400">
+                    Detailed items unavailable for this receipt
                   </div>
                 )}
 

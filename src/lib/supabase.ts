@@ -13,11 +13,25 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 console.log('[Supabase] Client initialized successfully');
 
+export interface ReceiptItem {
+  id: string;
+  receipt_id: string;
+  line_index: number;
+  description: string;
+  quantity: number;
+  unit_price: number | null;
+  line_total: number | null;
+  vat_amount: number | null;
+  vat_rate: number | null;
+  created_at?: string | null;
+}
+
 export interface Receipt {
   id: string;
   user_id: string;
   merchant: string;
   amount: number;
+  amount_gbp: number | null;
   subtotal: number;
   vat_amount: number;
   currency: string;
@@ -38,6 +52,7 @@ export interface Receipt {
   receipt_hash: string | null;
   confidence_score: number | null;
   parsed_at: string | null;
+  items?: ReceiptItem[] | null;
 }
 
 export interface Profile {

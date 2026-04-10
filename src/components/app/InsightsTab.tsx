@@ -36,6 +36,7 @@ export function InsightsTab() {
       const { data, error } = await supabase
         .from('receipts')
         .select('amount_gbp, category, transaction_date, status')
+        .eq('user_id', user.id)
         .order('transaction_date', { ascending: false });
 
       console.log('[InsightsTab] Raw data from Supabase:', data);
@@ -84,6 +85,7 @@ export function InsightsTab() {
           event: '*',
           schema: 'public',
           table: 'receipts',
+          filter: `user_id=eq.${user.id}`,
         },
         () => {
           fetchReceipts();
