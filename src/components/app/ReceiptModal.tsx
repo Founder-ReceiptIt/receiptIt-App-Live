@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { formatDistance } from 'date-fns';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
+import { useAuth } from '../../contexts/AuthContext';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -33,6 +34,7 @@ interface ReceiptModalProps {
 }
 
 export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) {
+  const { user } = useAuth();
   const [autoDelete, setAutoDelete] = useState('After Warranty Expires');
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteMenu, setShowDeleteMenu] = useState(false);
@@ -77,7 +79,39 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
           }
         }
 
-        // Step 2: Delete database record (this must succeed)
+        const receiptTransactionDate = String(receipt.date).split('T')[0];
+        const hasValidAmountGbp = typeof receipt.amount_gbp === 'number' && Number.isFinite(receipt.amount_gbp);
+        const hasValidAmount = typeof receipt.amount === 'number' && Number.isFinite(receipt.amount);
+
+        // Step 2: Delete linked processing logs for this receipt match (delete all matches)
+        if (user?.id) {
+          const matchingAmountFilters = [
+            hasValidAmount ? `original_amount.eq.${receipt.amount}` : null,
+            hasValidAmountGbp ? `amount_gbp.eq.${receipt.amount_gbp}` : null,
+          ].filter(Boolean).join(',');
+
+          if (matchingAmountFilters) {
+            console.log('[Delete] Deleting linked processing logs for receipt:', {
+              userId: user.id,
+              transactionDate: receiptTransactionDate,
+              originalAmount: hasValidAmount ? receipt.amount : null,
+              amountGbp: hasValidAmountGbp ? receipt.amount_gbp : null,
+            });
+
+            const { error: processingLogsError } = await supabase
+              .from('processing_logs')
+              .delete()
+              .eq('user_id', user.id)
+              .eq('transaction_date', receiptTransactionDate)
+              .or(matchingAmountFilters);
+
+            if (processingLogsError) {
+              console.warn('[Delete] processing_logs deletion failed (non-critical):', processingLogsError);
+            }
+          }
+        }
+
+        // Step 3: Delete database record (this must succeed)
         console.log('[Delete] Deleting database record:', receipt.id);
         const { error: dbError } = await supabase
           .from('receipts')
@@ -142,6 +176,11 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   if (!receipt) return null;
 
   // --- LOGIC FIX: BETTER DATE HANDLING ---
+  const displayGbpTotal = (
+    typeof receipt.amount_gbp === 'number' && Number.isFinite(receipt.amount_gbp)
+      ? receipt.amount_gbp
+      : receipt.amount
+  );
   const warrantyEndDate = receipt.warrantyDate ? new Date(receipt.warrantyDate) : null;
   const today = new Date();
   const isWarrantyActive = warrantyEndDate && warrantyEndDate > today;
@@ -300,10 +339,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   </div>
                   <div className="text-right">
                     <div className="text-3xl font-bold text-white">
-                      {receipt.currency && receipt.currency.toUpperCase() === 'GBP'
-                        ? `£${receipt.amount.toFixed(2)}`
-                        : `£${receipt.amount_gbp.toFixed(2)}`
-                      }
+                      £{displayGbpTotal.toFixed(2)}
                     </div>
                     {receipt.amount !== receipt.amount_gbp && receipt.currency && receipt.currency.toUpperCase() !== 'GBP' && (
                       <div className="text-sm pt-1 text-gray-400">
@@ -555,12 +591,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-white font-bold text-lg">
                     <span>Total (GBP)</span>
-                    <span>
-                      {receipt.currency && receipt.currency.toUpperCase() === 'GBP'
-                        ? `£${receipt.amount.toFixed(2)}`
-                        : `£${receipt.amount_gbp.toFixed(2)}`
-                      }
-                    </span>
+                    <span>£{displayGbpTotal.toFixed(2)}</span>
                   </div>
                   {receipt.currency && receipt.currency.toUpperCase() !== 'GBP' && (
                     <div className="flex items-center justify-between text-gray-400 text-sm pt-2 border-t border-white/10">
