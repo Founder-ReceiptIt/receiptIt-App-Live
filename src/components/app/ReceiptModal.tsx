@@ -3,6 +3,7 @@ import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, 
 import { Receipt } from './WalletTab';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { deleteMatchingProcessingLogs } from '../../lib/receiptCleanup';
 import { formatDistance } from 'date-fns';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { useAuth } from '../../contexts/AuthContext';
@@ -79,39 +80,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
           }
         }
 
-        const receiptTransactionDate = String(receipt.date).split('T')[0];
-        const hasValidAmountGbp = typeof receipt.amount_gbp === 'number' && Number.isFinite(receipt.amount_gbp);
-        const hasValidAmount = typeof receipt.amount === 'number' && Number.isFinite(receipt.amount);
-
-        // Step 2: Delete linked processing logs for this receipt match (delete all matches)
-        if (user?.id) {
-          const matchingAmountFilters = [
-            hasValidAmount ? `original_amount.eq.${receipt.amount}` : null,
-            hasValidAmountGbp ? `amount_gbp.eq.${receipt.amount_gbp}` : null,
-          ].filter(Boolean).join(',');
-
-          if (matchingAmountFilters) {
-            console.log('[Delete] Deleting linked processing logs for receipt:', {
-              userId: user.id,
-              transactionDate: receiptTransactionDate,
-              originalAmount: hasValidAmount ? receipt.amount : null,
-              amountGbp: hasValidAmountGbp ? receipt.amount_gbp : null,
-            });
-
-            const { error: processingLogsError } = await supabase
-              .from('processing_logs')
-              .delete()
-              .eq('user_id', user.id)
-              .eq('transaction_date', receiptTransactionDate)
-              .or(matchingAmountFilters);
-
-            if (processingLogsError) {
-              console.warn('[Delete] processing_logs deletion failed (non-critical):', processingLogsError);
-            }
-          }
-        }
-
-        // Step 3: Delete database record (this must succeed)
+        // Step 2: Delete database record (this must succeed)
         console.log('[Delete] Deleting database record:', receipt.id);
         const { error: dbError } = await supabase
           .from('receipts')
@@ -121,6 +90,15 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
         if (dbError) {
           console.error('[Delete] Database deletion failed:', dbError);
           throw dbError;
+        }
+
+        // Step 3: Delete linked processing logs for this receipt match (non-blocking)
+        if (user?.id) {
+          try {
+            await deleteMatchingProcessingLogs(user.id, [receipt]);
+          } catch (processingLogsError) {
+            console.warn('[Delete] processing_logs deletion failed (non-critical):', processingLogsError);
+          }
         }
 
         console.log('[Delete] Receipt deleted successfully');

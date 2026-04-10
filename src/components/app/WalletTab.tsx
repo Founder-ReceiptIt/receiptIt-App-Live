@@ -3,6 +3,7 @@ import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, Shopping
 import { Video as LucideIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
+import { deleteMatchingProcessingLogs } from '../../lib/receiptCleanup';
 import { useAuth } from '../../contexts/AuthContext';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { useToast } from '../../contexts/ToastContext';
@@ -140,7 +141,10 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         console.log('[WalletTab] Processing row:', row);
 
         const total = parseFloat(row.amount) || 0;
-        const totalGbp = row.amount_gbp !== null && row.amount_gbp !== undefined ? parseFloat(row.amount_gbp) : 0;
+        const parsedAmountGbp = row.amount_gbp !== null && row.amount_gbp !== undefined && row.amount_gbp !== ''
+          ? parseFloat(row.amount_gbp)
+          : NaN;
+        const totalGbp = Number.isFinite(parsedAmountGbp) ? parsedAmountGbp : total;
         const currencyCode = row.currency || 'GBP';
         const currencySymbol = getCurrencySymbol(currencyCode);
         const merchantName = row.merchant && row.merchant.trim() ? row.merchant : 'Receipt (Seller Unknown)';
@@ -164,7 +168,15 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           referenceNumber: row.reference_number || `REF-${row.id.slice(0, 8)}`,
           summary: row.short_summary || '',
           cardLast4: row.card_last_4 || '',
-          items: [],
+          items: Array.isArray(row.items)
+            ? row.items.map((item: any) => ({
+                name: item?.name || 'Item',
+                quantity: typeof item?.quantity === 'number' && Number.isFinite(item.quantity) ? item.quantity : 1,
+                price: typeof item?.price === 'number' && Number.isFinite(item.price)
+                  ? item.price
+                  : parseFloat(String(item?.price ?? 0)) || 0,
+              }))
+            : [],
           paymentMethod: '',
           location: '',
           folder: undefined,
@@ -314,6 +326,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
     setIsDeleting(true);
     try {
       const receiptIds = Array.from(selectedReceipts);
+      const receiptsToDelete = receipts.filter((receipt) => selectedReceipts.has(receipt.id));
       const { error } = await supabase
         .from('receipts')
         .delete()
@@ -324,6 +337,14 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         showToast('Failed to delete receipts', 'error');
         setIsDeleting(false);
         return;
+      }
+
+      if (user?.id && receiptsToDelete.length > 0) {
+        try {
+          await deleteMatchingProcessingLogs(user.id, receiptsToDelete);
+        } catch (processingLogsError) {
+          console.warn('[WalletTab] processing_logs deletion failed (non-critical):', processingLogsError);
+        }
       }
 
       setReceipts(receipts.filter(r => !selectedReceipts.has(r.id)));
