@@ -34,10 +34,15 @@ export interface Receipt {
   amount_gbp: number | null;
   subtotal: number;
   vat_amount: number;
+  discount_amount: number | null;
   currency: string;
   transaction_date: string;
   category: string | null;
   reference_number: string;
+  customer_number: string | null;
+  order_number: string | null;
+  invoice_number: string | null;
+  loyalty_member_id: string | null;
   created_at: string;
   status: string | null;
   storage_path: string | null;

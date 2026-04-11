@@ -150,6 +150,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const receiptCurrencySymbol = getCurrencySymbol(receipt.currency);
   const subtotal = getValidMoneyValue(receipt.subtotal);
   const vatAmount = getValidMoneyValue(receipt.vatAmount);
+  const discountAmount = getValidMoneyValue(receipt.discountAmount);
   const originalTotal = getValidMoneyValue(receipt.amount);
   const gbpAmount = getValidMoneyValue(receipt.amount_gbp);
   const displayOriginalTotal = originalTotal ?? gbpAmount ?? 0;
@@ -157,14 +158,32 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     ? (originalTotal ?? gbpAmount ?? 0)
     : (gbpAmount ?? originalTotal ?? 0);
   const hasReceiptItems = Array.isArray(receipt.items) && receipt.items.length > 0;
-  const hasReferenceDetails = Boolean(receipt.referenceNumber || receipt.cardLast4);
+  const hasReferenceDetails = Boolean(
+    receipt.referenceNumber ||
+    receipt.invoiceNumber ||
+    receipt.orderNumber ||
+    receipt.customerNumber ||
+    receipt.loyaltyMemberId ||
+    receipt.cardLast4
+  );
   const breakdownRows = [
     subtotal !== null ? { label: 'Subtotal', value: formatMoney(receiptCurrencySymbol, subtotal) } : null,
+    discountAmount !== null
+      ? { label: 'Discount', value: `-${formatMoney(receiptCurrencySymbol, Math.abs(discountAmount))}`, valueClassName: 'text-emerald-400' }
+      : null,
     vatAmount !== null ? { label: 'VAT', value: formatMoney(receiptCurrencySymbol, vatAmount) } : null,
     receiptCurrencyCode !== 'GBP' && originalTotal !== null
       ? { label: 'Original total', value: formatMoney(receiptCurrencySymbol, originalTotal) }
       : null,
-  ].filter((row): row is { label: string; value: string } => row !== null);
+  ].filter((row): row is { label: string; value: string; valueClassName?: string } => row !== null);
+  const referenceDetails = [
+    receipt.referenceNumber ? { label: 'Reference number', value: receipt.referenceNumber, icon: FileText } : null,
+    receipt.invoiceNumber ? { label: 'Invoice number', value: receipt.invoiceNumber, icon: FileText } : null,
+    receipt.orderNumber ? { label: 'Order number', value: receipt.orderNumber, icon: FileText } : null,
+    receipt.customerNumber ? { label: 'Customer number', value: receipt.customerNumber, icon: FileText } : null,
+    receipt.loyaltyMemberId ? { label: 'Loyalty/member ID', value: receipt.loyaltyMemberId, icon: FileText } : null,
+    receipt.cardLast4 ? { label: 'Card', value: `**** ${receipt.cardLast4}`, icon: CreditCard } : null,
+  ].filter((detail): detail is { label: string; value: string; icon: typeof FileText } => detail !== null);
   const warrantyEndDate = receipt.warrantyDate ? new Date(receipt.warrantyDate) : null;
   const today = new Date();
   const isWarrantyActive = warrantyEndDate && warrantyEndDate > today;
@@ -543,24 +562,19 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                 >
                   <h4 className="text-sm font-bold text-white mb-3 uppercase tracking-wide">Reference details</h4>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    {receipt.referenceNumber && (
-                      <div className="rounded-xl bg-white/5 border border-white/10 px-4 py-3">
-                        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
-                          <FileText className="w-3.5 h-3.5" />
-                          Reference number
+                    {referenceDetails.map((detail) => {
+                      const Icon = detail.icon;
+
+                      return (
+                        <div key={detail.label} className="rounded-xl bg-white/5 border border-white/10 px-4 py-3">
+                          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
+                            <Icon className="w-3.5 h-3.5" />
+                            {detail.label}
+                          </div>
+                          <div className="text-sm font-semibold text-gray-200 break-all">{detail.value}</div>
                         </div>
-                        <div className="text-sm font-semibold text-gray-200 break-all">{receipt.referenceNumber}</div>
-                      </div>
-                    )}
-                    {receipt.cardLast4 && (
-                      <div className="rounded-xl bg-white/5 border border-white/10 px-4 py-3">
-                        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
-                          <CreditCard className="w-3.5 h-3.5" />
-                          Card
-                        </div>
-                        <div className="text-sm font-semibold text-gray-200">**** {receipt.cardLast4}</div>
-                      </div>
-                    )}
+                      );
+                    })}
                   </div>
                 </motion.div>
               )}
@@ -612,7 +626,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                       className="flex items-center justify-between text-gray-400 text-sm"
                     >
                       <span>{row.label}</span>
-                      <span>{row.value}</span>
+                      <span className={row.valueClassName}>{row.value}</span>
                     </div>
                   ))}
                   <div className={`flex items-center justify-between text-white font-bold text-lg${breakdownRows.length > 0 ? ' pt-2 border-t border-white/10' : ''}`}>

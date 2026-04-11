@@ -116,6 +116,7 @@ export interface Receipt {
   amount_gbp: number | null;
   subtotal?: number;
   vatAmount?: number;
+  discountAmount?: number;
   currency: string;
   currencySymbol?: string;
   date: string;
@@ -125,6 +126,10 @@ export interface Receipt {
   warrantyDate?: string;
   returnDate?: string;
   referenceNumber: string;
+  customerNumber?: string;
+  orderNumber?: string;
+  invoiceNumber?: string;
+  loyaltyMemberId?: string;
   summary?: string;
   cardLast4?: string;
   items?: Array<{
@@ -240,6 +245,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           amount_gbp: totalGbp,
           subtotal: row.subtotal !== null && row.subtotal !== undefined ? parseFloat(row.subtotal) || 0 : undefined,
           vatAmount: row.vat_amount !== null && row.vat_amount !== undefined ? parseFloat(row.vat_amount) || 0 : undefined,
+          discountAmount: row.discount_amount !== null && row.discount_amount !== undefined ? parseFloat(row.discount_amount) || 0 : undefined,
           currency: currencyCode,
           currencySymbol: currencySymbol,
           date: row.transaction_date || new Date().toISOString(),
@@ -249,6 +255,10 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           warrantyDate: row.warranty_date || undefined,
           returnDate: row.return_date || undefined,
           referenceNumber: row.reference_number || `REF-${row.id.slice(0, 8)}`,
+          customerNumber: row.customer_number || undefined,
+          orderNumber: row.order_number || undefined,
+          invoiceNumber: row.invoice_number || undefined,
+          loyaltyMemberId: row.loyalty_member_id || undefined,
           summary: row.short_summary || '',
           cardLast4: row.card_last_4 || '',
           items: receiptItemsByReceiptId.get(row.id) || [],
