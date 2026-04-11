@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Download, MoreVertical, Undo2, CreditCard as Edit2, Save } from 'lucide-react';
+import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Download, MoreVertical, Undo2, CreditCard as Edit2, Save, ChevronDown } from 'lucide-react';
 import { Receipt } from './WalletTab';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -36,6 +36,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const [autoDelete, setAutoDelete] = useState('After Warranty Expires');
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteMenu, setShowDeleteMenu] = useState(false);
+  const [showMoreDetails, setShowMoreDetails] = useState(false);
   const [isEditingDates, setIsEditingDates] = useState(false);
   const [editWarrantyDate, setEditWarrantyDate] = useState('');
   const [editReturnDate, setEditReturnDate] = useState('');
@@ -43,6 +44,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
 
   useEffect(() => {
     setShowDeleteMenu(false);
+    setShowMoreDetails(false);
     setIsEditingDates(false);
     if (receipt) {
       setEditWarrantyDate(receipt.warrantyDate || '');
@@ -158,14 +160,11 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     ? (originalTotal ?? gbpAmount ?? 0)
     : (gbpAmount ?? originalTotal ?? 0);
   const hasReceiptItems = Array.isArray(receipt.items) && receipt.items.length > 0;
-  const hasReferenceDetails = Boolean(
-    receipt.referenceNumber ||
-    receipt.invoiceNumber ||
-    receipt.orderNumber ||
-    receipt.customerNumber ||
-    receipt.loyaltyMemberId ||
-    receipt.cardLast4
-  );
+  const heroMetadataChips = [
+    receipt.orderNumber ? { label: `Order ${receipt.orderNumber}`, value: receipt.orderNumber, icon: FileText } : null,
+    receipt.loyaltyMemberId ? { label: `Member ${receipt.loyaltyMemberId}`, value: receipt.loyaltyMemberId, icon: FileText } : null,
+    receipt.cardLast4 ? { label: `**** ${receipt.cardLast4}`, icon: CreditCard } : null,
+  ].filter((chip): chip is { label: string; value?: string; icon: typeof FileText } => chip !== null);
   const breakdownRows = [
     subtotal !== null ? { label: 'Subtotal', value: formatMoney(receiptCurrencySymbol, subtotal) } : null,
     discountAmount !== null
@@ -176,14 +175,20 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
       ? { label: 'Original total', value: formatMoney(receiptCurrencySymbol, originalTotal) }
       : null,
   ].filter((row): row is { label: string; value: string; valueClassName?: string } => row !== null);
-  const referenceDetails = [
+  const moreDetails = [
     receipt.referenceNumber ? { label: 'Reference number', value: receipt.referenceNumber, icon: FileText } : null,
     receipt.invoiceNumber ? { label: 'Invoice number', value: receipt.invoiceNumber, icon: FileText } : null,
-    receipt.orderNumber ? { label: 'Order number', value: receipt.orderNumber, icon: FileText } : null,
     receipt.customerNumber ? { label: 'Customer number', value: receipt.customerNumber, icon: FileText } : null,
-    receipt.loyaltyMemberId ? { label: 'Loyalty/member ID', value: receipt.loyaltyMemberId, icon: FileText } : null,
-    receipt.cardLast4 ? { label: 'Card', value: `**** ${receipt.cardLast4}`, icon: CreditCard } : null,
-  ].filter((detail): detail is { label: string; value: string; icon: typeof FileText } => detail !== null);
+    receipt.paymentMethod ? { label: 'Payment method', value: receipt.paymentMethod, icon: CreditCard } : null,
+  ]
+    .filter((detail): detail is { label: string; value: string; icon: typeof FileText } => detail !== null)
+    .filter((detail, index, allDetails) => {
+      const normalizedValue = detail.value.trim().toLowerCase();
+      const duplicateInHero = heroMetadataChips.some((chip) => chip.value?.trim().toLowerCase() === normalizedValue);
+      const firstMatchingIndex = allDetails.findIndex((candidate) => candidate.value.trim().toLowerCase() === normalizedValue);
+
+      return !duplicateInHero && firstMatchingIndex === index;
+    });
   const warrantyEndDate = receipt.warrantyDate ? new Date(receipt.warrantyDate) : null;
   const today = new Date();
   const isWarrantyActive = warrantyEndDate && warrantyEndDate > today;
@@ -357,12 +362,62 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                     <Tag className="w-4 h-4" />
                     {receipt.category || 'Receipt'}
                   </div>
-                  {vatAmount !== null && (
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md text-gray-400 bg-white/5 border-white/10">
-                      <span>VAT {formatMoney(receiptCurrencySymbol, vatAmount)}</span>
-                    </div>
+                  {heroMetadataChips.map((chip) => {
+                    const Icon = chip.icon;
+
+                    return (
+                      <div key={chip.label} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md text-gray-400 bg-white/5 border-white/10">
+                        <Icon className="w-3.5 h-3.5" />
+                        <span>{chip.label}</span>
+                      </div>
+                    );
+                  })}
+                  {moreDetails.length > 0 && (
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setShowMoreDetails((current) => !current)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md text-gray-400 bg-white/5 border-white/10 hover:bg-white/10 hover:text-white hover:border-white/20 transition-colors"
+                    >
+                      <span>More</span>
+                      <motion.div
+                        animate={{ rotate: showMoreDetails ? 180 : 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </motion.div>
+                    </motion.button>
                   )}
                 </div>
+
+                <AnimatePresence>
+                  {showMoreDetails && moreDetails.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                      animate={{ opacity: 1, height: 'auto', marginTop: 16 }}
+                      exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {moreDetails.map((detail) => {
+                            const Icon = detail.icon;
+
+                            return (
+                              <div key={detail.label} className="rounded-xl bg-black/10 border border-white/10 px-4 py-3">
+                                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
+                                  <Icon className="w-3.5 h-3.5" />
+                                  {detail.label}
+                                </div>
+                                <div className="text-sm font-semibold text-gray-200 break-all">{detail.value}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* --- WARRANTY SECTION (Animated & Glowing) --- */}
@@ -549,32 +604,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                         className="w-full px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white focus:outline-none focus:border-teal-400/50 focus:ring-2 focus:ring-teal-400/20 transition-all"
                       />
                     </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {hasReferenceDetails && (
-                <motion.div
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.18 }}
-                  className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-4"
-                >
-                  <h4 className="text-sm font-bold text-white mb-3 uppercase tracking-wide">Reference details</h4>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {referenceDetails.map((detail) => {
-                      const Icon = detail.icon;
-
-                      return (
-                        <div key={detail.label} className="rounded-xl bg-white/5 border border-white/10 px-4 py-3">
-                          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
-                            <Icon className="w-3.5 h-3.5" />
-                            {detail.label}
-                          </div>
-                          <div className="text-sm font-semibold text-gray-200 break-all">{detail.value}</div>
-                        </div>
-                      );
-                    })}
                   </div>
                 </motion.div>
               )}
