@@ -3,7 +3,6 @@ import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, Shopping
 import { Video as LucideIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { supabase, ReceiptItem as ReceiptItemRow } from '../../lib/supabase';
-import { deleteMatchingProcessingLogs } from '../../lib/receiptCleanup';
 import { useAuth } from '../../contexts/AuthContext';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { useToast } from '../../contexts/ToastContext';
@@ -60,6 +59,15 @@ const getCurrencySymbol = (currencyCode: string): string => {
 const formatCurrencyAmount = (currencyCode: string, amount: number): string => (
   `${getCurrencySymbol(currencyCode)}${amount.toFixed(2)}`
 );
+
+const getReceiptGbpDisplayAmount = (receipt: Receipt): number => {
+  const receiptCurrencyCode = receipt.currency?.toUpperCase() || 'GBP';
+  if (receiptCurrencyCode === 'GBP') {
+    return receipt.amount;
+  }
+
+  return receipt.amount_gbp ?? receipt.amount;
+};
 
 const mapReceiptItem = (item: ReceiptItemRow) => {
   const quantityValue = typeof item.quantity === 'number'
@@ -340,10 +348,10 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
     };
   }, [user, showToast]);
 
-  const totalSpent = receipts.reduce((sum, receipt) => sum + (receipt.amount_gbp ?? 0), 0);
+  const totalSpent = receipts.reduce((sum, receipt) => sum + getReceiptGbpDisplayAmount(receipt), 0);
   const budget = {
     currency: '£',
-    spent: totalSpent,
+    spent: Number(totalSpent.toFixed(2)),
     limit: 2500,
   };
 
@@ -390,7 +398,6 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
     setIsDeleting(true);
     try {
       const receiptIds = Array.from(selectedReceipts);
-      const receiptsToDelete = receipts.filter((receipt) => selectedReceipts.has(receipt.id));
       const { error } = await supabase
         .from('receipts')
         .delete()
@@ -401,14 +408,6 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         showToast('Failed to delete receipts', 'error');
         setIsDeleting(false);
         return;
-      }
-
-      if (user?.id && receiptsToDelete.length > 0) {
-        try {
-          await deleteMatchingProcessingLogs(user.id, receiptsToDelete);
-        } catch (processingLogsError) {
-          console.warn('[WalletTab] processing_logs deletion failed (non-critical):', processingLogsError);
-        }
       }
 
       setReceipts(receipts.filter(r => !selectedReceipts.has(r.id)));

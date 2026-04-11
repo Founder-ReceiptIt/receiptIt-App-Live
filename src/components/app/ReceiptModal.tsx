@@ -89,31 +89,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
           throw dbError;
         }
 
-        // Step 3: Delete linked processing logs for this receipt match (non-blocking)
-        if (receiptUserId) {
-          try {
-            const matchingAmountFilters = [
-              originalTotal !== null ? `original_amount.eq.${originalTotal}` : null,
-              gbpAmount !== null ? `amount_gbp.eq.${gbpAmount}` : null,
-            ].filter(Boolean).join(',');
-
-            if (matchingAmountFilters) {
-              const { error: processingLogsError } = await supabase
-                .from('processing_logs')
-                .delete()
-                .eq('user_id', receiptUserId)
-                .eq('transaction_date', String(receipt.date).split('T')[0])
-                .or(matchingAmountFilters);
-
-              if (processingLogsError) {
-                throw processingLogsError;
-              }
-            }
-          } catch (processingLogsError) {
-            console.warn('[Delete] processing_logs deletion failed (non-critical):', processingLogsError);
-          }
-        }
-
         console.log('[Delete] Receipt deleted successfully');
         onDelete?.();
         onClose();
@@ -181,8 +156,8 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const displayGbpTotal = receiptCurrencyCode === 'GBP'
     ? (originalTotal ?? gbpAmount ?? 0)
     : (gbpAmount ?? originalTotal ?? 0);
-  const receiptUserId = receipt.userId;
   const hasReceiptItems = Array.isArray(receipt.items) && receipt.items.length > 0;
+  const hasReferenceDetails = Boolean(receipt.referenceNumber || receipt.cardLast4);
   const breakdownRows = [
     subtotal !== null ? { label: 'Subtotal', value: formatMoney(receiptCurrencySymbol, subtotal) } : null,
     vatAmount !== null ? { label: 'VAT', value: formatMoney(receiptCurrencySymbol, vatAmount) } : null,
@@ -363,16 +338,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                     <Tag className="w-4 h-4" />
                     {receipt.category || 'Receipt'}
                   </div>
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md text-gray-400 bg-white/5 border-white/10">
-                    <FileText className="w-3.5 h-3.5" />
-                    {receipt.referenceNumber}
-                  </div>
-                  {receipt.cardLast4 && (
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md text-gray-400 bg-white/5 border-white/10">
-                      <CreditCard className="w-4 h-4" />
-                      **** {receipt.cardLast4}
-                    </div>
-                  )}
                   {vatAmount !== null && (
                     <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md text-gray-400 bg-white/5 border-white/10">
                       <span>VAT {formatMoney(receiptCurrencySymbol, vatAmount)}</span>
@@ -565,6 +530,37 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                         className="w-full px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white focus:outline-none focus:border-teal-400/50 focus:ring-2 focus:ring-teal-400/20 transition-all"
                       />
                     </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {hasReferenceDetails && (
+                <motion.div
+                  initial={{ y: 20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.18 }}
+                  className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-4"
+                >
+                  <h4 className="text-sm font-bold text-white mb-3 uppercase tracking-wide">Reference details</h4>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {receipt.referenceNumber && (
+                      <div className="rounded-xl bg-white/5 border border-white/10 px-4 py-3">
+                        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
+                          <FileText className="w-3.5 h-3.5" />
+                          Reference number
+                        </div>
+                        <div className="text-sm font-semibold text-gray-200 break-all">{receipt.referenceNumber}</div>
+                      </div>
+                    )}
+                    {receipt.cardLast4 && (
+                      <div className="rounded-xl bg-white/5 border border-white/10 px-4 py-3">
+                        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
+                          <CreditCard className="w-3.5 h-3.5" />
+                          Card
+                        </div>
+                        <div className="text-sm font-semibold text-gray-200">**** {receipt.cardLast4}</div>
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               )}
