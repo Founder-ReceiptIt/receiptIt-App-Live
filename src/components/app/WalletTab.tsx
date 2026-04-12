@@ -60,8 +60,6 @@ const formatCurrencyAmount = (currencyCode: string, amount: number): string => (
   `${getCurrencySymbol(currencyCode)}${amount.toFixed(2)}`
 );
 
-const FINAL_RECEIPT_STATUSES = ['parsed', 'completed'] as const;
-
 const getReceiptGbpDisplayAmount = (receipt: Receipt): number => {
   const receiptCurrencyCode = receipt.currency?.toUpperCase() || 'GBP';
   if (receiptCurrencyCode === 'GBP') {
@@ -190,7 +188,6 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           .from('receipts')
           .select('*')
           .eq('user_id', user.id)
-          .in('status', [...FINAL_RECEIPT_STATUSES])
           .order('transaction_date', { ascending: false });
 
         console.log('[WalletTab] Query result:', { data, error, dataLength: data?.length });
