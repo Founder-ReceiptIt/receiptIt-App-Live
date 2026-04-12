@@ -60,17 +60,31 @@ const formatCurrencyAmount = (currencyCode: string, amount: number): string => (
   `${getCurrencySymbol(currencyCode)}${amount.toFixed(2)}`
 );
 
-const WALLET_RECEIPT_STATUSES = ['processing', 'parsed', 'completed'] as const;
+const WALLET_RECEIPT_STATUSES = ['processing', 'parsed', 'completed', 'duplicate', 'failed', 'skipped'] as const;
 const FINAL_RECEIPT_STATUSES = ['parsed', 'completed'] as const;
+const HIDDEN_WALLET_RECEIPT_STATUSES = ['duplicate', 'failed', 'skipped'] as const;
+const PROCESSING_VISIBILITY_TIMEOUT_MS = 2 * 60 * 1000;
 
 const isFinalReceiptStatus = (status: unknown): status is typeof FINAL_RECEIPT_STATUSES[number] =>
   typeof status === 'string' && FINAL_RECEIPT_STATUSES.includes(status as typeof FINAL_RECEIPT_STATUSES[number]);
+
+const isHiddenWalletReceiptStatus = (status: unknown): status is typeof HIDDEN_WALLET_RECEIPT_STATUSES[number] =>
+  typeof status === 'string' && HIDDEN_WALLET_RECEIPT_STATUSES.includes(status as typeof HIDDEN_WALLET_RECEIPT_STATUSES[number]);
 
 const getReceiptStatusPriority = (status: unknown): number => {
   if (status === 'parsed') return 3;
   if (status === 'completed') return 2;
   if (status === 'processing') return 1;
   return 0;
+};
+
+const isRecentProcessingTimestamp = (createdAt?: string | null): boolean => {
+  if (!createdAt) return false;
+
+  const createdAtMs = new Date(createdAt).getTime();
+  if (!Number.isFinite(createdAtMs)) return false;
+
+  return Date.now() - createdAtMs <= PROCESSING_VISIBILITY_TIMEOUT_MS;
 };
 
 const getNormalizedAmountKey = (amount: string | number | null | undefined): string => {
@@ -151,6 +165,22 @@ const dedupeWalletReceipts = (receipts: Receipt[]): Receipt[] => {
 
   return receipts.filter((receipt) => groupedReceipts.get(receipt.groupingKey)?.id === receipt.id);
 };
+
+const filterVisibleReceiptRows = (rows: SupabaseReceiptRow[]): SupabaseReceiptRow[] =>
+  rows.filter((row) => {
+    if (isFinalReceiptStatus(row.status)) return true;
+    if (row.status === 'processing') return isRecentProcessingTimestamp(row.created_at);
+    if (isHiddenWalletReceiptStatus(row.status)) return false;
+    return false;
+  });
+
+const filterVisibleWalletReceipts = (receipts: Receipt[]): Receipt[] =>
+  receipts.filter((receipt) => {
+    if (isFinalReceiptStatus(receipt.status)) return true;
+    if (receipt.status === 'processing') return isRecentProcessingTimestamp(receipt.createdAt);
+    if (isHiddenWalletReceiptStatus(receipt.status)) return false;
+    return false;
+  });
 
 const getReceiptGbpDisplayAmount = (receipt: Receipt): number => {
   const receiptCurrencyCode = receipt.currency?.toUpperCase() || 'GBP';
@@ -239,6 +269,7 @@ export interface Receipt {
   status?: string;
   imageUrl?: string;
   storagePath?: string;
+  createdAt?: string;
   groupingKey: string;
 }
 
@@ -294,8 +325,10 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         }
 
         const rawRows = ((data || []) as SupabaseReceiptRow[]);
-        const dedupedRows = dedupeReceiptRows(rawRows);
-        const receiptIds = dedupedRows.map((row) => row.id).filter(Boolean);
+        const filteredRawRows = filterVisibleReceiptRows(rawRows);
+        const dedupedRows = dedupeReceiptRows(filteredRawRows);
+        const visibleDedupedRows = filterVisibleReceiptRows(dedupedRows);
+        const receiptIds = visibleDedupedRows.map((row) => row.id).filter(Boolean);
         const receiptItemsByReceiptId = new Map<string, Receipt['items']>();
 
         if (receiptIds.length > 0) {
@@ -318,7 +351,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           }
         }
 
-        const formattedReceipts: Receipt[] = dedupedRows.map((row) => {
+        const formattedReceipts: Receipt[] = visibleDedupedRows.map((row) => {
           console.log('[WalletTab] Processing row:', row);
 
           const total = parseFloat(row.amount) || 0;
@@ -363,14 +396,17 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             status: row.status || '',
             imageUrl: row.image_url || '',
             storagePath: row.storage_path || '',
+            createdAt: row.created_at || undefined,
             groupingKey: getReceiptGroupingKeyFromRow(row),
           };
         });
 
-        // Track receipt IDs for notification detection
-        previousReceiptIdsRef.current = new Set(formattedReceipts.map(r => r.id));
+        const safeReceipts = filterVisibleWalletReceipts(dedupeWalletReceipts(formattedReceipts));
 
-        setReceipts(formattedReceipts);
+        // Track receipt IDs for notification detection
+        previousReceiptIdsRef.current = new Set(safeReceipts.map(r => r.id));
+
+        setReceipts(safeReceipts);
         setLoading(false);
       } catch (error) {
         console.error('[WalletTab] Unexpected error fetching receipts:', error);
@@ -402,6 +438,15 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             const newRow = payload.new as Partial<SupabaseReceiptRow>;
             console.log('[WalletTab] New receipt inserted:', newRow);
 
+            if (newRow.status === 'duplicate') {
+              const merchantDescription = newRow.merchant && newRow.merchant.trim()
+                ? newRow.merchant
+                : 'This receipt was already in your wallet';
+              showToast('Duplicate receipt rejected', merchantDescription);
+              fetchReceipts();
+              return;
+            }
+
             if (isFinalReceiptStatus(newRow.status)) {
               const merchantName = newRow.merchant && newRow.merchant.trim() ? newRow.merchant : 'Receipt (Seller Unknown)';
               const amount = parseFloat(String(newRow.amount ?? '')) || parseFloat(String((newRow as any).total ?? '')) || 0;
@@ -416,6 +461,15 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             const oldRow = payload.old as Partial<SupabaseReceiptRow>;
 
             console.log('[WalletTab] Receipt updated:', { old: oldRow, new: updatedRow });
+
+            if (updatedRow.status === 'duplicate') {
+              const merchantDescription = updatedRow.merchant && updatedRow.merchant.trim()
+                ? updatedRow.merchant
+                : 'This receipt was already in your wallet';
+              showToast('Duplicate receipt rejected', merchantDescription);
+              fetchReceipts();
+              return;
+            }
 
             // Check if amount was just processed (changed from 0 or null to a value)
             const oldAmount = parseFloat(String(oldRow.amount ?? '')) || parseFloat(String((oldRow as any).total ?? '')) || 0;
@@ -452,9 +506,9 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
     };
   }, [user, showToast]);
 
-  const dedupedReceipts = dedupeWalletReceipts(receipts);
+  const visibleReceipts = filterVisibleWalletReceipts(dedupeWalletReceipts(receipts));
 
-  const totalSpent = dedupedReceipts.reduce((sum, receipt) => sum + getReceiptGbpDisplayAmount(receipt), 0);
+  const totalSpent = visibleReceipts.reduce((sum, receipt) => sum + getReceiptGbpDisplayAmount(receipt), 0);
   const budget = {
     currency: '£',
     spent: Number(totalSpent.toFixed(2)),
@@ -463,10 +517,10 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
 
   const percentage = (budget.spent / budget.limit) * 100;
 
-  const uniqueCategories = Array.from(new Set(dedupedReceipts.map(r => r.category)));
+  const uniqueCategories = Array.from(new Set(visibleReceipts.map(r => r.category)));
   const categories = ['All', ...uniqueCategories];
 
-  const filteredReceipts = dedupedReceipts.filter(receipt => {
+  const filteredReceipts = visibleReceipts.filter(receipt => {
     const matchesSearch = receipt.merchant.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          receipt.referenceNumber.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = !selectedCategory || selectedCategory === 'All' || receipt.category === selectedCategory;
@@ -476,9 +530,9 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
     return matchesSearch && matchesCategory && matchesFolder && matchesWarranty;
   });
 
-  const workReceipts = dedupedReceipts.filter(r => r.folder === 'work');
-  const personalReceipts = dedupedReceipts.filter(r => r.folder === 'personal');
-  const warrantyReceipts = dedupedReceipts.filter(r => r.warrantyDate && new Date(r.warrantyDate) > new Date());
+  const workReceipts = visibleReceipts.filter(r => r.folder === 'work');
+  const personalReceipts = visibleReceipts.filter(r => r.folder === 'personal');
+  const warrantyReceipts = visibleReceipts.filter(r => r.warrantyDate && new Date(r.warrantyDate) > new Date());
 
   const toggleReceiptSelection = (receiptId: string) => {
     const newSelected = new Set(selectedReceipts);
