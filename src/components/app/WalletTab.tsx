@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Store, Shield, Loader2, Car, Home, Plane, Zap, Utensils, RotateCcw, Undo2, Trash2, CheckSquare, Square, ChevronDown } from 'lucide-react';
 import { Video as LucideIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
-import { supabase, ReceiptItem as ReceiptItemRow } from '../../lib/supabase';
+import { supabase, Receipt as SupabaseReceiptRow, ReceiptItem as ReceiptItemRow } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { useToast } from '../../contexts/ToastContext';
@@ -60,10 +60,97 @@ const formatCurrencyAmount = (currencyCode: string, amount: number): string => (
   `${getCurrencySymbol(currencyCode)}${amount.toFixed(2)}`
 );
 
+const WALLET_RECEIPT_STATUSES = ['processing', 'parsed', 'completed'] as const;
 const FINAL_RECEIPT_STATUSES = ['parsed', 'completed'] as const;
 
 const isFinalReceiptStatus = (status: unknown): status is typeof FINAL_RECEIPT_STATUSES[number] =>
   typeof status === 'string' && FINAL_RECEIPT_STATUSES.includes(status as typeof FINAL_RECEIPT_STATUSES[number]);
+
+const getReceiptStatusPriority = (status: unknown): number => {
+  if (status === 'parsed') return 3;
+  if (status === 'completed') return 2;
+  if (status === 'processing') return 1;
+  return 0;
+};
+
+const getNormalizedAmountKey = (amount: string | number | null | undefined): string => {
+  const numericAmount = typeof amount === 'number' ? amount : parseFloat(String(amount ?? ''));
+  return Number.isFinite(numericAmount) ? numericAmount.toFixed(2) : String(amount ?? '');
+};
+
+const getReceiptGroupingKey = ({
+  storagePath,
+  imageUrl,
+  referenceNumber,
+  merchant,
+  transactionDate,
+  amount,
+  currency,
+}: {
+  storagePath?: string | null;
+  imageUrl?: string | null;
+  referenceNumber?: string | null;
+  merchant?: string | null;
+  transactionDate?: string | null;
+  amount?: string | number | null;
+  currency?: string | null;
+}): string => {
+  const normalizedStoragePath = storagePath?.trim();
+  if (normalizedStoragePath) return `storage:${normalizedStoragePath}`;
+
+  const normalizedImageUrl = imageUrl?.trim();
+  if (normalizedImageUrl) return `image:${normalizedImageUrl}`;
+
+  const normalizedReferenceNumber = referenceNumber?.trim();
+  if (normalizedReferenceNumber) return `reference:${normalizedReferenceNumber}`;
+
+  const normalizedMerchant = merchant?.trim().toLowerCase() || '';
+  const normalizedTransactionDate = transactionDate || '';
+  const normalizedAmount = getNormalizedAmountKey(amount);
+  const normalizedCurrency = (currency || 'GBP').trim().toUpperCase();
+
+  return `fallback:${normalizedMerchant}|${normalizedTransactionDate}|${normalizedAmount}|${normalizedCurrency}`;
+};
+
+const getReceiptGroupingKeyFromRow = (row: SupabaseReceiptRow): string =>
+  getReceiptGroupingKey({
+    storagePath: row.storage_path,
+    imageUrl: row.image_url,
+    referenceNumber: row.reference_number,
+    merchant: row.merchant,
+    transactionDate: row.transaction_date,
+    amount: row.amount,
+    currency: row.currency,
+  });
+
+const dedupeReceiptRows = (rows: SupabaseReceiptRow[]): SupabaseReceiptRow[] => {
+  const groupedRows = new Map<string, SupabaseReceiptRow>();
+
+  rows.forEach((row) => {
+    const groupingKey = getReceiptGroupingKeyFromRow(row);
+    const existingRow = groupedRows.get(groupingKey);
+
+    if (!existingRow || getReceiptStatusPriority(row.status) > getReceiptStatusPriority(existingRow.status)) {
+      groupedRows.set(groupingKey, row);
+    }
+  });
+
+  return rows.filter((row) => groupedRows.get(getReceiptGroupingKeyFromRow(row))?.id === row.id);
+};
+
+const dedupeWalletReceipts = (receipts: Receipt[]): Receipt[] => {
+  const groupedReceipts = new Map<string, Receipt>();
+
+  receipts.forEach((receipt) => {
+    const existingReceipt = groupedReceipts.get(receipt.groupingKey);
+
+    if (!existingReceipt || getReceiptStatusPriority(receipt.status) > getReceiptStatusPriority(existingReceipt.status)) {
+      groupedReceipts.set(receipt.groupingKey, receipt);
+    }
+  });
+
+  return receipts.filter((receipt) => groupedReceipts.get(receipt.groupingKey)?.id === receipt.id);
+};
 
 const getReceiptGbpDisplayAmount = (receipt: Receipt): number => {
   const receiptCurrencyCode = receipt.currency?.toUpperCase() || 'GBP';
@@ -152,6 +239,7 @@ export interface Receipt {
   status?: string;
   imageUrl?: string;
   storagePath?: string;
+  groupingKey: string;
 }
 
 export function WalletTab({ onReceiptClick }: WalletTabProps) {
@@ -193,7 +281,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           .from('receipts')
           .select('*')
           .eq('user_id', user.id)
-          .in('status', [...FINAL_RECEIPT_STATUSES])
+          .in('status', [...WALLET_RECEIPT_STATUSES])
           .order('transaction_date', { ascending: false });
 
         console.log('[WalletTab] Query result:', { data, error, dataLength: data?.length });
@@ -205,7 +293,9 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           return;
         }
 
-        const receiptIds = (data || []).map((row) => row.id).filter(Boolean);
+        const rawRows = ((data || []) as SupabaseReceiptRow[]);
+        const dedupedRows = dedupeReceiptRows(rawRows);
+        const receiptIds = dedupedRows.map((row) => row.id).filter(Boolean);
         const receiptItemsByReceiptId = new Map<string, Receipt['items']>();
 
         if (receiptIds.length > 0) {
@@ -228,54 +318,54 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           }
         }
 
-      const formattedReceipts: Receipt[] = (data || []).map((row) => {
-        console.log('[WalletTab] Processing row:', row);
+        const formattedReceipts: Receipt[] = dedupedRows.map((row) => {
+          console.log('[WalletTab] Processing row:', row);
 
-        const total = parseFloat(row.amount) || 0;
-        const parsedAmountGbp = row.amount_gbp !== null && row.amount_gbp !== undefined && row.amount_gbp !== ''
-          ? parseFloat(row.amount_gbp)
-          : NaN;
-        const totalGbp = Number.isFinite(parsedAmountGbp) ? parsedAmountGbp : null;
-        const currencyCode = row.currency || 'GBP';
-        const currencySymbol = getCurrencySymbol(currencyCode);
-        const merchantName = row.merchant && row.merchant.trim() ? row.merchant : 'Receipt (Seller Unknown)';
-        const category = row.category || 'Other';
-        const isProcessing = row.status === 'processing';
+          const total = parseFloat(row.amount) || 0;
+          const parsedAmountGbp = row.amount_gbp !== null && row.amount_gbp !== undefined && row.amount_gbp !== ''
+            ? parseFloat(row.amount_gbp)
+            : NaN;
+          const totalGbp = Number.isFinite(parsedAmountGbp) ? parsedAmountGbp : null;
+          const currencyCode = row.currency || 'GBP';
+          const currencySymbol = getCurrencySymbol(currencyCode);
+          const merchantName = row.merchant && row.merchant.trim() ? row.merchant : 'Receipt (Seller Unknown)';
+          const category = row.category || 'Other';
 
-        return {
-          id: row.id,
-          userId: row.user_id,
-          merchant: merchantName,
-          merchantIcon: getCategoryIcon(category),
-          amount: total,
-          amount_gbp: totalGbp,
-          subtotal: row.subtotal !== null && row.subtotal !== undefined ? parseFloat(row.subtotal) || 0 : undefined,
-          vatAmount: row.vat_amount !== null && row.vat_amount !== undefined ? parseFloat(row.vat_amount) || 0 : undefined,
-          discountAmount: row.discount_amount !== null && row.discount_amount !== undefined ? parseFloat(row.discount_amount) || 0 : undefined,
-          currency: currencyCode,
-          currencySymbol: currencySymbol,
-          date: row.transaction_date || new Date().toISOString(),
-          category: category,
-          tagColor: getTagColor(category),
-          hasWarranty: !!row.warranty_date,
-          warrantyDate: row.warranty_date || undefined,
-          returnDate: row.return_date || undefined,
-          referenceNumber: row.reference_number || `REF-${row.id.slice(0, 8)}`,
-          customerNumber: row.customer_number || undefined,
-          orderNumber: row.order_number || undefined,
-          invoiceNumber: row.invoice_number || undefined,
-          loyaltyMemberId: row.loyalty_member_id || undefined,
-          summary: row.short_summary || '',
-          cardLast4: row.card_last_4 || '',
-          items: receiptItemsByReceiptId.get(row.id) || [],
-          paymentMethod: '',
-          location: '',
-          folder: undefined,
-          status: row.status || '',
-          imageUrl: row.image_url || '',
-          storagePath: row.storage_path || '',
-        };
-      });
+          return {
+            id: row.id,
+            userId: row.user_id,
+            merchant: merchantName,
+            merchantIcon: getCategoryIcon(category),
+            amount: total,
+            amount_gbp: totalGbp,
+            subtotal: row.subtotal !== null && row.subtotal !== undefined ? parseFloat(row.subtotal) || 0 : undefined,
+            vatAmount: row.vat_amount !== null && row.vat_amount !== undefined ? parseFloat(row.vat_amount) || 0 : undefined,
+            discountAmount: row.discount_amount !== null && row.discount_amount !== undefined ? parseFloat(row.discount_amount) || 0 : undefined,
+            currency: currencyCode,
+            currencySymbol: currencySymbol,
+            date: row.transaction_date || new Date().toISOString(),
+            category: category,
+            tagColor: getTagColor(category),
+            hasWarranty: !!row.warranty_date,
+            warrantyDate: row.warranty_date || undefined,
+            returnDate: row.return_date || undefined,
+            referenceNumber: row.reference_number || `REF-${row.id.slice(0, 8)}`,
+            customerNumber: row.customer_number || undefined,
+            orderNumber: row.order_number || undefined,
+            invoiceNumber: row.invoice_number || undefined,
+            loyaltyMemberId: row.loyalty_member_id || undefined,
+            summary: row.short_summary || '',
+            cardLast4: row.card_last_4 || '',
+            items: receiptItemsByReceiptId.get(row.id) || [],
+            paymentMethod: '',
+            location: '',
+            folder: undefined,
+            status: row.status || '',
+            imageUrl: row.image_url || '',
+            storagePath: row.storage_path || '',
+            groupingKey: getReceiptGroupingKeyFromRow(row),
+          };
+        });
 
         // Track receipt IDs for notification detection
         previousReceiptIdsRef.current = new Set(formattedReceipts.map(r => r.id));
@@ -309,49 +399,37 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           console.log('[WalletTab] Realtime event received:', payload.eventType, payload);
 
           if (payload.eventType === 'INSERT') {
-            const newRow = payload.new as any;
+            const newRow = payload.new as Partial<SupabaseReceiptRow>;
             console.log('[WalletTab] New receipt inserted:', newRow);
 
-            if (!isFinalReceiptStatus(newRow.status)) {
-              console.log('[WalletTab] Ignoring non-final receipt insert:', newRow.status);
-              return;
+            if (isFinalReceiptStatus(newRow.status)) {
+              const merchantName = newRow.merchant && newRow.merchant.trim() ? newRow.merchant : 'Receipt (Seller Unknown)';
+              const amount = parseFloat(String(newRow.amount ?? '')) || parseFloat(String((newRow as any).total ?? '')) || 0;
+              const currencyCode = newRow.currency || 'GBP';
+              const formattedAmount = amount > 0 ? formatCurrencyAmount(currencyCode, amount) : 'Processing...';
+              showToast('New Receipt Processed', `${merchantName} - ${formattedAmount}`);
             }
 
-            // Only show notification for finalized receipts
-            const merchantName = newRow.merchant && newRow.merchant.trim() ? newRow.merchant : 'Receipt (Seller Unknown)';
-            const amount = parseFloat(newRow.amount) || parseFloat(newRow.total) || 0;
-            const currencyCode = newRow.currency || 'GBP';
-            const formattedAmount = amount > 0 ? formatCurrencyAmount(currencyCode, amount) : 'Processing...';
-            showToast('New Receipt Processed', `${merchantName} - ${formattedAmount}`);
-
-            // Refresh receipts to show in list
             fetchReceipts();
           } else if (payload.eventType === 'UPDATE') {
-            const updatedRow = payload.new as any;
-            const oldRow = payload.old as any;
+            const updatedRow = payload.new as Partial<SupabaseReceiptRow>;
+            const oldRow = payload.old as Partial<SupabaseReceiptRow>;
 
             console.log('[WalletTab] Receipt updated:', { old: oldRow, new: updatedRow });
 
-            if (!isFinalReceiptStatus(updatedRow.status)) {
-              console.log('[WalletTab] Ignoring non-final receipt update:', updatedRow.status);
-              return;
-            }
-
             // Check if amount was just processed (changed from 0 or null to a value)
-            const oldAmount = parseFloat(oldRow.amount) || parseFloat(oldRow.total) || 0;
-            const newAmount = parseFloat(updatedRow.amount) || parseFloat(updatedRow.total) || 0;
+            const oldAmount = parseFloat(String(oldRow.amount ?? '')) || parseFloat(String((oldRow as any).total ?? '')) || 0;
+            const newAmount = parseFloat(String(updatedRow.amount ?? '')) || parseFloat(String((updatedRow as any).total ?? '')) || 0;
 
-            if (oldAmount === 0 && newAmount > 0) {
+            if (isFinalReceiptStatus(updatedRow.status) && ((oldAmount === 0 && newAmount > 0) || !isFinalReceiptStatus(oldRow.status))) {
               const merchantName = updatedRow.merchant && updatedRow.merchant.trim() ? updatedRow.merchant : 'Receipt (Seller Unknown)';
               const currencyCode = updatedRow.currency || 'GBP';
               showToast('Receipt processed', `${merchantName} - ${formatCurrencyAmount(currencyCode, newAmount)}`);
             }
 
-            // Refresh receipts
             fetchReceipts();
           } else if (payload.eventType === 'DELETE') {
             console.log('[WalletTab] Receipt deleted');
-            // Refresh receipts
             fetchReceipts();
           }
         }
@@ -374,7 +452,9 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
     };
   }, [user, showToast]);
 
-  const totalSpent = receipts.reduce((sum, receipt) => sum + getReceiptGbpDisplayAmount(receipt), 0);
+  const dedupedReceipts = dedupeWalletReceipts(receipts);
+
+  const totalSpent = dedupedReceipts.reduce((sum, receipt) => sum + getReceiptGbpDisplayAmount(receipt), 0);
   const budget = {
     currency: '£',
     spent: Number(totalSpent.toFixed(2)),
@@ -383,10 +463,10 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
 
   const percentage = (budget.spent / budget.limit) * 100;
 
-  const uniqueCategories = Array.from(new Set(receipts.map(r => r.category)));
+  const uniqueCategories = Array.from(new Set(dedupedReceipts.map(r => r.category)));
   const categories = ['All', ...uniqueCategories];
 
-  const filteredReceipts = receipts.filter(receipt => {
+  const filteredReceipts = dedupedReceipts.filter(receipt => {
     const matchesSearch = receipt.merchant.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          receipt.referenceNumber.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = !selectedCategory || selectedCategory === 'All' || receipt.category === selectedCategory;
@@ -396,9 +476,9 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
     return matchesSearch && matchesCategory && matchesFolder && matchesWarranty;
   });
 
-  const workReceipts = receipts.filter(r => r.folder === 'work');
-  const personalReceipts = receipts.filter(r => r.folder === 'personal');
-  const warrantyReceipts = receipts.filter(r => r.warrantyDate && new Date(r.warrantyDate) > new Date());
+  const workReceipts = dedupedReceipts.filter(r => r.folder === 'work');
+  const personalReceipts = dedupedReceipts.filter(r => r.folder === 'personal');
+  const warrantyReceipts = dedupedReceipts.filter(r => r.warrantyDate && new Date(r.warrantyDate) > new Date());
 
   const toggleReceiptSelection = (receiptId: string) => {
     const newSelected = new Set(selectedReceipts);
