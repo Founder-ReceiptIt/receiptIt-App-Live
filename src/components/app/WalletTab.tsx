@@ -60,6 +60,11 @@ const formatCurrencyAmount = (currencyCode: string, amount: number): string => (
   `${getCurrencySymbol(currencyCode)}${amount.toFixed(2)}`
 );
 
+const FINAL_RECEIPT_STATUSES = ['parsed', 'completed'] as const;
+
+const isFinalReceiptStatus = (status: unknown): status is typeof FINAL_RECEIPT_STATUSES[number] =>
+  typeof status === 'string' && FINAL_RECEIPT_STATUSES.includes(status as typeof FINAL_RECEIPT_STATUSES[number]);
+
 const getReceiptGbpDisplayAmount = (receipt: Receipt): number => {
   const receiptCurrencyCode = receipt.currency?.toUpperCase() || 'GBP';
   if (receiptCurrencyCode === 'GBP') {
@@ -188,6 +193,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           .from('receipts')
           .select('*')
           .eq('user_id', user.id)
+          .in('status', [...FINAL_RECEIPT_STATUSES])
           .order('transaction_date', { ascending: false });
 
         console.log('[WalletTab] Query result:', { data, error, dataLength: data?.length });
@@ -306,7 +312,12 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             const newRow = payload.new as any;
             console.log('[WalletTab] New receipt inserted:', newRow);
 
-            // Always show notification for new receipts
+            if (!isFinalReceiptStatus(newRow.status)) {
+              console.log('[WalletTab] Ignoring non-final receipt insert:', newRow.status);
+              return;
+            }
+
+            // Only show notification for finalized receipts
             const merchantName = newRow.merchant && newRow.merchant.trim() ? newRow.merchant : 'Receipt (Seller Unknown)';
             const amount = parseFloat(newRow.amount) || parseFloat(newRow.total) || 0;
             const currencyCode = newRow.currency || 'GBP';
@@ -320,6 +331,11 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             const oldRow = payload.old as any;
 
             console.log('[WalletTab] Receipt updated:', { old: oldRow, new: updatedRow });
+
+            if (!isFinalReceiptStatus(updatedRow.status)) {
+              console.log('[WalletTab] Ignoring non-final receipt update:', updatedRow.status);
+              return;
+            }
 
             // Check if amount was just processed (changed from 0 or null to a value)
             const oldAmount = parseFloat(oldRow.amount) || parseFloat(oldRow.total) || 0;
