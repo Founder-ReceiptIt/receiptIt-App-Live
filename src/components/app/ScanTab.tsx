@@ -12,6 +12,29 @@ interface ScanTabProps {
   onNavigateToWallet: () => void;
 }
 
+/**
+ * Compute a SHA‑256 hash for the given file. This function reads the file
+ * contents as an ArrayBuffer and then uses the SubtleCrypto API to
+ * generate a hex‑encoded hash string. The resulting hash can be stored in
+ * the `file_hash` column of the receipts table to enable exact duplicate
+ * detection on the backend. See migrations/20260405105709_20260405_add_duplicate_detection.sql
+ * for details.
+ *
+ * @param file The file to hash
+ * @returns A promise that resolves to a lowercase hex string representing the SHA‑256 hash
+ */
+async function computeFileHash(file: File): Promise<string> {
+  // Read the file contents into an ArrayBuffer
+  const arrayBuffer = await file.arrayBuffer();
+  // Generate the digest. Note: SubtleCrypto API returns a promise
+  const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+  // Convert the buffer to a byte array so we can build a hex string
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  // Convert each byte to a two‑digit hex string and join
+  const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+  return hashHex;
+}
+
 export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
   const { user, emailAlias } = useAuth();
   const { showToast } = useToast();
@@ -122,6 +145,11 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     console.log('[ScanTab] Starting upload to storage...');
 
     try {
+      // Kick off hashing in parallel with the upload. Computing the hash can take
+      // some time for larger files, so starting it now means that the hash
+      // should be ready by the time we insert the row.
+      const fileHashPromise = computeFileHash(file);
+
       const timestamp = Date.now();
 
       // CRITICAL: Generate completely random filename (NO original filename, NO spaces, NO special chars)
@@ -164,12 +192,25 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       try {
         const referenceNumber = `REF-${timestamp}`;
 
+        // Await the hash result. If computing the hash fails for any reason,
+        // we'll just leave the file_hash undefined and allow the backend to
+        // handle duplicate detection based on other keys. Wrap in try/catch to
+        // avoid unhandled promise rejections.
+        let fileHash: string | undefined;
+        try {
+          fileHash = await fileHashPromise;
+        } catch (hashErr) {
+          console.error('[ScanTab] Failed to compute file hash:', hashErr);
+        }
+
         const { data: insertData, error: insertError } = await supabase
           .from('receipts')
           .insert({
             user_id: user.id,
             storage_path: storagePath,
             image_url: publicUrl,
+            // Persist the file hash for exact duplicate detection when available
+            ...(fileHash ? { file_hash: fileHash } : {}),
             status: 'processing',
             merchant: 'Analyzing...',
             amount: 0,

@@ -26,6 +26,16 @@ export interface ReceiptItem {
   created_at?: string | null;
 }
 
+/**
+ * Interface representing a single receipt row returned from Supabase.
+ *
+ * Note: The database schema has evolved to support duplicate detection via file
+ * hashes. The legacy `receipt_hash` column has been replaced with
+ * `file_hash`. To ensure type safety and forward compatibility, this
+ * interface includes the new duplicate detection fields as optional
+ * properties. Consumers of this interface should prefer `file_hash` over
+ * `receipt_hash` going forward.
+ */
 export interface Receipt {
   id: string;
   user_id: string;
@@ -54,7 +64,34 @@ export interface Receipt {
   source: string | null;
   error_reason: string | null;
   processing_attempts: number | null;
-  receipt_hash: string | null;
+  /**
+   * Legacy field kept for backwards compatibility. New code should use
+   * `file_hash` instead. May be null if not set.
+   */
+  receipt_hash?: string | null;
+  /**
+   * SHA‑256 hash of the uploaded file for exact duplicate detection. When
+   * present, this value can be used to reliably identify exact
+   * duplicates across uploads. It supersedes `receipt_hash`.
+   */
+  file_hash?: string | null;
+  /**
+   * The ID of the original receipt if this row is considered a duplicate
+   * of another. Used in conjunction with `is_duplicate` to group
+   * duplicates together.
+   */
+  duplicate_of?: string | null;
+  /**
+   * Flag indicating whether this receipt row is a duplicate of another. When
+   * true, `duplicate_of` should reference the original receipt.
+   */
+  is_duplicate?: boolean | null;
+  /**
+   * If this receipt was rescanned from an earlier original (for example,
+   * reprocessing the same physical receipt), this points to that
+   * original receipt's ID.
+   */
+  original_receipt_id?: string | null;
   confidence_score: number | null;
   parsed_at: string | null;
   items?: ReceiptItem[] | null;
