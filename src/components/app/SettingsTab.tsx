@@ -7,7 +7,6 @@ import {
   Mail,
   Trash2,
   Shield,
-  Smartphone,
   Globe,
   Eye,
   ChevronRight,
@@ -16,7 +15,7 @@ import {
   X
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+import { FINALIZED_RECEIPT_STATUSES, supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -34,7 +33,6 @@ export function SettingsTab() {
     return 'Not set';
   };
   const [receiptsCount, setReceiptsCount] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
@@ -58,12 +56,12 @@ export function SettingsTab() {
       const { count, error } = await supabase
         .from('receipts')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .in('status', [...FINALIZED_RECEIPT_STATUSES]);
 
       if (!error && count !== null) {
         setReceiptsCount(count);
       }
-      setLoading(false);
     };
 
     fetchUserData();
@@ -76,6 +74,7 @@ export function SettingsTab() {
       .from('receipts')
       .select('*')
       .eq('user_id', user.id)
+      .in('status', [...FINALIZED_RECEIPT_STATUSES])
       .order('transaction_date', { ascending: false });
 
     if (error || !receipts) return;

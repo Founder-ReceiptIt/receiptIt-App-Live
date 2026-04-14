@@ -1,8 +1,13 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Store, Shield, Loader2, Car, Home, Plane, Zap, Utensils, RotateCcw, Undo2, Trash2, CheckSquare, Square, ChevronDown } from 'lucide-react';
+import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Shield, Loader2, Car, Home, Plane, Zap, Utensils, Undo2, Trash2, CheckSquare, Square, ChevronDown } from 'lucide-react';
 import { Video as LucideIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
-import { supabase, Receipt as SupabaseReceiptRow, ReceiptItem as ReceiptItemRow } from '../../lib/supabase';
+import {
+  isFinalizedReceiptStatus,
+  supabase,
+  Receipt as SupabaseReceiptRow,
+  ReceiptItem as ReceiptItemRow,
+} from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { useToast } from '../../contexts/ToastContext';
@@ -61,12 +66,8 @@ const formatCurrencyAmount = (currencyCode: string, amount: number): string => (
 );
 
 const WALLET_RECEIPT_STATUSES = ['processing', 'parsed', 'completed', 'duplicate', 'failed', 'skipped'] as const;
-const FINAL_RECEIPT_STATUSES = ['parsed', 'completed'] as const;
 const HIDDEN_WALLET_RECEIPT_STATUSES = ['duplicate', 'failed', 'skipped'] as const;
 const PROCESSING_VISIBILITY_TIMEOUT_MS = 2 * 60 * 1000;
-
-const isFinalReceiptStatus = (status: unknown): status is typeof FINAL_RECEIPT_STATUSES[number] =>
-  typeof status === 'string' && FINAL_RECEIPT_STATUSES.includes(status as typeof FINAL_RECEIPT_STATUSES[number]);
 
 const isHiddenWalletReceiptStatus = (status: unknown): status is typeof HIDDEN_WALLET_RECEIPT_STATUSES[number] =>
   typeof status === 'string' && HIDDEN_WALLET_RECEIPT_STATUSES.includes(status as typeof HIDDEN_WALLET_RECEIPT_STATUSES[number]);
@@ -168,7 +169,7 @@ const dedupeWalletReceipts = (receipts: Receipt[]): Receipt[] => {
 
 const filterVisibleReceiptRows = (rows: SupabaseReceiptRow[]): SupabaseReceiptRow[] =>
   rows.filter((row) => {
-    if (isFinalReceiptStatus(row.status)) return true;
+    if (isFinalizedReceiptStatus(row.status)) return true;
     if (row.status === 'processing') return isRecentProcessingTimestamp(row.created_at);
     if (isHiddenWalletReceiptStatus(row.status)) return false;
     return false;
@@ -176,7 +177,7 @@ const filterVisibleReceiptRows = (rows: SupabaseReceiptRow[]): SupabaseReceiptRo
 
 const filterVisibleWalletReceipts = (receipts: Receipt[]): Receipt[] =>
   receipts.filter((receipt) => {
-    if (isFinalReceiptStatus(receipt.status)) return true;
+    if (isFinalizedReceiptStatus(receipt.status)) return true;
     if (receipt.status === 'processing') return isRecentProcessingTimestamp(receipt.createdAt);
     if (isHiddenWalletReceiptStatus(receipt.status)) return false;
     return false;
@@ -191,40 +192,29 @@ const getReceiptGbpDisplayAmount = (receipt: Receipt): number => {
   return receipt.amount_gbp ?? receipt.amount;
 };
 
-const mapReceiptItem = (item: ReceiptItemRow) => {
-  const quantityValue = typeof item.quantity === 'number'
-    ? item.quantity
-    : parseFloat(String(item.quantity ?? 1));
-  const quantity = Number.isFinite(quantityValue) && quantityValue > 0 ? quantityValue : 1;
-  const unitPriceValue = typeof item.unit_price === 'number'
-    ? item.unit_price
-    : item.unit_price !== null
-      ? parseFloat(String(item.unit_price))
-      : NaN;
-  const lineTotalValue = typeof item.line_total === 'number'
-    ? item.line_total
-    : item.line_total !== null
-      ? parseFloat(String(item.line_total))
-      : NaN;
-  const vatAmountValue = typeof item.vat_amount === 'number'
-    ? item.vat_amount
-    : item.vat_amount !== null
-      ? parseFloat(String(item.vat_amount))
-      : NaN;
-  const vatRateValue = typeof item.vat_rate === 'number'
-    ? item.vat_rate
-    : item.vat_rate !== null
-      ? parseFloat(String(item.vat_rate))
-      : NaN;
+const getNullableNumber = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
 
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsedValue = parseFloat(value);
+    return Number.isFinite(parsedValue) ? parsedValue : null;
+  }
+
+  return null;
+};
+
+const mapReceiptItem = (item: ReceiptItemRow) => {
   return {
-    lineIndex: item.line_index,
-    description: item.description,
-    quantity,
-    unitPrice: Number.isFinite(unitPriceValue) ? unitPriceValue : undefined,
-    lineTotal: Number.isFinite(lineTotalValue) ? lineTotalValue : 0,
-    vatAmount: Number.isFinite(vatAmountValue) ? vatAmountValue : undefined,
-    vatRate: Number.isFinite(vatRateValue) ? vatRateValue : undefined,
+    lineIndex: Number.isFinite(item.line_index) ? item.line_index : 0,
+    description: typeof item.description === 'string' && item.description.trim() ? item.description.trim() : null,
+    itemType: item.item_type ?? null,
+    quantity: getNullableNumber(item.quantity),
+    unitPrice: getNullableNumber(item.unit_price),
+    lineTotal: getNullableNumber(item.line_total),
+    vatAmount: getNullableNumber(item.vat_amount),
+    vatRate: getNullableNumber(item.vat_rate),
   };
 };
 
@@ -256,12 +246,13 @@ export interface Receipt {
   cardLast4?: string;
   items?: Array<{
     lineIndex: number;
-    description: string;
-    quantity: number;
-    unitPrice?: number;
-    lineTotal: number;
-    vatAmount?: number;
-    vatRate?: number;
+    description?: string | null;
+    itemType?: 'product' | 'charge' | 'discount' | string | null;
+    quantity?: number | null;
+    unitPrice?: number | null;
+    lineTotal?: number | null;
+    vatAmount?: number | null;
+    vatRate?: number | null;
   }>;
   paymentMethod?: string;
   location?: string;
@@ -354,11 +345,11 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         const formattedReceipts: Receipt[] = visibleDedupedRows.map((row) => {
           console.log('[WalletTab] Processing row:', row);
 
-          const total = parseFloat(row.amount) || 0;
-          const parsedAmountGbp = row.amount_gbp !== null && row.amount_gbp !== undefined && row.amount_gbp !== ''
-            ? parseFloat(row.amount_gbp)
-            : NaN;
-          const totalGbp = Number.isFinite(parsedAmountGbp) ? parsedAmountGbp : null;
+          const total = getNullableNumber(row.amount) ?? 0;
+          const totalGbp = getNullableNumber(row.amount_gbp);
+          const subtotal = getNullableNumber(row.subtotal);
+          const vatAmount = getNullableNumber(row.vat_amount);
+          const discountAmount = getNullableNumber(row.discount_amount);
           const currencyCode = row.currency || 'GBP';
           const currencySymbol = getCurrencySymbol(currencyCode);
           const merchantName = row.merchant && row.merchant.trim() ? row.merchant : 'Receipt (Seller Unknown)';
@@ -371,9 +362,9 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             merchantIcon: getCategoryIcon(category),
             amount: total,
             amount_gbp: totalGbp,
-            subtotal: row.subtotal !== null && row.subtotal !== undefined ? parseFloat(row.subtotal) || 0 : undefined,
-            vatAmount: row.vat_amount !== null && row.vat_amount !== undefined ? parseFloat(row.vat_amount) || 0 : undefined,
-            discountAmount: row.discount_amount !== null && row.discount_amount !== undefined ? parseFloat(row.discount_amount) || 0 : undefined,
+            subtotal: subtotal ?? undefined,
+            vatAmount: vatAmount ?? undefined,
+            discountAmount: discountAmount ?? undefined,
             currency: currencyCode,
             currencySymbol: currencySymbol,
             date: row.transaction_date || new Date().toISOString(),
@@ -447,7 +438,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
               return;
             }
 
-            if (isFinalReceiptStatus(newRow.status)) {
+            if (isFinalizedReceiptStatus(newRow.status)) {
               const merchantName = newRow.merchant && newRow.merchant.trim() ? newRow.merchant : 'Receipt (Seller Unknown)';
               const amount = parseFloat(String(newRow.amount ?? '')) || parseFloat(String((newRow as any).total ?? '')) || 0;
               const currencyCode = newRow.currency || 'GBP';
@@ -475,7 +466,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             const oldAmount = parseFloat(String(oldRow.amount ?? '')) || parseFloat(String((oldRow as any).total ?? '')) || 0;
             const newAmount = parseFloat(String(updatedRow.amount ?? '')) || parseFloat(String((updatedRow as any).total ?? '')) || 0;
 
-            if (isFinalReceiptStatus(updatedRow.status) && ((oldAmount === 0 && newAmount > 0) || !isFinalReceiptStatus(oldRow.status))) {
+            if (isFinalizedReceiptStatus(updatedRow.status) && ((oldAmount === 0 && newAmount > 0) || !isFinalizedReceiptStatus(oldRow.status))) {
               const merchantName = updatedRow.merchant && updatedRow.merchant.trim() ? updatedRow.merchant : 'Receipt (Seller Unknown)';
               const currencyCode = updatedRow.currency || 'GBP';
               showToast('Receipt processed', `${merchantName} - ${formatCurrencyAmount(currencyCode, newAmount)}`);
@@ -507,8 +498,8 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
   }, [user, showToast]);
 
   const visibleReceipts = filterVisibleWalletReceipts(dedupeWalletReceipts(receipts));
-
-  const totalSpent = visibleReceipts.reduce((sum, receipt) => sum + getReceiptGbpDisplayAmount(receipt), 0);
+  const finalizedReceipts = visibleReceipts.filter((receipt) => isFinalizedReceiptStatus(receipt.status));
+  const totalSpent = finalizedReceipts.reduce((sum, receipt) => sum + getReceiptGbpDisplayAmount(receipt), 0);
   const budget = {
     currency: '£',
     spent: Number(totalSpent.toFixed(2)),
@@ -517,10 +508,10 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
 
   const percentage = (budget.spent / budget.limit) * 100;
 
-  const uniqueCategories = Array.from(new Set(visibleReceipts.map(r => r.category)));
+  const uniqueCategories = Array.from(new Set(finalizedReceipts.map(r => r.category)));
   const categories = ['All', ...uniqueCategories];
 
-  const filteredReceipts = visibleReceipts.filter(receipt => {
+  const matchesReceiptFilters = (receipt: Receipt) => {
     const matchesSearch = receipt.merchant.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          receipt.referenceNumber.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = !selectedCategory || selectedCategory === 'All' || receipt.category === selectedCategory;
@@ -528,11 +519,13 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
     const hasActiveWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) > new Date();
     const matchesWarranty = !warrantyFilterActive || hasActiveWarranty;
     return matchesSearch && matchesCategory && matchesFolder && matchesWarranty;
-  });
+  };
 
-  const workReceipts = visibleReceipts.filter(r => r.folder === 'work');
-  const personalReceipts = visibleReceipts.filter(r => r.folder === 'personal');
-  const warrantyReceipts = visibleReceipts.filter(r => r.warrantyDate && new Date(r.warrantyDate) > new Date());
+  const filteredReceipts = visibleReceipts.filter(matchesReceiptFilters);
+
+  const workReceipts = finalizedReceipts.filter(r => r.folder === 'work');
+  const personalReceipts = finalizedReceipts.filter(r => r.folder === 'personal');
+  const warrantyReceipts = finalizedReceipts.filter(r => r.warrantyDate && new Date(r.warrantyDate) > new Date());
 
   const toggleReceiptSelection = (receiptId: string) => {
     const newSelected = new Set(selectedReceipts);

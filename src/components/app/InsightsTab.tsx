@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, DollarSign, Calendar, PieChart, BarChart3, Tag } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+import { FINALIZED_RECEIPT_STATUSES, supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface Receipt {
@@ -25,7 +25,6 @@ const getTagColor = (category: string): string => {
 export function InsightsTab() {
   const { user } = useAuth();
   const [receipts, setReceipts] = useState<Receipt[]>([]);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user) return;
@@ -35,8 +34,9 @@ export function InsightsTab() {
 
       const { data, error } = await supabase
         .from('receipts')
-        .select('amount_gbp, category, transaction_date, status')
+        .select('amount, amount_gbp, category, transaction_date, status')
         .eq('user_id', user.id)
+        .in('status', [...FINALIZED_RECEIPT_STATUSES])
         .order('transaction_date', { ascending: false });
 
       console.log('[InsightsTab] Raw data from Supabase:', data);
@@ -50,29 +50,23 @@ export function InsightsTab() {
           hint: error.hint,
           code: error.code,
         });
-        setLoading(false);
         return;
       }
 
       if (data) {
         console.log('[InsightsTab] Raw data before filter:', data);
 
-        const processedReceipts = data
-          .filter(row => {
-            const shouldInclude = row.status !== 'processing';
-            console.log('[InsightsTab] Row:', row, 'Include:', shouldInclude);
-            return shouldInclude;
-          })
-          .map(row => ({
-            amount: typeof row.amount_gbp === 'string' ? parseFloat(row.amount_gbp) : (row.amount_gbp || 0),
-            category: row.category || 'Other',
-            transaction_date: row.transaction_date ? String(row.transaction_date) : new Date().toISOString().split('T')[0],
-          }));
+        const processedReceipts = data.map(row => ({
+          amount: typeof row.amount_gbp === 'string'
+            ? parseFloat(row.amount_gbp)
+            : row.amount_gbp ?? row.amount ?? 0,
+          category: row.category || 'Other',
+          transaction_date: row.transaction_date ? String(row.transaction_date) : new Date().toISOString().split('T')[0],
+        }));
 
         console.log('[InsightsTab] Processed receipts:', processedReceipts);
         setReceipts(processedReceipts);
       }
-      setLoading(false);
     };
 
     fetchReceipts();

@@ -13,12 +13,20 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 console.log('[Supabase] Client initialized successfully');
 
+export const FINALIZED_RECEIPT_STATUSES = ['parsed', 'completed'] as const;
+
+export const isFinalizedReceiptStatus = (
+  status: unknown
+): status is typeof FINALIZED_RECEIPT_STATUSES[number] =>
+  typeof status === 'string' && FINALIZED_RECEIPT_STATUSES.includes(status as typeof FINALIZED_RECEIPT_STATUSES[number]);
+
 export interface ReceiptItem {
   id: string;
   receipt_id: string;
   line_index: number;
-  description: string;
-  quantity: number;
+  description?: string | null;
+  item_type?: 'product' | 'charge' | 'discount' | string | null;
+  quantity?: number | null;
   unit_price: number | null;
   line_total: number | null;
   vat_amount: number | null;
@@ -102,6 +110,7 @@ export interface Profile {
   email: string | null;
   full_name: string | null;
   email_alias: string | null;
+  spam_blocked?: number | null;
   plan: string | null;
   created_at: string;
   username: string | null;

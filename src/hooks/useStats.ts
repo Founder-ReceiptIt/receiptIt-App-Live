@@ -1,17 +1,17 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { FINALIZED_RECEIPT_STATUSES, supabase } from '../lib/supabase';
 
 export interface Stats {
   receiptsCaptured: number;
   warrantiesTracked: number;
-  spamBlocked: number;
+  spamBlocked: number | null;
 }
 
 export function useStats(userId: string | undefined) {
   const [stats, setStats] = useState<Stats>({
     receiptsCaptured: 0,
     warrantiesTracked: 0,
-    spamBlocked: 0,
+    spamBlocked: null,
   });
   const [loading, setLoading] = useState(true);
 
@@ -25,17 +25,24 @@ export function useStats(userId: string | undefined) {
       try {
         const today = new Date().toISOString().split('T')[0];
 
-        const [totalResult, warrantiesResult] = await Promise.all([
-          supabase
-            .from('receipts')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', userId),
+        const [totalResult, warrantiesResult, profileResult] = await Promise.all([
           supabase
             .from('receipts')
             .select('*', { count: 'exact', head: true })
             .eq('user_id', userId)
+            .in('status', [...FINALIZED_RECEIPT_STATUSES]),
+          supabase
+            .from('receipts')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', userId)
+            .in('status', [...FINALIZED_RECEIPT_STATUSES])
             .not('warranty_date', 'is', null)
-            .gt('warranty_date', today)
+            .gt('warranty_date', today),
+          supabase
+            .from('profiles')
+            .select('spam_blocked')
+            .eq('id', userId)
+            .maybeSingle(),
         ]);
 
         if (totalResult.error) {
@@ -50,9 +57,16 @@ export function useStats(userId: string | undefined) {
           return;
         }
 
+        if (profileResult.error) {
+          console.error('Error fetching spam_blocked:', profileResult.error);
+        }
+
         const receiptsCaptured = totalResult.count || 0;
         const warrantiesTracked = warrantiesResult.count || 0;
-        const spamBlocked = receiptsCaptured * 12;
+        const spamBlocked = typeof profileResult.data?.spam_blocked === 'number'
+          && Number.isFinite(profileResult.data.spam_blocked)
+          ? profileResult.data.spam_blocked
+          : null;
 
         setStats({
           receiptsCaptured,

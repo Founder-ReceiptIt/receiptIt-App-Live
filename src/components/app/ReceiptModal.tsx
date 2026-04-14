@@ -33,7 +33,6 @@ interface ReceiptModalProps {
 }
 
 export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) {
-  const [autoDelete, setAutoDelete] = useState('After Warranty Expires');
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteMenu, setShowDeleteMenu] = useState(false);
   const [showMoreDetails, setShowMoreDetails] = useState(false);
@@ -148,6 +147,12 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     typeof value === 'number' && Number.isFinite(value) ? value : null
   );
   const formatMoney = (currencySymbol: string, value: number) => `${currencySymbol}${value.toFixed(2)}`;
+  const formatOptionalMoney = (currencySymbol: string, value?: number | null) => (
+    typeof value === 'number' && Number.isFinite(value) ? formatMoney(currencySymbol, value) : '—'
+  );
+  const formatOptionalQuantity = (value?: number | null) => (
+    typeof value === 'number' && Number.isFinite(value) ? value.toFixed(Number.isInteger(value) ? 0 : 2) : '—'
+  );
   const receiptCurrencyCode = receipt.currency?.toUpperCase() || 'GBP';
   const receiptCurrencySymbol = getCurrencySymbol(receipt.currency);
   const subtotal = getValidMoneyValue(receipt.subtotal);
@@ -156,25 +161,53 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const originalTotal = getValidMoneyValue(receipt.amount);
   const gbpAmount = getValidMoneyValue(receipt.amount_gbp);
   const displayOriginalTotal = originalTotal ?? gbpAmount ?? 0;
-  const displayGbpTotal = receiptCurrencyCode === 'GBP'
-    ? (originalTotal ?? gbpAmount ?? 0)
-    : (gbpAmount ?? originalTotal ?? 0);
+  const displayOriginalCurrencySymbol = originalTotal !== null || receiptCurrencyCode === 'GBP' ? receiptCurrencySymbol : '£';
   const hasReceiptItems = Array.isArray(receipt.items) && receipt.items.length > 0;
+  const normalizedReceiptItems = hasReceiptItems
+    ? receipt.items!.filter((item) => {
+        const hasDescription = typeof item.description === 'string' && item.description.trim().length > 0;
+        return hasDescription
+          || getValidMoneyValue(item.quantity) !== null
+          || getValidMoneyValue(item.unitPrice) !== null
+          || getValidMoneyValue(item.lineTotal) !== null
+          || getValidMoneyValue(item.vatAmount) !== null
+          || getValidMoneyValue(item.vatRate) !== null;
+      })
+    : [];
+  const getReceiptItemGroup = (item: NonNullable<Receipt['items']>[number]) => {
+    const normalizedType = item.itemType?.trim().toLowerCase();
+
+    if (normalizedType === 'charge') return 'charge';
+    if (normalizedType === 'discount') return 'discount';
+    return 'product';
+  };
+  const receiptItemSections = [
+    {
+      key: 'product',
+      title: 'Items purchased',
+      items: normalizedReceiptItems.filter((item) => getReceiptItemGroup(item) === 'product'),
+    },
+    {
+      key: 'charge',
+      title: 'Additional charges',
+      items: normalizedReceiptItems.filter((item) => getReceiptItemGroup(item) === 'charge'),
+    },
+    {
+      key: 'discount',
+      title: 'Discounts',
+      items: normalizedReceiptItems.filter((item) => getReceiptItemGroup(item) === 'discount'),
+    },
+  ].filter((section) => section.items.length > 0);
   const heroMetadataChips = [
     receipt.orderNumber ? { label: `Order ${receipt.orderNumber}`, value: receipt.orderNumber, icon: FileText } : null,
     receipt.loyaltyMemberId ? { label: `Member ${receipt.loyaltyMemberId}`, value: receipt.loyaltyMemberId, icon: FileText } : null,
     receipt.cardLast4 ? { label: `**** ${receipt.cardLast4}`, icon: CreditCard } : null,
   ].filter((chip): chip is { label: string; value?: string; icon: typeof FileText } => chip !== null);
-  const breakdownRows = [
-    subtotal !== null ? { label: 'Subtotal', value: formatMoney(receiptCurrencySymbol, subtotal) } : null,
-    discountAmount !== null
-      ? { label: 'Discount', value: `-${formatMoney(receiptCurrencySymbol, Math.abs(discountAmount))}`, valueClassName: 'text-emerald-400' }
-      : null,
-    vatAmount !== null ? { label: 'VAT', value: formatMoney(receiptCurrencySymbol, vatAmount) } : null,
-    receiptCurrencyCode !== 'GBP' && originalTotal !== null
-      ? { label: 'Original total', value: formatMoney(receiptCurrencySymbol, originalTotal) }
-      : null,
-  ].filter((row): row is { label: string; value: string; valueClassName?: string } => row !== null);
+  const summaryRows = [
+    { label: 'Subtotal', value: subtotal },
+    { label: 'Discount', value: discountAmount, isDiscount: true },
+    { label: 'VAT', value: vatAmount },
+  ];
   const moreDetails = [
     receipt.referenceNumber ? { label: 'Reference number', value: receipt.referenceNumber, icon: FileText } : null,
     receipt.invoiceNumber ? { label: 'Invoice number', value: receipt.invoiceNumber, icon: FileText } : null,
@@ -345,11 +378,11 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                       </div>
                     )}
                   </div>
-                  <div className="text-right">
-                    <div className="text-3xl font-bold text-white">
-                      {formatMoney(receiptCurrencySymbol, displayOriginalTotal)}
-                    </div>
-                    {receiptCurrencyCode !== 'GBP' && gbpAmount !== null && (
+                    <div className="text-right">
+                      <div className="text-3xl font-bold text-white">
+                      {formatMoney(displayOriginalCurrencySymbol, displayOriginalTotal)}
+                      </div>
+                    {receiptCurrencyCode !== 'GBP' && gbpAmount !== null && originalTotal !== null && (
                       <div className="text-sm pt-1 text-gray-400">
                         Approx. {formatMoney('£', gbpAmount)}
                       </div>
@@ -621,26 +654,50 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                 </h4>
 
                 {hasReceiptItems ? (
-                  <div className="mb-4">
-                    <h5 className="text-sm font-bold text-gray-400 mb-3 uppercase tracking-wide">Items Purchased</h5>
-                    <div className="space-y-3">
-                      {receipt.items!.map((item) => (
-                        <div key={`${item.lineIndex}-${item.description}`} className="flex items-start justify-between gap-4 p-3 bg-white/5 rounded-lg">
-                          <div className="flex-1">
-                            <div className="text-white font-semibold">{item.description}</div>
-                            <div className="text-xs text-gray-400 mt-0.5">
-                              Qty {item.quantity}
-                              {item.unitPrice !== undefined ? ` x ${formatMoney(receiptCurrencySymbol, item.unitPrice)}` : ''}
-                              {item.vatRate !== undefined ? ` • VAT ${item.vatRate}%` : ''}
-                            </div>
+                  <div className="mb-4 space-y-4">
+                    {receiptItemSections.map((section) => (
+                      <div key={section.key}>
+                        <h5 className="text-sm font-bold text-gray-400 mb-3 uppercase tracking-wide">{section.title}</h5>
+                        <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
+                          <div className="grid grid-cols-[minmax(0,1.6fr)_70px_110px_110px] gap-3 px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-gray-500 border-b border-white/10">
+                            <div>Description</div>
+                            <div className="text-right">Qty</div>
+                            <div className="text-right">Unit</div>
+                            <div className="text-right">Total</div>
                           </div>
-                          <div className="text-white font-bold">
-                            {formatMoney(receiptCurrencySymbol, item.lineTotal)}
+                          <div className="divide-y divide-white/10">
+                            {section.items.map((item) => (
+                              <div
+                                key={`${section.key}-${item.lineIndex}-${item.description ?? 'item'}`}
+                                className="grid grid-cols-[minmax(0,1.6fr)_70px_110px_110px] gap-3 px-4 py-3 items-start"
+                              >
+                                <div className="min-w-0">
+                                  <div className="text-white font-semibold break-words">
+                                    {item.description?.trim() || 'Unnamed item'}
+                                  </div>
+                                  {(getValidMoneyValue(item.vatRate) !== null || getValidMoneyValue(item.vatAmount) !== null) && (
+                                    <div className="text-xs text-gray-400 mt-1">
+                                      {getValidMoneyValue(item.vatRate) !== null ? `VAT ${item.vatRate!.toFixed(2)}%` : 'VAT'}
+                                      {getValidMoneyValue(item.vatAmount) !== null ? ` • ${formatMoney(receiptCurrencySymbol, item.vatAmount!)}` : ''}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="text-sm text-right text-gray-300">
+                                  {formatOptionalQuantity(item.quantity)}
+                                </div>
+                                <div className="text-sm text-right text-gray-300">
+                                  {formatOptionalMoney(receiptCurrencySymbol, item.unitPrice)}
+                                </div>
+                                <div className="text-sm text-right font-semibold text-white">
+                                  {formatOptionalMoney(receiptCurrencySymbol, item.lineTotal)}
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
-                      ))}
-                    </div>
-                    <div className="h-px bg-white/10 my-4" />
+                      </div>
+                    ))}
+                    <div className="h-px bg-white/10" />
                   </div>
                 ) : (
                   <div className="mb-4 rounded-lg bg-white/5 p-4 text-sm text-gray-400">
@@ -649,18 +706,22 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                 )}
 
                 <div className="space-y-2">
-                  {breakdownRows.map((row) => (
+                  {summaryRows.map((row) => (
                     <div
                       key={row.label}
                       className="flex items-center justify-between text-gray-400 text-sm"
                     >
                       <span>{row.label}</span>
-                      <span className={row.valueClassName}>{row.value}</span>
+                      <span className={row.isDiscount ? 'text-emerald-400' : undefined}>
+                        {row.isDiscount && row.value !== null
+                          ? `-${formatMoney(receiptCurrencySymbol, Math.abs(row.value))}`
+                          : formatOptionalMoney(receiptCurrencySymbol, row.value)}
+                      </span>
                     </div>
                   ))}
-                  <div className={`flex items-center justify-between text-white font-bold text-lg${breakdownRows.length > 0 ? ' pt-2 border-t border-white/10' : ''}`}>
-                    <span>Total (GBP)</span>
-                    <span>{formatMoney('£', displayGbpTotal)}</span>
+                  <div className="flex items-center justify-between text-white font-bold text-lg pt-2 border-t border-white/10">
+                    <span>Total</span>
+                    <span>{formatMoney(displayOriginalCurrencySymbol, displayOriginalTotal)}</span>
                   </div>
                 </div>
 

@@ -7,14 +7,16 @@ import { useStats } from '../../hooks/useStats';
 export function AliasTab() {
   const { user, emailAlias } = useAuth();
   const [copied, setCopied] = useState(false);
-  const { stats: statsData, loading } = useStats(user?.id);
+  const { stats: statsData } = useStats(user?.id);
 
   console.log('AliasTab - emailAlias:', emailAlias, 'user:', user?.id);
 
   const stats = [
     { label: 'Receipts Captured', value: statsData.receiptsCaptured.toString(), icon: Mail },
-    { label: 'Spam Blocked', value: statsData.spamBlocked.toLocaleString(), icon: Lock },
     { label: 'Warranties Tracked', value: statsData.warrantiesTracked.toString(), icon: Shield },
+    ...(typeof statsData.spamBlocked === 'number'
+      ? [{ label: 'Spam Blocked', value: statsData.spamBlocked.toLocaleString(), icon: Lock }]
+      : []),
   ];
 
   const handleCopy = () => {
@@ -95,7 +97,7 @@ export function AliasTab() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className={`grid gap-3 mb-6 ${stats.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
           {stats.map((stat, index) => (
             <motion.div
               key={index}
