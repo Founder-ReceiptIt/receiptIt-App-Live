@@ -203,9 +203,22 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     receipt.loyaltyMemberId ? { label: `Member ${receipt.loyaltyMemberId}`, value: receipt.loyaltyMemberId, icon: FileText } : null,
     receipt.cardLast4 ? { label: `**** ${receipt.cardLast4}`, icon: CreditCard } : null,
   ].filter((chip): chip is { label: string; value?: string; icon: typeof FileText } => chip !== null);
+  // Build summary rows dynamically. Only include a discount row when a discount amount
+  // exists (non-null and non-zero). This avoids showing an empty Discount line when
+  // there is no discount on the receipt.
   const summaryRows = [
     { label: 'Subtotal', value: subtotal },
-    { label: 'Discount', value: discountAmount, isDiscount: true },
+    // Conditionally include the discount entry. We check for a valid finite number
+    // and ensure it's not zero before adding the row. If discountAmount is null
+    // or zero, the row will be omitted entirely.
+    ...(
+      discountAmount !== null &&
+      typeof discountAmount === 'number' &&
+      Number.isFinite(discountAmount) &&
+      discountAmount !== 0
+        ? [{ label: 'Discount', value: discountAmount, isDiscount: true }]
+        : []
+    ),
     { label: 'VAT', value: vatAmount },
   ];
   const moreDetails = [
