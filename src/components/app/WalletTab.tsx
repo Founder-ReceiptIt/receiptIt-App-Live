@@ -6,7 +6,6 @@ import {
   isFinalizedReceiptStatus,
   supabase,
   Receipt as SupabaseReceiptRow,
-  ReceiptItem as ReceiptItemRow,
 } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
@@ -205,19 +204,6 @@ const getNullableNumber = (value: unknown): number | null => {
   return null;
 };
 
-const mapReceiptItem = (item: ReceiptItemRow) => {
-  return {
-    lineIndex: Number.isFinite(item.line_index) ? item.line_index : 0,
-    description: typeof item.description === 'string' && item.description.trim() ? item.description.trim() : null,
-    itemType: item.item_type ?? null,
-    quantity: getNullableNumber(item.quantity),
-    unitPrice: getNullableNumber(item.unit_price),
-    lineTotal: getNullableNumber(item.line_total),
-    vatAmount: getNullableNumber(item.vat_amount),
-    vatRate: getNullableNumber(item.vat_rate),
-  };
-};
-
 export interface Receipt {
   id: string;
   userId: string;
@@ -319,29 +305,6 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         const filteredRawRows = filterVisibleReceiptRows(rawRows);
         const dedupedRows = dedupeReceiptRows(filteredRawRows);
         const visibleDedupedRows = filterVisibleReceiptRows(dedupedRows);
-        const receiptIds = visibleDedupedRows.map((row) => row.id).filter(Boolean);
-        const receiptItemsByReceiptId = new Map<string, Receipt['items']>();
-
-        if (receiptIds.length > 0) {
-          const { data: receiptItemsData, error: receiptItemsError } = await supabase
-            .from('receipt_items')
-            .select('*')
-            .in('receipt_id', receiptIds)
-            .order('line_index', { ascending: true });
-
-          if (receiptItemsError) {
-            console.error('[WalletTab] receipt_items query error:', receiptItemsError);
-          } else {
-            (receiptItemsData || []).forEach((item) => {
-              const receiptId = String(item.receipt_id || '');
-              if (!receiptId) return;
-              const existingItems = receiptItemsByReceiptId.get(receiptId) || [];
-              existingItems.push(mapReceiptItem(item as ReceiptItemRow));
-              receiptItemsByReceiptId.set(receiptId, existingItems);
-            });
-          }
-        }
-
         const formattedReceipts: Receipt[] = visibleDedupedRows.map((row) => {
           console.log('[WalletTab] Processing row:', row);
 
@@ -380,7 +343,6 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             loyaltyMemberId: row.loyalty_member_id || undefined,
             summary: row.short_summary || '',
             cardLast4: row.card_last_4 || '',
-            items: receiptItemsByReceiptId.get(row.id) || [],
             paymentMethod: '',
             location: '',
             folder: undefined,

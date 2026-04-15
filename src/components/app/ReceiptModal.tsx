@@ -3,7 +3,6 @@ import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, 
 import { Receipt } from './WalletTab';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { formatDistance } from 'date-fns';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -26,6 +25,76 @@ const getCurrencySymbol = (currencyCode: string): string => {
   return symbols[code] || code;
 };
 
+type ReceiptModalItem = NonNullable<Receipt['items']>[number];
+
+interface ReceiptPaymentDisplay {
+  id: string;
+  amount: number;
+  currencyCode?: string | null;
+  label: string;
+}
+
+const getNullableNumber = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsedValue = parseFloat(value);
+    return Number.isFinite(parsedValue) ? parsedValue : null;
+  }
+
+  return null;
+};
+
+const getNonEmptyString = (value: unknown): string | null => (
+  typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+);
+
+const mapReceiptItemRow = (row: Record<string, unknown>): ReceiptModalItem => ({
+  lineIndex: getNullableNumber(row.line_index) ?? 0,
+  description: getNonEmptyString(row.description),
+  itemType: getNonEmptyString(row.item_type),
+  quantity: getNullableNumber(row.quantity),
+  unitPrice: getNullableNumber(row.unit_price),
+  lineTotal: getNullableNumber(row.line_total),
+  vatAmount: getNullableNumber(row.vat_amount),
+  vatRate: getNullableNumber(row.vat_rate),
+});
+
+const mapReceiptPaymentRow = (row: Record<string, unknown>): ReceiptPaymentDisplay | null => {
+  const amount = [
+    row.amount,
+    row.payment_amount,
+    row.paid_amount,
+    row.tender_amount,
+  ]
+    .map(getNullableNumber)
+    .find((value): value is number => value !== null);
+
+  if (amount === null) return null;
+
+  const label = [
+    row.payment_method,
+    row.method,
+    row.payment_type,
+    row.tender_type,
+    row.type,
+    row.description,
+  ]
+    .map(getNonEmptyString)
+    .find((value): value is string => value !== null) || 'Payment';
+
+  const id = getNonEmptyString(row.id) || `${label}-${amount.toFixed(2)}`;
+
+  return {
+    id,
+    amount,
+    currencyCode: getNonEmptyString(row.currency),
+    label,
+  };
+};
+
 interface ReceiptModalProps {
   receipt: Receipt | null;
   onClose: () => void;
@@ -40,6 +109,11 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const [editWarrantyDate, setEditWarrantyDate] = useState('');
   const [editReturnDate, setEditReturnDate] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [detailReceiptId, setDetailReceiptId] = useState<string | null>(receipt?.id ?? null);
+  const [receiptItems, setReceiptItems] = useState<ReceiptModalItem[]>([]);
+  const [receiptPayments, setReceiptPayments] = useState<ReceiptPaymentDisplay[]>([]);
+  const [itemsLoading, setItemsLoading] = useState(false);
+  const [itemsLoaded, setItemsLoaded] = useState(false);
 
   useEffect(() => {
     setShowDeleteMenu(false);
@@ -50,6 +124,70 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
       setEditReturnDate(receipt.returnDate || '');
     }
   }, [receipt]);
+
+  useEffect(() => {
+    if (!receipt?.id) {
+      setDetailReceiptId(null);
+      setReceiptItems([]);
+      setReceiptPayments([]);
+      setItemsLoading(false);
+      setItemsLoaded(false);
+      return;
+    }
+
+    let isCancelled = false;
+
+    setDetailReceiptId(receipt.id);
+    setReceiptItems([]);
+    setReceiptPayments([]);
+    setItemsLoading(true);
+    setItemsLoaded(false);
+
+    const loadReceiptDetails = async () => {
+      const [itemsResult, paymentsResult] = await Promise.all([
+        supabase
+          .from('receipt_items')
+          .select('*')
+          .eq('receipt_id', receipt.id)
+          .order('line_index', { ascending: true }),
+        supabase
+          .from('receipt_payments')
+          .select('*')
+          .eq('receipt_id', receipt.id),
+      ]);
+
+      if (isCancelled) return;
+
+      if (itemsResult.error) {
+        console.error('[ReceiptModal] receipt_items query error:', itemsResult.error);
+        setReceiptItems([]);
+      } else {
+        setReceiptItems(
+          (itemsResult.data || []).map((item) => mapReceiptItemRow(item as Record<string, unknown>))
+        );
+      }
+
+      if (paymentsResult.error) {
+        console.error('[ReceiptModal] receipt_payments query error:', paymentsResult.error);
+        setReceiptPayments([]);
+      } else {
+        setReceiptPayments(
+          (paymentsResult.data || [])
+            .map((payment) => mapReceiptPaymentRow(payment as Record<string, unknown>))
+            .filter((payment): payment is ReceiptPaymentDisplay => payment !== null)
+        );
+      }
+
+      setItemsLoading(false);
+      setItemsLoaded(true);
+    };
+
+    loadReceiptDetails();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [receipt?.id]);
 
   // --- LOGIC FIX: ROBUST DELETE HANDLING ---
   const handleDelete = async (deleteOption: 'now' | '30days' | 'warranty') => {
@@ -162,18 +300,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const gbpAmount = getValidMoneyValue(receipt.amount_gbp);
   const displayOriginalTotal = originalTotal ?? gbpAmount ?? 0;
   const displayOriginalCurrencySymbol = originalTotal !== null || receiptCurrencyCode === 'GBP' ? receiptCurrencySymbol : '£';
-  const hasReceiptItems = Array.isArray(receipt.items) && receipt.items.length > 0;
-  const normalizedReceiptItems = hasReceiptItems
-    ? receipt.items!.filter((item) => {
-        const hasDescription = typeof item.description === 'string' && item.description.trim().length > 0;
-        return hasDescription
-          || getValidMoneyValue(item.quantity) !== null
-          || getValidMoneyValue(item.unitPrice) !== null
-          || getValidMoneyValue(item.lineTotal) !== null
-          || getValidMoneyValue(item.vatAmount) !== null
-          || getValidMoneyValue(item.vatRate) !== null;
-      })
-    : [];
   const getReceiptItemGroup = (item: NonNullable<Receipt['items']>[number]) => {
     const normalizedType = item.itemType?.trim().toLowerCase();
 
@@ -181,21 +307,60 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     if (normalizedType === 'discount') return 'discount';
     return 'product';
   };
+  const isCurrentReceiptDetails = detailReceiptId === receipt.id;
+  const activeReceiptItems = isCurrentReceiptDetails ? receiptItems : [];
+  const activeReceiptPayments = isCurrentReceiptDetails ? receiptPayments : [];
+  const normalizedReceiptItems = activeReceiptItems.filter((item) => {
+    const hasDescription = typeof item.description === 'string' && item.description.trim().length > 0;
+    return hasDescription
+      || getValidMoneyValue(item.quantity) !== null
+      || getValidMoneyValue(item.unitPrice) !== null
+      || getValidMoneyValue(item.lineTotal) !== null
+      || getValidMoneyValue(item.vatAmount) !== null
+      || getValidMoneyValue(item.vatRate) !== null;
+  });
+  const productItemsMissingPrices = normalizedReceiptItems
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => (
+      getReceiptItemGroup(item) === 'product'
+      && getValidMoneyValue(item.unitPrice) === null
+      && getValidMoneyValue(item.lineTotal) === null
+    ));
+  const fallbackProductItemIndex = (() => {
+    if (productItemsMissingPrices.length !== 1 || subtotal === null) return null;
+
+    const candidateIndex = productItemsMissingPrices[0].index;
+    const explicitLineTotalSum = normalizedReceiptItems.reduce((sum, item, index) => {
+      if (index === candidateIndex) return sum;
+
+      const lineTotal = getValidMoneyValue(item.lineTotal);
+      return lineTotal !== null ? sum + lineTotal : sum;
+    }, 0);
+
+    return Math.abs(subtotal - explicitLineTotalSum) < 0.01 ? candidateIndex : null;
+  })();
+  const displayReceiptItems = normalizedReceiptItems.map((item, index) => (
+    index === fallbackProductItemIndex
+      ? { ...item, unitPrice: 0, lineTotal: 0 }
+      : item
+  ));
+  const hasReceiptItems = displayReceiptItems.length > 0;
+  const showItemsLoadingState = !isCurrentReceiptDetails || itemsLoading || !itemsLoaded;
   const receiptItemSections = [
     {
       key: 'product',
       title: 'Items purchased',
-      items: normalizedReceiptItems.filter((item) => getReceiptItemGroup(item) === 'product'),
+      items: displayReceiptItems.filter((item) => getReceiptItemGroup(item) === 'product'),
     },
     {
       key: 'charge',
       title: 'Additional charges',
-      items: normalizedReceiptItems.filter((item) => getReceiptItemGroup(item) === 'charge'),
+      items: displayReceiptItems.filter((item) => getReceiptItemGroup(item) === 'charge'),
     },
     {
       key: 'discount',
       title: 'Discounts',
-      items: normalizedReceiptItems.filter((item) => getReceiptItemGroup(item) === 'discount'),
+      items: displayReceiptItems.filter((item) => getReceiptItemGroup(item) === 'discount'),
     },
   ].filter((section) => section.items.length > 0);
   const heroMetadataChips = [
@@ -666,7 +831,18 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   Receipt Breakdown
                 </h4>
 
-                {hasReceiptItems ? (
+                {showItemsLoadingState ? (
+                  <div className="mb-4 rounded-lg border border-white/10 bg-white/5 p-4">
+                    <div className="space-y-2 animate-pulse">
+                      <div className="h-3 rounded bg-white/10" />
+                      <div className="h-3 w-5/6 rounded bg-white/10" />
+                      <div className="h-3 w-2/3 rounded bg-white/10" />
+                    </div>
+                    <div className="mt-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Items loading...
+                    </div>
+                  </div>
+                ) : hasReceiptItems ? (
                   <div className="mb-4 space-y-4">
                     {receiptItemSections.map((section) => (
                       <div key={section.key}>
@@ -712,11 +888,11 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                     ))}
                     <div className="h-px bg-white/10" />
                   </div>
-                ) : (
+                ) : itemsLoaded ? (
                   <div className="mb-4 rounded-lg bg-white/5 p-4 text-sm text-gray-400">
                     Detailed items unavailable for this receipt
                   </div>
-                )}
+                ) : null}
 
                 <div className="space-y-2">
                   {summaryRows.map((row) => (
@@ -737,6 +913,25 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                     <span>{formatMoney(displayOriginalCurrencySymbol, displayOriginalTotal)}</span>
                   </div>
                 </div>
+
+                {activeReceiptPayments.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-white/10">
+                    <h5 className="text-sm font-bold text-gray-400 mb-3 uppercase tracking-wide">Payments</h5>
+                    <div className="space-y-2">
+                      {activeReceiptPayments.map((payment) => (
+                        <div
+                          key={payment.id}
+                          className="flex items-center justify-between text-sm text-gray-300"
+                        >
+                          <span>{payment.label}</span>
+                          <span className="font-semibold text-white">
+                            {formatMoney(getCurrencySymbol(payment.currencyCode || receipt.currency), payment.amount)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
               </motion.div>
 
