@@ -208,6 +208,76 @@ const getNonEmptyString = (value: unknown): string | undefined => (
   typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
 );
 
+const normalizeSearchValue = (value: unknown): string => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return `${value} ${value.toFixed(2)}`;
+  }
+
+  if (typeof value === 'string') {
+    return value.trim().toLowerCase();
+  }
+
+  return '';
+};
+
+const getSearchableDateValues = (value?: string): string[] => {
+  const rawValue = getNonEmptyString(value);
+  if (!rawValue) return [];
+
+  const parsedDate = new Date(rawValue);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return [rawValue];
+  }
+
+  return Array.from(new Set([
+    rawValue,
+    parsedDate.toISOString().slice(0, 10),
+    parsedDate.toLocaleDateString('en-GB'),
+    parsedDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+    parsedDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+  ]));
+};
+
+const buildReceiptSearchText = ({
+  merchant,
+  summary,
+  orderNumber,
+  invoiceNumber,
+  referenceNumber,
+  customerNumber,
+  amount,
+  amountGbp,
+  date,
+  itemDescriptions,
+}: {
+  merchant: string;
+  summary?: string;
+  orderNumber?: string;
+  invoiceNumber?: string;
+  referenceNumber: string;
+  customerNumber?: string;
+  amount: number;
+  amountGbp: number | null;
+  date: string;
+  itemDescriptions: string[];
+}): string => (
+  [
+    merchant,
+    summary,
+    orderNumber,
+    invoiceNumber,
+    referenceNumber,
+    customerNumber,
+    amount,
+    amountGbp,
+    ...getSearchableDateValues(date),
+    ...itemDescriptions,
+  ]
+    .map(normalizeSearchValue)
+    .filter(Boolean)
+    .join(' ')
+);
+
 export interface Receipt {
   id: string;
   userId: string;
@@ -240,6 +310,8 @@ export interface Receipt {
   loyaltyMemberId?: string;
   summary?: string;
   cardLast4?: string;
+  itemDescriptions: string[];
+  searchText: string;
   items?: Array<{
     lineIndex: number;
     description?: string | null;
@@ -315,6 +387,30 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         const filteredRawRows = filterVisibleReceiptRows(rawRows);
         const dedupedRows = dedupeReceiptRows(filteredRawRows);
         const visibleDedupedRows = filterVisibleReceiptRows(dedupedRows);
+        const itemDescriptionsByReceipt = new Map<string, string[]>();
+
+        if (visibleDedupedRows.length > 0) {
+          const { data: receiptItemsData, error: receiptItemsError } = await supabase
+            .from('receipt_items')
+            .select('receipt_id, description')
+            .in('receipt_id', visibleDedupedRows.map((row) => row.id));
+
+          if (receiptItemsError) {
+            console.error('[WalletTab] receipt_items search query error:', receiptItemsError);
+          } else {
+            (receiptItemsData || []).forEach((row) => {
+              const receiptId = getNonEmptyString((row as { receipt_id?: string | null }).receipt_id);
+              const description = getNonEmptyString((row as { description?: string | null }).description);
+
+              if (!receiptId || !description) return;
+
+              const existingDescriptions = itemDescriptionsByReceipt.get(receiptId) || [];
+              existingDescriptions.push(description);
+              itemDescriptionsByReceipt.set(receiptId, existingDescriptions);
+            });
+          }
+        }
+
         const formattedReceipts: Receipt[] = visibleDedupedRows.map((row) => {
           console.log('[WalletTab] Processing row:', row);
 
@@ -327,6 +423,9 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           const currencySymbol = getCurrencySymbol(currencyCode);
           const merchantName = row.merchant && row.merchant.trim() ? row.merchant : 'Receipt (Seller Unknown)';
           const category = row.category || 'Other';
+          const date = row.transaction_date || new Date().toISOString();
+          const referenceNumber = row.reference_number || `REF-${row.id.slice(0, 8)}`;
+          const itemDescriptions = itemDescriptionsByReceipt.get(row.id) || [];
 
           return {
             id: row.id,
@@ -346,19 +445,32 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             discountAmount: discountAmount ?? undefined,
             currency: currencyCode,
             currencySymbol: currencySymbol,
-            date: row.transaction_date || new Date().toISOString(),
+            date,
             category: category,
             tagColor: getTagColor(category),
             hasWarranty: !!row.warranty_date,
             warrantyDate: row.warranty_date || undefined,
             returnDate: row.return_date || undefined,
-            referenceNumber: row.reference_number || `REF-${row.id.slice(0, 8)}`,
+            referenceNumber,
             customerNumber: row.customer_number || undefined,
             orderNumber: row.order_number || undefined,
             invoiceNumber: row.invoice_number || undefined,
             loyaltyMemberId: row.loyalty_member_id || undefined,
             summary: row.short_summary || '',
             cardLast4: row.card_last_4 || '',
+            itemDescriptions,
+            searchText: buildReceiptSearchText({
+              merchant: merchantName,
+              summary: row.short_summary || undefined,
+              orderNumber: row.order_number || undefined,
+              invoiceNumber: row.invoice_number || undefined,
+              referenceNumber,
+              customerNumber: row.customer_number || undefined,
+              amount: total,
+              amountGbp: totalGbp,
+              date,
+              itemDescriptions,
+            }),
             paymentMethod: '',
             location: '',
             folder: undefined,
@@ -488,10 +600,11 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
 
   const uniqueCategories = Array.from(new Set(finalizedReceipts.map(r => r.category)));
   const categories = ['All', ...uniqueCategories];
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const hasSearchQuery = normalizedSearchQuery.length > 0;
 
   const matchesReceiptFilters = (receipt: Receipt) => {
-    const matchesSearch = receipt.merchant.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         receipt.referenceNumber.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = !hasSearchQuery || receipt.searchText.includes(normalizedSearchQuery);
     const matchesCategory = !selectedCategory || selectedCategory === 'All' || receipt.category === selectedCategory;
     const matchesFolder = selectedFolder === 'all' || receipt.folder === selectedFolder;
     const hasActiveWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) > new Date();
@@ -713,7 +826,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Search receipts..."
+              placeholder="Search receipts, merchants, items..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-10 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-teal-400/50 transition-colors"
@@ -838,18 +951,34 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
         </div>
 
         <AnimatePresence mode="popLayout">
-          {filteredReceipts.length === 0 ? (
+          {loading ? (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-12 text-center"
+            >
+              <Loader2 className="w-12 h-12 text-teal-400 animate-spin mx-auto mb-4" />
+              <h3 className="text-lg font-bold text-white mb-2">Loading receipts...</h3>
+              <p className="text-gray-400">Pulling in your wallet</p>
+            </motion.div>
+          ) : filteredReceipts.length === 0 ? (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-12 text-center"
             >
-              {searchQuery || selectedCategory || warrantyFilterActive ? (
+              {hasSearchQuery ? (
                 <>
                   <Search className="w-12 h-12 text-gray-500 mx-auto mb-4" />
                   <h3 className="text-lg font-bold text-white mb-2">No receipts found</h3>
-                  <p className="text-gray-400">Try adjusting your search or filters</p>
+                  <p className="text-gray-400">Try searching by merchant, item, or order number</p>
+                </>
+              ) : selectedCategory || warrantyFilterActive ? (
+                <>
+                  <Search className="w-12 h-12 text-gray-500 mx-auto mb-4" />
+                  <h3 className="text-lg font-bold text-white mb-2">No receipts found</h3>
+                  <p className="text-gray-400">Try adjusting your filters</p>
                 </>
               ) : (
                 <>
