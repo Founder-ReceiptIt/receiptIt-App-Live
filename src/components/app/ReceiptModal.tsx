@@ -109,6 +109,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteMenu, setShowDeleteMenu] = useState(false);
   const [showMoreDetails, setShowMoreDetails] = useState(false);
+  const [showCompanyDetails, setShowCompanyDetails] = useState(false);
   const [isEditingDates, setIsEditingDates] = useState(false);
   const [editWarrantyDate, setEditWarrantyDate] = useState('');
   const [editReturnDate, setEditReturnDate] = useState('');
@@ -122,6 +123,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   useEffect(() => {
     setShowDeleteMenu(false);
     setShowMoreDetails(false);
+    setShowCompanyDetails(false);
     setIsEditingDates(false);
     if (receipt) {
       setEditWarrantyDate(receipt.warrantyDate || '');
@@ -407,14 +409,21 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
 
       return !duplicateInHero && firstMatchingIndex === index;
     });
-  const merchantDetails = [
+  const merchantCompanyName = receipt.merchant && receipt.merchant !== 'Receipt (Seller Unknown)'
+    ? receipt.merchant
+    : null;
+  const primaryMerchantDetails = [
+    merchantCompanyName ? { label: 'Company', value: merchantCompanyName } : null,
     receipt.merchantPhone ? { label: 'Phone', value: receipt.merchantPhone, href: `tel:${receipt.merchantPhone}` } : null,
     receipt.merchantEmail ? { label: 'Email', value: receipt.merchantEmail, href: `mailto:${receipt.merchantEmail}` } : null,
     receipt.merchantWebsite ? { label: 'Website', value: receipt.merchantWebsite, href: getWebsiteHref(receipt.merchantWebsite) } : null,
+  ].filter((detail): detail is { label: string; value: string; href?: string } => detail !== null);
+  const secondaryMerchantDetails = [
     receipt.merchantAddress ? { label: 'Address', value: receipt.merchantAddress } : null,
     receipt.merchantVatNumber ? { label: 'VAT number', value: receipt.merchantVatNumber } : null,
     receipt.merchantCompanyNumber ? { label: 'Company number', value: receipt.merchantCompanyNumber } : null,
   ].filter((detail): detail is { label: string; value: string; href?: string } => detail !== null);
+  const hasCompanyDetails = primaryMerchantDetails.length > 0 || secondaryMerchantDetails.length > 0;
   const warrantyEndDate = receipt.warrantyDate ? new Date(receipt.warrantyDate) : null;
   const today = new Date();
   const isWarrantyActive = warrantyEndDate && warrantyEndDate > today;
@@ -598,6 +607,22 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                       </div>
                     );
                   })}
+                  {hasCompanyDetails && (
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setShowCompanyDetails((current) => !current)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md text-gray-400 bg-white/5 border-white/10 hover:bg-white/10 hover:text-white hover:border-white/20 transition-colors"
+                    >
+                      <span>Company</span>
+                      <motion.div
+                        animate={{ rotate: showCompanyDetails ? 180 : 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </motion.div>
+                    </motion.button>
+                  )}
                   {moreDetails.length > 0 && (
                     <motion.button
                       whileHover={{ scale: 1.02 }}
@@ -617,6 +642,56 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                 </div>
 
                 <AnimatePresence>
+                  {showCompanyDetails && hasCompanyDetails && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                      animate={{ opacity: 1, height: 'auto', marginTop: 16 }}
+                      exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                        <div className="space-y-2">
+                          {primaryMerchantDetails.map((detail) => (
+                            <div key={detail.label} className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                {detail.label}
+                              </div>
+                              {detail.href ? (
+                                <a
+                                  href={detail.href}
+                                  target={detail.label === 'Website' ? '_blank' : undefined}
+                                  rel={detail.label === 'Website' ? 'noopener noreferrer' : undefined}
+                                  className="text-sm font-semibold text-gray-200 break-all hover:text-white transition-colors sm:text-right"
+                                >
+                                  {detail.value}
+                                </a>
+                              ) : (
+                                <div className="text-sm font-semibold text-gray-200 break-words sm:text-right">
+                                  {detail.value}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        {secondaryMerchantDetails.length > 0 && (
+                          <div className="mt-3 border-t border-white/10 pt-3 space-y-2">
+                            {secondaryMerchantDetails.map((detail) => (
+                              <div key={detail.label} className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                                <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                  {detail.label}
+                                </div>
+                                <div className="text-sm font-semibold text-gray-200 break-words sm:text-right">
+                                  {detail.value}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+
                   {showMoreDetails && moreDetails.length > 0 && (
                     <motion.div
                       initial={{ opacity: 0, height: 0, marginTop: 0 }}
@@ -644,35 +719,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                     </motion.div>
                   )}
                 </AnimatePresence>
-
-                {merchantDetails.length > 0 && (
-                  <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">
-                      Merchant details
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {merchantDetails.map((detail) => (
-                        <div key={detail.label} className="rounded-xl bg-black/10 border border-white/10 px-4 py-3">
-                          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
-                            {detail.label}
-                          </div>
-                          {detail.href ? (
-                            <a
-                              href={detail.href}
-                              target={detail.label === 'Website' ? '_blank' : undefined}
-                              rel={detail.label === 'Website' ? 'noopener noreferrer' : undefined}
-                              className="text-sm font-semibold text-gray-200 break-all hover:text-white transition-colors"
-                            >
-                              {detail.value}
-                            </a>
-                          ) : (
-                            <div className="text-sm font-semibold text-gray-200 break-words">{detail.value}</div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* --- WARRANTY SECTION (Animated & Glowing) --- */}
