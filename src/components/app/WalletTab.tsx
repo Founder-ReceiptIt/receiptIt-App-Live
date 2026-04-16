@@ -204,12 +204,22 @@ const getNullableNumber = (value: unknown): number | null => {
   return null;
 };
 
+const getNonEmptyString = (value: unknown): string | undefined => (
+  typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
+);
+
 export interface Receipt {
   id: string;
   userId: string;
   merchant: string;
   merchantIcon: LucideIcon;
   merchantLogo?: string;
+  merchantPhone?: string;
+  merchantEmail?: string;
+  merchantWebsite?: string;
+  merchantAddress?: string;
+  merchantVatNumber?: string;
+  merchantCompanyNumber?: string;
   amount: number;
   amount_gbp: number | null;
   subtotal?: number;
@@ -323,6 +333,12 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             userId: row.user_id,
             merchant: merchantName,
             merchantIcon: getCategoryIcon(category),
+            merchantPhone: getNonEmptyString(row.merchant_phone),
+            merchantEmail: getNonEmptyString(row.merchant_email),
+            merchantWebsite: getNonEmptyString(row.merchant_website),
+            merchantAddress: getNonEmptyString(row.merchant_address),
+            merchantVatNumber: getNonEmptyString(row.merchant_vat_number),
+            merchantCompanyNumber: getNonEmptyString(row.merchant_company_number),
             amount: total,
             amount_gbp: totalGbp,
             subtotal: subtotal ?? undefined,

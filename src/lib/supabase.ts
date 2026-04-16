@@ -48,6 +48,12 @@ export interface Receipt {
   id: string;
   user_id: string;
   merchant: string;
+  merchant_phone: string | null;
+  merchant_email: string | null;
+  merchant_website: string | null;
+  merchant_address: string | null;
+  merchant_vat_number: string | null;
+  merchant_company_number: string | null;
   amount: number;
   amount_gbp: number | null;
   subtotal: number;

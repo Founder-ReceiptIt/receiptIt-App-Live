@@ -51,6 +51,10 @@ const getNonEmptyString = (value: unknown): string | null => (
   typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
 );
 
+const getWebsiteHref = (website: string): string => (
+  /^https?:\/\//i.test(website) ? website : `https://${website}`
+);
+
 const mapReceiptItemRow = (row: Record<string, unknown>): ReceiptModalItem => ({
   lineIndex: getNullableNumber(row.line_index) ?? 0,
   description: getNonEmptyString(row.description),
@@ -189,9 +193,12 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     };
   }, [receipt?.id]);
 
+  const hasWarrantyInfo = Boolean(receipt?.warrantyDate?.trim() || receipt?.hasWarranty);
+
   // --- LOGIC FIX: ROBUST DELETE HANDLING ---
   const handleDelete = async (deleteOption: 'now' | '30days' | 'warranty') => {
     if (!receipt) return;
+    if (deleteOption === 'warranty' && !hasWarrantyInfo) return;
 
     if (deleteOption === 'now') {
       if (!confirm(`Delete receipt from ${receipt.merchant || 'Receipt (Seller Unknown)'}?`)) return;
@@ -400,6 +407,14 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
 
       return !duplicateInHero && firstMatchingIndex === index;
     });
+  const merchantDetails = [
+    receipt.merchantPhone ? { label: 'Phone', value: receipt.merchantPhone, href: `tel:${receipt.merchantPhone}` } : null,
+    receipt.merchantEmail ? { label: 'Email', value: receipt.merchantEmail, href: `mailto:${receipt.merchantEmail}` } : null,
+    receipt.merchantWebsite ? { label: 'Website', value: receipt.merchantWebsite, href: getWebsiteHref(receipt.merchantWebsite) } : null,
+    receipt.merchantAddress ? { label: 'Address', value: receipt.merchantAddress } : null,
+    receipt.merchantVatNumber ? { label: 'VAT number', value: receipt.merchantVatNumber } : null,
+    receipt.merchantCompanyNumber ? { label: 'Company number', value: receipt.merchantCompanyNumber } : null,
+  ].filter((detail): detail is { label: string; value: string; href?: string } => detail !== null);
   const warrantyEndDate = receipt.warrantyDate ? new Date(receipt.warrantyDate) : null;
   const today = new Date();
   const isWarrantyActive = warrantyEndDate && warrantyEndDate > today;
@@ -629,6 +644,35 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                     </motion.div>
                   )}
                 </AnimatePresence>
+
+                {merchantDetails.length > 0 && (
+                  <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">
+                      Merchant details
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {merchantDetails.map((detail) => (
+                        <div key={detail.label} className="rounded-xl bg-black/10 border border-white/10 px-4 py-3">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
+                            {detail.label}
+                          </div>
+                          {detail.href ? (
+                            <a
+                              href={detail.href}
+                              target={detail.label === 'Website' ? '_blank' : undefined}
+                              rel={detail.label === 'Website' ? 'noopener noreferrer' : undefined}
+                              className="text-sm font-semibold text-gray-200 break-all hover:text-white transition-colors"
+                            >
+                              {detail.value}
+                            </a>
+                          ) : (
+                            <div className="text-sm font-semibold text-gray-200 break-words">{detail.value}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* --- WARRANTY SECTION (Animated & Glowing) --- */}
@@ -979,13 +1023,15 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                       <Trash2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
                       <span className="font-semibold">Delete Now</span>
                     </button>
-                    <button
-                      onClick={() => handleDelete('warranty')}
-                      className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-white/5 transition-colors text-gray-400 hover:text-white group"
-                    >
-                      <Shield className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                      <span className="font-semibold">Delete when Warranty Expires</span>
-                    </button>
+                    {hasWarrantyInfo && (
+                      <button
+                        onClick={() => handleDelete('warranty')}
+                        className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-white/5 transition-colors text-gray-400 hover:text-white group"
+                      >
+                        <Shield className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                        <span className="font-semibold">Delete when Warranty Expires</span>
+                      </button>
+                    )}
                   </motion.div>
                 )}
               </motion.div>
