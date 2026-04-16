@@ -297,6 +297,9 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const formatOptionalMoney = (currencySymbol: string, value?: number | null) => (
     typeof value === 'number' && Number.isFinite(value) ? formatMoney(currencySymbol, value) : '—'
   );
+  const formatOptionalDeductionMoney = (currencySymbol: string, value?: number | null) => (
+    typeof value === 'number' && Number.isFinite(value) ? `-${formatMoney(currencySymbol, Math.abs(value))}` : '—'
+  );
   const formatOptionalQuantity = (value?: number | null) => (
     typeof value === 'number' && Number.isFinite(value) ? value.toFixed(Number.isInteger(value) ? 0 : 2) : '—'
   );
@@ -389,7 +392,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
       discountAmount !== null &&
       typeof discountAmount === 'number' &&
       Number.isFinite(discountAmount) &&
-      discountAmount !== 0
+      discountAmount > 0
         ? [{ label: 'Discount', value: discountAmount, isDiscount: true }]
         : []
     ),
@@ -965,10 +968,14 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                                   {formatOptionalQuantity(item.quantity)}
                                 </div>
                                 <div className="text-sm text-right text-gray-300">
-                                  {formatOptionalMoney(receiptCurrencySymbol, item.unitPrice)}
+                                  {section.key === 'discount'
+                                    ? formatOptionalDeductionMoney(receiptCurrencySymbol, item.unitPrice)
+                                    : formatOptionalMoney(receiptCurrencySymbol, item.unitPrice)}
                                 </div>
-                                <div className="text-sm text-right font-semibold text-white">
-                                  {formatOptionalMoney(receiptCurrencySymbol, item.lineTotal)}
+                                <div className={`text-sm text-right font-semibold ${section.key === 'discount' ? 'text-emerald-400' : 'text-white'}`}>
+                                  {section.key === 'discount'
+                                    ? formatOptionalDeductionMoney(receiptCurrencySymbol, item.lineTotal)
+                                    : formatOptionalMoney(receiptCurrencySymbol, item.lineTotal)}
                                 </div>
                               </div>
                             ))}

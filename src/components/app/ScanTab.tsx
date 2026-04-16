@@ -453,12 +453,12 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                   </div>
 
                   <h2 className="text-2xl font-bold text-white mb-2">
-                    {scanState === 'uploading' ? 'Uploading Receipt...' : 'Creating Entry...'}
+                    {scanState === 'uploading' ? 'Uploading Receipt...' : 'Preparing your receipt...'}
                   </h2>
                   <p className="text-gray-400 mb-6">
                     {scanState === 'uploading'
                       ? 'Uploading your receipt to secure storage'
-                      : 'Creating placeholder for AI processing'
+                      : 'Getting everything ready for scanning'
                     }
                   </p>
 
@@ -512,17 +512,17 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                     <CheckCircle className="w-20 h-20 text-green-400 mx-auto mb-4" strokeWidth={1.5} />
                   </motion.div>
 
-                  <h2 className="text-2xl font-bold text-white mb-2">Upload Successful!</h2>
-                  <p className="text-gray-400 mb-6">Your receipt is being processed by AI</p>
+                  <h2 className="text-2xl font-bold text-white mb-2">Receipt uploaded</h2>
+                  <p className="text-gray-400 mb-6">We’re now scanning your receipt</p>
 
                   <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4 mb-6">
                     <p className="text-sm text-gray-400">
-                      Your receipt will appear in your wallet with extracted data once processing is complete.
+                      It will appear in your wallet once your details are ready.
                     </p>
                   </div>
 
                   <p className="text-sm text-green-400 font-semibold">
-                    Redirecting to wallet...
+                    Taking you to your wallet...
                   </p>
                 </div>
               </motion.div>
