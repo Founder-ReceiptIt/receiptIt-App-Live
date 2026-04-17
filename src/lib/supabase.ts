@@ -76,6 +76,7 @@ export interface Receipt {
   card_last_4: string | null;
   short_summary: string | null;
   return_date: string | null;
+  folder?: string | null;
   source: string | null;
   error_reason: string | null;
   processing_attempts: number | null;

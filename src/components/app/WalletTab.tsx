@@ -326,7 +326,7 @@ export interface Receipt {
   }>;
   paymentMethod?: string;
   location?: string;
-  folder?: 'work' | 'personal';
+  folder?: 'work' | 'personal' | null;
   status?: string;
   imageUrl?: string;
   storagePath?: string;
@@ -475,7 +475,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             }),
             paymentMethod: '',
             location: '',
-            folder: undefined,
+            folder: row.folder === 'work' || row.folder === 'personal' ? row.folder : null,
             status: row.status || '',
             imageUrl: row.image_url || '',
             storagePath: row.storage_path || '',
@@ -670,7 +670,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
   };
 
   const handleBulkMove = async (targetFolder: 'work' | 'personal' | null) => {
-    if (selectedReceipts.size === 0) return;
+    if (selectedReceipts.size === 0 || !user?.id) return;
 
     setIsDeleting(true);
     try {
@@ -678,10 +678,16 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
       const { error } = await supabase
         .from('receipts')
         .update({ folder: targetFolder })
+        .eq('user_id', user.id)
         .in('id', receiptIds);
 
       if (error) {
-        console.error('[WalletTab] Move error:', error);
+        console.error('[WalletTab] Move error while updating receipts.folder:', {
+          error,
+          targetFolder,
+          receiptIds,
+          userId: user.id,
+        });
         showToast('Failed to move receipts', 'error');
         setIsDeleting(false);
         return;
