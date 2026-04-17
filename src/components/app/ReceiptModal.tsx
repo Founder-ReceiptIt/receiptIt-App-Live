@@ -3,6 +3,7 @@ import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, 
 import { Receipt } from './WalletTab';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { formatReceiptDate, getPurchaseDateDisplay } from '../../lib/receiptDateUtils';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -60,6 +61,7 @@ const mapReceiptItemRow = (row: Record<string, unknown>): ReceiptModalItem => ({
   description: getNonEmptyString(row.description),
   itemType: getNonEmptyString(row.item_type),
   quantity: getNullableNumber(row.quantity),
+  quantityUnit: getNonEmptyString(row.quantity_unit),
   unitPrice: getNullableNumber(row.unit_price),
   lineTotal: getNullableNumber(row.line_total),
   vatAmount: getNullableNumber(row.vat_amount),
@@ -300,9 +302,14 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const formatOptionalDeductionMoney = (currencySymbol: string, value?: number | null) => (
     typeof value === 'number' && Number.isFinite(value) ? `-${formatMoney(currencySymbol, Math.abs(value))}` : '—'
   );
-  const formatOptionalQuantity = (value?: number | null) => (
-    typeof value === 'number' && Number.isFinite(value) ? value.toFixed(Number.isInteger(value) ? 0 : 2) : '—'
-  );
+  const formatOptionalQuantity = (value?: number | null, quantityUnit?: string | null) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return '—';
+    }
+
+    const formattedValue = value.toFixed(Number.isInteger(value) ? 0 : 2);
+    return quantityUnit ? `${formattedValue} ${quantityUnit}` : formattedValue;
+  };
   const receiptCurrencyCode = receipt.currency?.toUpperCase() || 'GBP';
   const receiptCurrencySymbol = getCurrencySymbol(receipt.currency);
   const subtotal = getValidMoneyValue(receipt.subtotal);
@@ -356,6 +363,9 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
       ? { ...item, unitPrice: 0, lineTotal: 0 }
       : item
   ));
+  const formattedPurchaseDate = formatReceiptDate(receipt.date, 'long');
+  const purchaseDateDisplay = getPurchaseDateDisplay(receipt.date, 'long');
+  const importedOnDisplay = !formattedPurchaseDate ? formatReceiptDate(receipt.createdAt, 'long') : null;
   const hasReceiptItems = displayReceiptItems.length > 0;
   const showItemsLoadingState = !isCurrentReceiptDetails || itemsLoading || !itemsLoaded;
   const receiptItemSections = [
@@ -403,6 +413,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     receipt.invoiceNumber ? { label: 'Invoice number', value: receipt.invoiceNumber, icon: FileText } : null,
     receipt.customerNumber ? { label: 'Customer number', value: receipt.customerNumber, icon: FileText } : null,
     receipt.paymentMethod ? { label: 'Payment method', value: receipt.paymentMethod, icon: CreditCard } : null,
+    importedOnDisplay ? { label: 'Imported on', value: importedOnDisplay, icon: Calendar } : null,
   ]
     .filter((detail): detail is { label: string; value: string; icon: typeof FileText } => detail !== null)
     .filter((detail, index, allDetails) => {
@@ -574,7 +585,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                       <p className="text-teal-400 text-sm mb-2">{receipt.summary}</p>
                     )}
                     <p className="text-gray-400 text-sm">
-                      {new Date(receipt.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      {purchaseDateDisplay}
                     </p>
                     {receipt.location && (
                       <div className="flex items-center gap-1.5 mt-2 text-gray-400 text-xs">
@@ -965,7 +976,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                                   )}
                                 </div>
                                 <div className="text-sm text-right text-gray-300">
-                                  {formatOptionalQuantity(item.quantity)}
+                                  {formatOptionalQuantity(item.quantity, item.quantityUnit)}
                                 </div>
                                 <div className="text-sm text-right text-gray-300">
                                   {section.key === 'discount'

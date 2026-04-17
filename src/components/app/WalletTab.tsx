@@ -7,6 +7,7 @@ import {
   supabase,
   Receipt as SupabaseReceiptRow,
 } from '../../lib/supabase';
+import { getPurchaseDateDisplay } from '../../lib/receiptDateUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { useToast } from '../../contexts/ToastContext';
@@ -258,7 +259,7 @@ const buildReceiptSearchText = ({
   customerNumber?: string;
   amount: number;
   amountGbp: number | null;
-  date: string;
+  date?: string;
   itemDescriptions: string[];
 }): string => (
   [
@@ -297,7 +298,7 @@ export interface Receipt {
   discountAmount?: number;
   currency: string;
   currencySymbol?: string;
-  date: string;
+  date?: string;
   category: string;
   tagColor: string;
   hasWarranty?: boolean;
@@ -317,6 +318,7 @@ export interface Receipt {
     description?: string | null;
     itemType?: 'product' | 'charge' | 'discount' | string | null;
     quantity?: number | null;
+    quantityUnit?: string | null;
     unitPrice?: number | null;
     lineTotal?: number | null;
     vatAmount?: number | null;
@@ -423,7 +425,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           const currencySymbol = getCurrencySymbol(currencyCode);
           const merchantName = row.merchant && row.merchant.trim() ? row.merchant : 'Receipt (Seller Unknown)';
           const category = row.category || 'Other';
-          const date = row.transaction_date || new Date().toISOString();
+          const date = row.transaction_date || undefined;
           const referenceNumber = row.reference_number || `REF-${row.id.slice(0, 8)}`;
           const itemDescriptions = itemDescriptionsByReceipt.get(row.id) || [];
 
@@ -1075,7 +1077,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                     )}
 
                     <div className="flex items-center gap-2">
-                      <p className="text-sm text-gray-400">{new Date(receipt.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                      <p className="text-sm text-gray-400">{getPurchaseDateDisplay(receipt.date, 'short')}</p>
                       {hasActiveWarranty && !isProcessing && (
                         <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-400/10 border border-emerald-400/30 rounded-full">
                           <Shield className="w-3 h-3 text-emerald-400" strokeWidth={2} />

@@ -27,6 +27,7 @@ export interface ReceiptItem {
   description?: string | null;
   item_type?: 'product' | 'charge' | 'discount' | string | null;
   quantity?: number | null;
+  quantity_unit?: string | null;
   unit_price: number | null;
   line_total: number | null;
   vat_amount: number | null;
