@@ -283,7 +283,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
             subtotal: 0,
             vat_amount: 0,
             currency: 'GBP',
-            transaction_date: new Date().toISOString().split('T')[0],
+            transaction_date: null,
             category: 'Other',
             reference_number: referenceNumber,
           })
