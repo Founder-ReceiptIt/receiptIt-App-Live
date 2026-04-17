@@ -16,21 +16,13 @@ import { ToastProvider } from './contexts/ToastContext';
 import { useAuth } from './contexts/AuthContext';
 
 function App() {
-  const { user, session, loading: authLoading, needsAliasSetup, forceRefresh } = useAuth();
+  const { user, session, loading: authLoading, needsAliasSetup } = useAuth();
   const [showApp, setShowApp] = useState(false);
   const [activeTab, setActiveTab] = useState('wallet');
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-
-  useEffect(() => {
-    const checkAuthState = async () => {
-      if (!authLoading && user && session) {
-        console.log('[App] Auth state check: user exists, validating profile');
-        await forceRefresh();
-      }
-    };
-    checkAuthState();
-  }, [authLoading]);
+  const isAuthenticated = Boolean(user && session);
+  const shouldShowBootSplash = authLoading || (isAuthenticated && !needsAliasSetup && !showApp);
 
   useEffect(() => {
     const isScanning = localStorage.getItem('isScanning');
@@ -41,29 +33,33 @@ function App() {
   }, [user, session]);
 
   useEffect(() => {
-    if (!authLoading) {
-      if (user && session) {
-        console.log('[App] User authenticated, showing app');
-        const isScanning = localStorage.getItem('isScanning');
-        if (isScanning !== 'true') {
-          setActiveTab('wallet');
-        }
-        const timer = setTimeout(() => {
-          setShowApp(true);
-        }, 2000);
+    if (authLoading) {
+      return;
+    }
 
-        return () => clearTimeout(timer);
-      } else {
-        console.log('[App] User not authenticated, showing auth screen');
-        setShowApp(false);
+    if (isAuthenticated && !needsAliasSetup) {
+      console.log('[App] User authenticated, preparing app shell');
+      const isScanning = localStorage.getItem('isScanning');
+      if (isScanning !== 'true') {
         setActiveTab('wallet');
       }
-    }
-  }, [authLoading, user, session]);
+      if (showApp) {
+        return;
+      }
 
-  if (authLoading) {
-    return <LoadingScreen />;
-  }
+      const timer = setTimeout(() => {
+        setShowApp(true);
+      }, 2000);
+
+      return () => clearTimeout(timer);
+    }
+
+    console.log('[App] App shell not ready - resetting splash state');
+    setShowApp(false);
+    if (!isAuthenticated) {
+      setActiveTab('wallet');
+    }
+  }, [authLoading, isAuthenticated, needsAliasSetup, showApp, user, session]);
 
   if (!user || !session) {
     return <AuthForm />;
@@ -85,7 +81,7 @@ function App() {
       </style>
 
       <AnimatePresence mode="wait">
-        {!showApp ? (
+        {shouldShowBootSplash ? (
           <motion.div
             key="loading"
             initial={{ opacity: 1 }}
