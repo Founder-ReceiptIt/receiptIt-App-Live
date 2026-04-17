@@ -44,6 +44,60 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
   const [errorMessage, setErrorMessage] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isScanningRef = useRef(false);
+  const activeScanTokenRef = useRef(0);
+  const pendingReceiptIdRef = useRef<string | null>(null);
+
+  const clearScanningStorage = () => {
+    localStorage.removeItem('isScanning');
+    localStorage.removeItem('scanningSource');
+  };
+
+  const isScanActive = (scanToken: number) => activeScanTokenRef.current === scanToken;
+
+  const cleanupPendingReceipt = async (receiptId: string, userId: string) => {
+    const { data: scopedReceipt, error: scopedReceiptError } = await supabase
+      .from('receipts')
+      .select('id')
+      .eq('id', receiptId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (scopedReceiptError) {
+      throw scopedReceiptError;
+    }
+
+    if (!scopedReceipt) {
+      return;
+    }
+
+    const { error: receiptItemsError } = await supabase
+      .from('receipt_items')
+      .delete()
+      .eq('receipt_id', receiptId);
+
+    if (receiptItemsError) {
+      throw receiptItemsError;
+    }
+
+    const { error: receiptPaymentsError } = await supabase
+      .from('receipt_payments')
+      .delete()
+      .eq('receipt_id', receiptId);
+
+    if (receiptPaymentsError) {
+      throw receiptPaymentsError;
+    }
+
+    const { error: receiptDeleteError } = await supabase
+      .from('receipts')
+      .delete()
+      .eq('id', receiptId)
+      .eq('user_id', userId);
+
+    if (receiptDeleteError) {
+      throw receiptDeleteError;
+    }
+  };
 
   // ANDROID FIX: Restore scanning state after page reload (Android kills tab when camera opens)
   useEffect(() => {
@@ -60,8 +114,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
         setErrorMessage('Android closed the camera. Please try uploading again.');
         setScanState('error');
         isScanningRef.current = false;
-        localStorage.removeItem('isScanning');
-        localStorage.removeItem('scanningSource');
+        clearScanningStorage();
       }, 10000);
 
       // Clean up timeout if component unmounts
@@ -78,8 +131,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     if (!file || isScanningRef.current) {
       console.log('[ScanTab] File selection blocked - already scanning or no file');
       // Clear localStorage if no file selected (user cancelled)
-      localStorage.removeItem('isScanning');
-      localStorage.removeItem('scanningSource');
+      clearScanningStorage();
       return;
     }
 
@@ -94,8 +146,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       console.error('[ScanTab] Invalid file type:', file.type);
       setErrorMessage('Unsupported file type. Please use JPG, PNG, or PDF.');
       setScanState('error');
-      localStorage.removeItem('isScanning');
-      localStorage.removeItem('scanningSource');
+      clearScanningStorage();
       showToast('Unsupported file type. Please use JPG, PNG, or PDF.', undefined);
       return;
     }
@@ -106,8 +157,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       console.error('[ScanTab] File too large:', file.size, 'bytes');
       setErrorMessage('File too large. Max size is 10MB.');
       setScanState('error');
-      localStorage.removeItem('isScanning');
-      localStorage.removeItem('scanningSource');
+      clearScanningStorage();
       showToast('File too large. Max size is 10MB.', undefined);
       return;
     }
@@ -125,19 +175,28 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
     console.log('[ScanTab] State set to uploading with flushSync, modal MUST be visible now');
 
+    const scanToken = activeScanTokenRef.current + 1;
+    activeScanTokenRef.current = scanToken;
+    pendingReceiptIdRef.current = null;
+
     // Start the async upload process separately (not awaited in this handler)
     // Use setTimeout to ensure this happens AFTER the render
     setTimeout(() => {
-      startScan(file);
+      void startScan(file, scanToken);
     }, 0);
   };
 
-  const startScan = async (file: File) => {
+  const startScan = async (file: File, scanToken: number) => {
+    if (!isScanActive(scanToken)) {
+      return;
+    }
+
     if (!user) {
-      setErrorMessage('User not authenticated');
-      setScanState('error');
-      localStorage.removeItem('isScanning');
-      localStorage.removeItem('scanningSource');
+      if (isScanActive(scanToken)) {
+        setErrorMessage('User not authenticated');
+        setScanState('error');
+        clearScanningStorage();
+      }
       return;
     }
 
@@ -172,10 +231,15 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
         });
 
       if (uploadError) {
-        setErrorMessage(`Failed to upload file: ${uploadError.message}`);
-        setScanState('error');
-        localStorage.removeItem('isScanning');
-        localStorage.removeItem('scanningSource');
+        if (isScanActive(scanToken)) {
+          setErrorMessage(`Failed to upload file: ${uploadError.message}`);
+          setScanState('error');
+          clearScanningStorage();
+        }
+        return;
+      }
+
+      if (!isScanActive(scanToken)) {
         return;
       }
 
@@ -187,7 +251,9 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
       const publicUrl = publicUrlData.publicUrl;
 
-      setScanState('processing');
+      if (isScanActive(scanToken)) {
+        setScanState('processing');
+      }
 
       try {
         const referenceNumber = `REF-${timestamp}`;
@@ -225,18 +291,20 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
         if (insertError) {
           console.error('Insert error:', insertError);
-          setErrorMessage(`Failed to create database record: ${insertError.message}`);
-          setScanState('error');
-          localStorage.removeItem('isScanning');
-          localStorage.removeItem('scanningSource');
+          if (isScanActive(scanToken)) {
+            setErrorMessage(`Failed to create database record: ${insertError.message}`);
+            setScanState('error');
+            clearScanningStorage();
+          }
           throw insertError;
         }
 
         if (!insertData || insertData.length === 0) {
-          setErrorMessage('Failed to verify receipt record creation');
-          setScanState('error');
-          localStorage.removeItem('isScanning');
-          localStorage.removeItem('scanningSource');
+          if (isScanActive(scanToken)) {
+            setErrorMessage('Failed to verify receipt record creation');
+            setScanState('error');
+            clearScanningStorage();
+          }
           return;
         }
 
@@ -244,23 +312,49 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
         const merchant = insertData[0]?.merchant || undefined;
         const receiptId = insertData[0]?.id;
+        if (receiptId) {
+          pendingReceiptIdRef.current = receiptId;
+        }
+
+        if (!isScanActive(scanToken)) {
+          if (receiptId) {
+            try {
+              await cleanupPendingReceipt(receiptId, user.id);
+            } catch (cleanupError) {
+              console.error('[ScanTab] Failed to clean up canceled receipt after insert:', cleanupError);
+            }
+          }
+          return;
+        }
+
         showToast('New receipt received', merchant !== 'Analyzing...' ? merchant : undefined);
       } catch (err) {
         console.error('Scan error:', err);
         throw err;
       }
 
+      if (!isScanActive(scanToken)) {
+        return;
+      }
+
       console.log('[ScanTab] Showing processing state for 3.5 seconds');
       // Stay in processing state to show the scanning animation
       await new Promise(resolve => setTimeout(resolve, 3500));
 
+      if (!isScanActive(scanToken)) {
+        return;
+      }
+
       console.log('[ScanTab] Showing success message for 2.5 seconds');
       setScanState('success');
       // ANDROID FIX: Clear localStorage on success
-      localStorage.removeItem('isScanning');
-      localStorage.removeItem('scanningSource');
+      clearScanningStorage();
 
       await new Promise(resolve => setTimeout(resolve, 2500));
+
+      if (!isScanActive(scanToken)) {
+        return;
+      }
 
       console.log('[ScanTab] Navigating to wallet...');
       isScanningRef.current = false;
@@ -268,20 +362,23 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       onNavigateToWallet();
     } catch (error) {
       console.error('[ScanTab] Error during scan:', error);
-      setErrorMessage(`An unexpected error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      setScanState('error');
-      isScanningRef.current = false;
-      // ANDROID FIX: Clear localStorage on error
-      localStorage.removeItem('isScanning');
-      localStorage.removeItem('scanningSource');
+      if (isScanActive(scanToken)) {
+        setErrorMessage(`An unexpected error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        setScanState('error');
+        isScanningRef.current = false;
+        // ANDROID FIX: Clear localStorage on error
+        clearScanningStorage();
+      }
     }
   };
 
   const resetScan = () => {
     console.log('[ScanTab] Resetting scan state');
+    activeScanTokenRef.current += 1;
     isScanningRef.current = false;
     setScanState('idle');
     setSelectedFile(null);
+    pendingReceiptIdRef.current = null;
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
     }
@@ -291,14 +388,24 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       fileInputRef.current.value = '';
     }
     // ANDROID FIX: Clear localStorage on reset
-    localStorage.removeItem('isScanning');
-    localStorage.removeItem('scanningSource');
+    clearScanningStorage();
   };
 
   const handleCancel = () => {
     console.log('[ScanTab] User cancelled scan');
-    isScanningRef.current = false;
+    const pendingReceiptId = pendingReceiptIdRef.current;
+    const currentUserId = user?.id;
+
     resetScan();
+
+    if (!pendingReceiptId || !currentUserId) {
+      return;
+    }
+
+    void cleanupPendingReceipt(pendingReceiptId, currentUserId).catch((cleanupError) => {
+      console.error('[ScanTab] Failed to clean up canceled receipt:', cleanupError);
+      showToast('Failed to fully cancel receipt scan', 'error');
+    });
   };
 
   return (
