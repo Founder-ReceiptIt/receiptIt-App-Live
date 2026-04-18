@@ -14,7 +14,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 console.log('[Supabase] Client initialized successfully');
 
 export const FINALIZED_RECEIPT_STATUSES = ['parsed', 'completed'] as const;
-export const STALE_PROCESSING_TIMEOUT_MS = 5 * 60 * 1000;
+export const STALE_PROCESSING_TIMEOUT_MS = 3 * 60 * 1000;
 export const RECEIPT_PRIMARY_CURRENCY_CONFIRMATION_OPTION = 'GBP' as const;
 export const RECEIPT_PRIORITY_CURRENCY_CONFIRMATION_OPTIONS = [
   'GBP',
