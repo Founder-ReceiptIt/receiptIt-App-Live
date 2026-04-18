@@ -14,11 +14,32 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 console.log('[Supabase] Client initialized successfully');
 
 export const FINALIZED_RECEIPT_STATUSES = ['parsed', 'completed'] as const;
+export const RECEIPT_CURRENCY_CONFIRMATION_OPTIONS = ['GBP', 'EUR', 'USD'] as const;
+
+export type ReceiptCurrencyConfirmationOption =
+  typeof RECEIPT_CURRENCY_CONFIRMATION_OPTIONS[number];
 
 export const isFinalizedReceiptStatus = (
   status: unknown
 ): status is typeof FINALIZED_RECEIPT_STATUSES[number] =>
   typeof status === 'string' && FINALIZED_RECEIPT_STATUSES.includes(status as typeof FINALIZED_RECEIPT_STATUSES[number]);
+
+export const needsCurrencyConfirmation = (
+  status: unknown,
+  errorReason: unknown
+): boolean => status === 'needs_input' && errorReason === 'currency_missing';
+
+export const confirmReceiptCurrency = async (
+  receiptId: string,
+  currency: ReceiptCurrencyConfirmationOption
+) => supabase
+  .from('receipts')
+  .update({
+    user_confirmed_currency: currency,
+    status: 'processing',
+    error_reason: null,
+  })
+  .eq('id', receiptId);
 
 export interface ReceiptItem {
   id: string;
@@ -79,6 +100,7 @@ export interface Receipt {
   folder?: string | null;
   source: string | null;
   error_reason: string | null;
+  user_confirmed_currency: string | null;
   processing_attempts: number | null;
   /**
    * Legacy field kept for backwards compatibility. New code should use

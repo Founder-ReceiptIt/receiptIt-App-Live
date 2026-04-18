@@ -3,10 +3,14 @@ import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, Shopping
 import { Video as LucideIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import {
+  confirmReceiptCurrency,
+  needsCurrencyConfirmation,
   isFinalizedReceiptStatus,
+  RECEIPT_CURRENCY_CONFIRMATION_OPTIONS,
   supabase,
   Receipt as SupabaseReceiptRow,
 } from '../../lib/supabase';
+import type { ReceiptCurrencyConfirmationOption } from '../../lib/supabase';
 import { getPurchaseDateDisplay } from '../../lib/receiptDateUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
@@ -65,7 +69,7 @@ const formatCurrencyAmount = (currencyCode: string, amount: number): string => (
   `${getCurrencySymbol(currencyCode)}${amount.toFixed(2)}`
 );
 
-const WALLET_RECEIPT_STATUSES = ['processing', 'parsed', 'completed', 'duplicate', 'failed', 'skipped'] as const;
+const WALLET_RECEIPT_STATUSES = ['needs_input', 'processing', 'parsed', 'completed', 'duplicate', 'failed', 'skipped'] as const;
 const HIDDEN_WALLET_RECEIPT_STATUSES = ['duplicate', 'failed', 'skipped'] as const;
 const PROCESSING_VISIBILITY_TIMEOUT_MS = 2 * 60 * 1000;
 
@@ -73,6 +77,7 @@ const isHiddenWalletReceiptStatus = (status: unknown): status is typeof HIDDEN_W
   typeof status === 'string' && HIDDEN_WALLET_RECEIPT_STATUSES.includes(status as typeof HIDDEN_WALLET_RECEIPT_STATUSES[number]);
 
 const getReceiptStatusPriority = (status: unknown): number => {
+  if (status === 'needs_input') return 4;
   if (status === 'parsed') return 3;
   if (status === 'completed') return 2;
   if (status === 'processing') return 1;
@@ -87,6 +92,13 @@ const isRecentProcessingTimestamp = (createdAt?: string | null): boolean => {
 
   return Date.now() - createdAtMs <= PROCESSING_VISIBILITY_TIMEOUT_MS;
 };
+
+const shouldKeepProcessingReceiptVisible = (
+  createdAt?: string | null,
+  userConfirmedCurrency?: string | null
+): boolean => (
+  isRecentProcessingTimestamp(createdAt) || Boolean(userConfirmedCurrency)
+);
 
 const getNormalizedAmountKey = (amount: string | number | null | undefined): string => {
   const numericAmount = typeof amount === 'number' ? amount : parseFloat(String(amount ?? ''));
@@ -170,7 +182,10 @@ const dedupeWalletReceipts = (receipts: Receipt[]): Receipt[] => {
 const filterVisibleReceiptRows = (rows: SupabaseReceiptRow[]): SupabaseReceiptRow[] =>
   rows.filter((row) => {
     if (isFinalizedReceiptStatus(row.status)) return true;
-    if (row.status === 'processing') return isRecentProcessingTimestamp(row.created_at);
+    if (needsCurrencyConfirmation(row.status, row.error_reason)) return true;
+    if (row.status === 'processing') {
+      return shouldKeepProcessingReceiptVisible(row.created_at, row.user_confirmed_currency);
+    }
     if (isHiddenWalletReceiptStatus(row.status)) return false;
     return false;
   });
@@ -178,7 +193,10 @@ const filterVisibleReceiptRows = (rows: SupabaseReceiptRow[]): SupabaseReceiptRo
 const filterVisibleWalletReceipts = (receipts: Receipt[]): Receipt[] =>
   receipts.filter((receipt) => {
     if (isFinalizedReceiptStatus(receipt.status)) return true;
-    if (receipt.status === 'processing') return isRecentProcessingTimestamp(receipt.createdAt);
+    if (needsCurrencyConfirmation(receipt.status, receipt.errorReason)) return true;
+    if (receipt.status === 'processing') {
+      return shouldKeepProcessingReceiptVisible(receipt.createdAt, receipt.userConfirmedCurrency);
+    }
     if (isHiddenWalletReceiptStatus(receipt.status)) return false;
     return false;
   });
@@ -328,6 +346,8 @@ export interface Receipt {
   location?: string;
   folder?: 'work' | 'personal' | null;
   status?: string;
+  errorReason?: string | null;
+  userConfirmedCurrency?: string | null;
   imageUrl?: string;
   storagePath?: string;
   createdAt?: string;
@@ -358,6 +378,10 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedReceipts, setSelectedReceipts] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
+  const [currencyConfirmationState, setCurrencyConfirmationState] = useState<{
+    receiptId: string;
+    currency: ReceiptCurrencyConfirmationOption;
+  } | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [moveMenuOpen, setMoveMenuOpen] = useState(false);
   const previousReceiptIdsRef = useRef<Set<string>>(new Set());
@@ -477,6 +501,8 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             location: '',
             folder: row.folder === 'work' || row.folder === 'personal' ? row.folder : null,
             status: row.status || '',
+            errorReason: row.error_reason,
+            userConfirmedCurrency: row.user_confirmed_currency,
             imageUrl: row.image_url || '',
             storagePath: row.storage_path || '',
             createdAt: row.created_at || undefined,
@@ -708,6 +734,41 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
       showToast('Failed to move receipts', 'error');
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleCurrencyConfirmation = async (receiptId: string, currency: ReceiptCurrencyConfirmationOption) => {
+    const targetReceipt = receipts.find((receipt) => receipt.id === receiptId);
+    if (!targetReceipt) return;
+
+    setCurrencyConfirmationState({ receiptId, currency });
+
+    try {
+      const { error } = await confirmReceiptCurrency(receiptId, currency);
+
+      if (error) {
+        console.error('[WalletTab] Error confirming receipt currency:', error);
+        showToast('Failed to confirm currency', targetReceipt.merchant);
+        return;
+      }
+
+      setReceipts((currentReceipts) => currentReceipts.map((receipt) => (
+        receipt.id === receiptId
+          ? {
+            ...receipt,
+            status: 'processing',
+            errorReason: null,
+            userConfirmedCurrency: currency,
+          }
+          : receipt
+      )));
+
+      showToast('Currency confirmed', `${targetReceipt.merchant} - ${currency}`);
+    } catch (error) {
+      console.error('[WalletTab] Unexpected error confirming receipt currency:', error);
+      showToast('Failed to confirm currency', targetReceipt.merchant);
+    } finally {
+      setCurrencyConfirmationState(null);
     }
   };
 
@@ -1001,151 +1062,192 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
               {filteredReceipts.map((receipt, index) => {
             const MerchantIcon = receipt.merchantIcon;
             const isProcessing = receipt.status === 'processing';
+            const requiresCurrencyConfirmation = needsCurrencyConfirmation(receipt.status, receipt.errorReason);
+            const isConfirmingCurrency = currencyConfirmationState?.receiptId === receipt.id;
             const hasActiveWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) > new Date();
             const hasExpiredWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) <= new Date();
             const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
             return (
-              <motion.button
+              <motion.div
                 key={receipt.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: index * 0.1, ease: [0.22, 1, 0.36, 1] }}
                 whileHover={{ scale: isProcessing ? 1 : 1.02 }}
-                whileTap={{ scale: isProcessing ? 1 : 0.98 }}
-                onClick={() => {
-                  if (selectMode && !isProcessing) {
-                    toggleReceiptSelection(receipt.id);
-                  } else if (!isProcessing) {
-                    onReceiptClick(receipt);
-                  }
-                }}
                 className={`w-full backdrop-blur-xl border rounded-xl p-5 transition-all text-left relative ${
                   selectMode && selectedReceipts.has(receipt.id)
                     ? 'bg-teal-400/20 border-teal-400/60'
                     : isProcessing
                     ? 'bg-teal-400/5 border-teal-400/30 cursor-default'
+                    : requiresCurrencyConfirmation
+                    ? 'bg-amber-400/5 border-amber-400/30'
                     : hasActiveWarranty
                     ? 'bg-gradient-to-br from-emerald-900/10 to-teal-900/5 border-emerald-500/50 hover:bg-gradient-to-br hover:from-emerald-900/15 hover:to-teal-900/10 hover:border-emerald-400/60 shadow-[0_0_20px_rgba(16,185,129,0.2)]'
                     : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-teal-400/30'
                 }`}
               >
-                <div className="flex items-start gap-4 mb-3">
-                  {selectMode ? (
-                    <div className="w-12 h-12 flex-shrink-0 rounded-xl border border-teal-400/50 bg-teal-400/10 flex items-center justify-center">
-                      {selectedReceipts.has(receipt.id) ? (
-                        <CheckSquare className="w-6 h-6 text-teal-400" strokeWidth={2} />
-                      ) : (
-                        <Square className="w-6 h-6 text-gray-500" strokeWidth={1.5} />
-                      )}
-                    </div>
-                  ) : (
-                    <div className={`w-12 h-12 flex-shrink-0 rounded-xl border flex items-center justify-center ${
-                      isProcessing
-                        ? 'bg-teal-400/10 border-teal-400/30'
-                        : 'bg-gradient-to-br from-white/10 to-white/5 border-white/10'
-                    }`}>
-                      {isProcessing ? (
-                        <Loader2 className="w-6 h-6 text-teal-400 animate-spin" strokeWidth={1.5} />
-                      ) : (
-                        <MerchantIcon className="w-6 h-6 text-teal-400" strokeWidth={1.5} />
-                      )}
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    {isProcessing ? (
-                      <motion.h3 className="text-lg font-bold mb-1 text-teal-400">
-                        Processing<motion.span
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: [0, 1, 1, 0] }}
-                          transition={{ duration: 1.5, repeat: Infinity }}
-                        >
-                          .
-                        </motion.span>
-                        <motion.span
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: [0, 0, 1, 0] }}
-                          transition={{ duration: 1.5, repeat: Infinity }}
-                        >
-                          .
-                        </motion.span>
-                        <motion.span
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: [0, 0, 1, 0] }}
-                          transition={{ duration: 1.5, repeat: Infinity, delay: 0.1 }}
-                        >
-                          .
-                        </motion.span>
-                      </motion.h3>
-                    ) : (
-                      <h3 className="text-lg font-bold mb-1 text-white">
-                        {receipt.merchant}
-                      </h3>
-                    )}
-
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm text-gray-400">{getPurchaseDateDisplay(receipt.date, 'short')}</p>
-                      {hasActiveWarranty && !isProcessing && (
-                        <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-400/10 border border-emerald-400/30 rounded-full">
-                          <Shield className="w-3 h-3 text-emerald-400" strokeWidth={2} />
-                          <span className="text-emerald-400 text-xs font-bold">Active</span>
-                        </div>
-                      )}
-                      {hasExpiredWarranty && !isProcessing && (
-                        <div className="flex items-center gap-1 px-2 py-0.5 bg-red-400/10 border border-red-400/30 rounded-full">
-                          <Shield className="w-3 h-3 text-red-400" strokeWidth={2} />
-                          <span className="text-red-400 text-xs font-bold">Expired</span>
-                        </div>
-                      )}
-                      {returnWindowStatus.status === 'active' && !isProcessing && (
-                        <div className="flex items-center gap-1 px-1.5 py-0.5 bg-red-400/10 border border-red-400/20 rounded-full">
-                          <Undo2 className="w-2.5 h-2.5 text-red-400" strokeWidth={2.5} />
-                          <span className="text-red-400 text-[10px] font-bold">{returnWindowStatus.message}</span>
-                        </div>
-                      )}
-                      {returnWindowStatus.status === 'urgent' && !isProcessing && (
-                        <div className="flex items-center gap-1 px-1.5 py-0.5 bg-red-500/20 border border-red-500/40 rounded-full animate-pulse">
-                          <Undo2 className="w-2.5 h-2.5 text-red-400" strokeWidth={2.5} />
-                          <span className="text-red-400 text-[10px] font-bold">{returnWindowStatus.message}</span>
-                        </div>
-                      )}
-                      {returnWindowStatus.status === 'expired' && !isProcessing && (
-                        <div className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-400/10 border border-gray-400/20 rounded-full">
-                          <Undo2 className="w-2.5 h-2.5 text-gray-500" strokeWidth={2.5} />
-                          <span className="text-gray-500 text-[10px] font-bold">{returnWindowStatus.message}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {!isProcessing && (
-                    <div className="text-right">
-                      <div className="text-2xl font-bold text-white">
-                        {formatCurrencyAmount(receipt.currency, receipt.amount)}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectMode && !isProcessing) {
+                      toggleReceiptSelection(receipt.id);
+                    } else if (!isProcessing) {
+                      onReceiptClick(receipt);
+                    }
+                  }}
+                  className={`w-full text-left ${!isProcessing ? 'cursor-pointer' : 'cursor-default'}`}
+                >
+                  <div className="flex items-start gap-4 mb-3">
+                    {selectMode ? (
+                      <div className="w-12 h-12 flex-shrink-0 rounded-xl border border-teal-400/50 bg-teal-400/10 flex items-center justify-center">
+                        {selectedReceipts.has(receipt.id) ? (
+                          <CheckSquare className="w-6 h-6 text-teal-400" strokeWidth={2} />
+                        ) : (
+                          <Square className="w-6 h-6 text-gray-500" strokeWidth={1.5} />
+                        )}
                       </div>
-                      {receipt.currency && receipt.currency.toUpperCase() !== 'GBP' && receipt.amount_gbp !== null && (
-                        <div className="text-xs pt-1 text-gray-400">
-                          Approx. £{receipt.amount_gbp.toFixed(2)}
-                        </div>
+                    ) : (
+                      <div className={`w-12 h-12 flex-shrink-0 rounded-xl border flex items-center justify-center ${
+                        isProcessing
+                          ? 'bg-teal-400/10 border-teal-400/30'
+                          : requiresCurrencyConfirmation
+                          ? 'bg-amber-400/10 border-amber-400/30'
+                          : 'bg-gradient-to-br from-white/10 to-white/5 border-white/10'
+                      }`}>
+                        {isProcessing ? (
+                          <Loader2 className="w-6 h-6 text-teal-400 animate-spin" strokeWidth={1.5} />
+                        ) : (
+                          <MerchantIcon className="w-6 h-6 text-teal-400" strokeWidth={1.5} />
+                        )}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      {isProcessing ? (
+                        <motion.h3 className="text-lg font-bold mb-1 text-teal-400">
+                          Processing<motion.span
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: [0, 1, 1, 0] }}
+                            transition={{ duration: 1.5, repeat: Infinity }}
+                          >
+                            .
+                          </motion.span>
+                          <motion.span
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: [0, 0, 1, 0] }}
+                            transition={{ duration: 1.5, repeat: Infinity }}
+                          >
+                            .
+                          </motion.span>
+                          <motion.span
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: [0, 0, 1, 0] }}
+                            transition={{ duration: 1.5, repeat: Infinity, delay: 0.1 }}
+                          >
+                            .
+                          </motion.span>
+                        </motion.h3>
+                      ) : (
+                        <h3 className="text-lg font-bold mb-1 text-white">
+                          {receipt.merchant}
+                        </h3>
                       )}
-                    </div>
-                  )}
-                </div>
 
-                <div className="flex items-center gap-2 flex-wrap">
-                  {isProcessing ? (
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md text-teal-400 bg-teal-400/10 border-teal-400/30">
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      Processing...
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-gray-400">{getPurchaseDateDisplay(receipt.date, 'short')}</p>
+                        {hasActiveWarranty && !isProcessing && (
+                          <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-400/10 border border-emerald-400/30 rounded-full">
+                            <Shield className="w-3 h-3 text-emerald-400" strokeWidth={2} />
+                            <span className="text-emerald-400 text-xs font-bold">Active</span>
+                          </div>
+                        )}
+                        {hasExpiredWarranty && !isProcessing && (
+                          <div className="flex items-center gap-1 px-2 py-0.5 bg-red-400/10 border border-red-400/30 rounded-full">
+                            <Shield className="w-3 h-3 text-red-400" strokeWidth={2} />
+                            <span className="text-red-400 text-xs font-bold">Expired</span>
+                          </div>
+                        )}
+                        {returnWindowStatus.status === 'active' && !isProcessing && (
+                          <div className="flex items-center gap-1 px-1.5 py-0.5 bg-red-400/10 border border-red-400/20 rounded-full">
+                            <Undo2 className="w-2.5 h-2.5 text-red-400" strokeWidth={2.5} />
+                            <span className="text-red-400 text-[10px] font-bold">{returnWindowStatus.message}</span>
+                          </div>
+                        )}
+                        {returnWindowStatus.status === 'urgent' && !isProcessing && (
+                          <div className="flex items-center gap-1 px-1.5 py-0.5 bg-red-500/20 border border-red-500/40 rounded-full animate-pulse">
+                            <Undo2 className="w-2.5 h-2.5 text-red-400" strokeWidth={2.5} />
+                            <span className="text-red-400 text-[10px] font-bold">{returnWindowStatus.message}</span>
+                          </div>
+                        )}
+                        {returnWindowStatus.status === 'expired' && !isProcessing && (
+                          <div className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-400/10 border border-gray-400/20 rounded-full">
+                            <Undo2 className="w-2.5 h-2.5 text-gray-500" strokeWidth={2.5} />
+                            <span className="text-gray-500 text-[10px] font-bold">{returnWindowStatus.message}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  ) : (
-                    <>
+                    {!isProcessing && (
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-white">
+                          {requiresCurrencyConfirmation ? receipt.amount.toFixed(2) : formatCurrencyAmount(receipt.currency, receipt.amount)}
+                        </div>
+                        {requiresCurrencyConfirmation ? (
+                          <div className="text-xs pt-1 text-amber-300">
+                            Awaiting currency
+                          </div>
+                        ) : (
+                          receipt.currency && receipt.currency.toUpperCase() !== 'GBP' && receipt.amount_gbp !== null && (
+                            <div className="text-xs pt-1 text-gray-400">
+                              Approx. £{receipt.amount_gbp.toFixed(2)}
+                            </div>
+                          )
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {isProcessing ? (
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md text-teal-400 bg-teal-400/10 border-teal-400/30">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Processing...
+                      </div>
+                    ) : (
                       <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md ${getTagColor(receipt.category)}`}>
                         <Tag className="w-3 h-3" />
                         {receipt.category}
                       </div>
-                    </>
-                  )}
-                </div>
-              </motion.button>
+                    )}
+                  </div>
+                </button>
+
+                {requiresCurrencyConfirmation && (
+                  <div className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-amber-200">Currency missing, please confirm</p>
+                        <p className="text-xs text-amber-100/80">Choose the currency for this receipt to send it back into processing.</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {RECEIPT_CURRENCY_CONFIRMATION_OPTIONS.map((currencyOption) => (
+                          <button
+                            key={currencyOption}
+                            type="button"
+                            onClick={() => void handleCurrencyConfirmation(receipt.id, currencyOption)}
+                            disabled={isConfirmingCurrency}
+                            className="px-3 py-1.5 rounded-lg border border-amber-300/30 bg-black/20 text-sm font-semibold text-amber-100 hover:bg-amber-300/10 hover:border-amber-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {currencyConfirmationState?.receiptId === receipt.id
+                              && currencyConfirmationState.currency === currencyOption
+                              ? 'Saving...'
+                              : currencyOption}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </motion.div>
             );
           })}
             </div>
