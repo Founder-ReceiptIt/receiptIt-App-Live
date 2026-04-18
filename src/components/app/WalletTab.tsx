@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Shield, Loader2, Car, Home, Plane, Zap, Utensils, Undo2, Trash2, CheckSquare, Square, ChevronDown } from 'lucide-react';
 import { Video as LucideIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
+import { ReportProblemDialog } from './ReportProblemDialog';
 import {
   confirmReceiptCurrency,
   deleteReceiptRecord,
@@ -458,6 +459,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
   } | null>(null);
   const [processingAttemptStartedAtByReceiptId, setProcessingAttemptStartedAtByReceiptId] = useState<Record<string, string>>({});
   const [otherCurrencyReceiptId, setOtherCurrencyReceiptId] = useState<string | null>(null);
+  const [reportProblemReceipt, setReportProblemReceipt] = useState<{ id: string; merchant: string } | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [moveMenuOpen, setMoveMenuOpen] = useState(false);
   const previousReceiptIdsRef = useRef<Set<string>>(new Set());
@@ -1431,6 +1433,17 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                             >
                               {isDeleting ? 'Deleting...' : 'Delete'}
                             </button>
+                            <button
+                              type="button"
+                              onClick={() => setReportProblemReceipt({
+                                id: receipt.id,
+                                merchant: receipt.merchant,
+                              })}
+                              disabled={isDeleting || isConfirmingCurrency}
+                              className="px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              Report a problem
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -1507,6 +1520,13 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
             </div>
           )}
         </AnimatePresence>
+
+        <ReportProblemDialog
+          isOpen={Boolean(reportProblemReceipt)}
+          onClose={() => setReportProblemReceipt(null)}
+          receiptId={reportProblemReceipt?.id}
+          receiptMerchant={reportProblemReceipt?.merchant}
+        />
 
         <AnimatePresence>
           {deleteConfirmOpen && (

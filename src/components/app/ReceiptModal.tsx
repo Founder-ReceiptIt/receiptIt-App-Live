@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Download, MoreVertical, Undo2, CreditCard as Edit2, Save, ChevronDown } from 'lucide-react';
 import { Receipt } from './WalletTab';
+import { ReportProblemDialog } from './ReportProblemDialog';
 import { useState, useEffect } from 'react';
 import {
   confirmReceiptCurrency,
@@ -140,6 +141,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   } | null>(null);
   const [processingAttemptStartedAt, setProcessingAttemptStartedAt] = useState<string | null>(null);
   const [showOtherCurrencyOptions, setShowOtherCurrencyOptions] = useState(false);
+  const [showReportProblemDialog, setShowReportProblemDialog] = useState(false);
 
   useEffect(() => {
     setShowDeleteMenu(false);
@@ -152,6 +154,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     }
     setProcessingAttemptStartedAt(receipt?.processingAttemptStartedAt || null);
     setShowOtherCurrencyOptions(false);
+    setShowReportProblemDialog(false);
   }, [receipt]);
 
   useEffect(() => {
@@ -830,6 +833,14 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                       >
                         {isDeleting ? 'Deleting...' : 'Delete'}
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowReportProblemDialog(true)}
+                        disabled={isDeleting || isConfirmingCurrency}
+                        className="px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Report a problem
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1266,6 +1277,14 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
 
             </div>
           </div>
+
+          <ReportProblemDialog
+            isOpen={showReportProblemDialog}
+            onClose={() => setShowReportProblemDialog(false)}
+            receiptId={receipt.id}
+            receiptMerchant={receipt.merchant}
+            zIndexClassName="z-[80]"
+          />
         </motion.div>
       </motion.div>
     </AnimatePresence>

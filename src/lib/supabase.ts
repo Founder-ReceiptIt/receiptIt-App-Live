@@ -176,6 +176,15 @@ export const RECEIPT_CURRENCY_CONFIRMATION_OPTIONS = [
 export type ReceiptCurrencyConfirmationOption =
   typeof RECEIPT_CURRENCY_CONFIRMATION_OPTIONS[number];
 
+export const BUG_REPORT_ISSUE_TYPES = [
+  'stuck_processing',
+  'currency_missing_loop',
+  'receipt_parse_problem',
+  'other',
+] as const;
+
+export type BugReportIssueType = typeof BUG_REPORT_ISSUE_TYPES[number];
+
 export const isReceiptCurrencyConfirmationOption = (
   value: string
 ): value is ReceiptCurrencyConfirmationOption =>
@@ -240,6 +249,25 @@ export const deleteReceiptRecord = async ({
     .delete()
     .eq('id', receiptId);
 };
+
+export const createBugReport = async ({
+  receiptId,
+  userId,
+  issueType,
+  note,
+}: {
+  receiptId?: string | null,
+  userId?: string | null,
+  issueType: BugReportIssueType,
+  note?: string | null,
+}) => supabase
+  .from('bug_reports')
+  .insert({
+    receipt_id: receiptId ?? null,
+    user_id: userId ?? null,
+    issue_type: issueType,
+    note: note?.trim() || null,
+  });
 
 const getProcessingReferenceTimestampMs = (
   createdAt?: string | null,
