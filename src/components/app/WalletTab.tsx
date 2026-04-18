@@ -4,11 +4,14 @@ import { Video as LucideIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import {
   confirmReceiptCurrency,
+  deleteReceiptRecord,
   isReceiptCurrencyConfirmationOption,
+  isReceiptStaleProcessing,
   needsCurrencyConfirmation,
   isFinalizedReceiptStatus,
   RECEIPT_CURRENCY_CONFIRMATION_OPTIONS,
   RECEIPT_PRIMARY_CURRENCY_CONFIRMATION_OPTION,
+  retryReceiptProcessing,
   supabase,
   Receipt as SupabaseReceiptRow,
 } from '../../lib/supabase';
@@ -74,7 +77,6 @@ const formatCurrencyAmount = (currencyCode: string, amount: number): string => (
 
 const WALLET_RECEIPT_STATUSES = ['needs_input', 'processing', 'parsed', 'completed', 'duplicate', 'failed', 'skipped'] as const;
 const HIDDEN_WALLET_RECEIPT_STATUSES = ['duplicate', 'failed', 'skipped'] as const;
-const PROCESSING_VISIBILITY_TIMEOUT_MS = 2 * 60 * 1000;
 
 const isHiddenWalletReceiptStatus = (status: unknown): status is typeof HIDDEN_WALLET_RECEIPT_STATUSES[number] =>
   typeof status === 'string' && HIDDEN_WALLET_RECEIPT_STATUSES.includes(status as typeof HIDDEN_WALLET_RECEIPT_STATUSES[number]);
@@ -86,22 +88,6 @@ const getReceiptStatusPriority = (status: unknown): number => {
   if (status === 'processing') return 1;
   return 0;
 };
-
-const isRecentProcessingTimestamp = (createdAt?: string | null): boolean => {
-  if (!createdAt) return false;
-
-  const createdAtMs = new Date(createdAt).getTime();
-  if (!Number.isFinite(createdAtMs)) return false;
-
-  return Date.now() - createdAtMs <= PROCESSING_VISIBILITY_TIMEOUT_MS;
-};
-
-const shouldKeepProcessingReceiptVisible = (
-  createdAt?: string | null,
-  userConfirmedCurrency?: string | null
-): boolean => (
-  isRecentProcessingTimestamp(createdAt) || Boolean(userConfirmedCurrency)
-);
 
 const getNormalizedAmountKey = (amount: string | number | null | undefined): string => {
   const numericAmount = typeof amount === 'number' ? amount : parseFloat(String(amount ?? ''));
@@ -190,9 +176,7 @@ const filterVisibleReceiptRows = (rows: SupabaseReceiptRow[]): SupabaseReceiptRo
   rows.filter((row) => {
     if (isFinalizedReceiptStatus(row.status)) return true;
     if (needsCurrencyConfirmation(row.status, row.error_reason)) return true;
-    if (row.status === 'processing') {
-      return shouldKeepProcessingReceiptVisible(row.created_at, row.user_confirmed_currency);
-    }
+    if (row.status === 'processing') return true;
     if (isHiddenWalletReceiptStatus(row.status)) return false;
     return false;
   });
@@ -201,9 +185,7 @@ const filterVisibleWalletReceipts = (receipts: Receipt[]): Receipt[] =>
   receipts.filter((receipt) => {
     if (isFinalizedReceiptStatus(receipt.status)) return true;
     if (needsCurrencyConfirmation(receipt.status, receipt.errorReason)) return true;
-    if (receipt.status === 'processing') {
-      return shouldKeepProcessingReceiptVisible(receipt.createdAt, receipt.userConfirmedCurrency);
-    }
+    if (receipt.status === 'processing') return true;
     if (isHiddenWalletReceiptStatus(receipt.status)) return false;
     return false;
   });
@@ -439,6 +421,7 @@ export interface Receipt {
   status?: string;
   errorReason?: string | null;
   userConfirmedCurrency?: string | null;
+  processingAttemptStartedAt?: string;
   imageUrl?: string;
   storagePath?: string;
   createdAt?: string;
@@ -473,6 +456,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
     receiptId: string;
     currency: ReceiptCurrencyConfirmationOption;
   } | null>(null);
+  const [processingAttemptStartedAtByReceiptId, setProcessingAttemptStartedAtByReceiptId] = useState<Record<string, string>>({});
   const [otherCurrencyReceiptId, setOtherCurrencyReceiptId] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [moveMenuOpen, setMoveMenuOpen] = useState(false);
@@ -646,7 +630,12 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
     };
   }, [user, showToast]);
 
-  const visibleReceipts = filterVisibleWalletReceipts(dedupeWalletReceipts(receipts));
+  const effectiveReceipts = receipts.map((receipt) => ({
+    ...receipt,
+    processingAttemptStartedAt: processingAttemptStartedAtByReceiptId[receipt.id] || receipt.processingAttemptStartedAt,
+  }));
+
+  const visibleReceipts = filterVisibleWalletReceipts(dedupeWalletReceipts(effectiveReceipts));
   const finalizedReceipts = visibleReceipts.filter((receipt) => isFinalizedReceiptStatus(receipt.status));
   const totalSpent = finalizedReceipts.reduce((sum, receipt) => sum + getReceiptGbpDisplayAmount(receipt), 0);
   const budget = {
@@ -676,6 +665,20 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
   useEffect(() => {
     onReceiptsChange?.(visibleReceipts);
   }, [onReceiptsChange, visibleReceipts]);
+
+  useEffect(() => {
+    setProcessingAttemptStartedAtByReceiptId((currentValue) => {
+      const nextValue = Object.fromEntries(
+        Object.entries(currentValue).filter(([receiptId]) => (
+          receipts.some((receipt) => receipt.id === receiptId && receipt.status === 'processing')
+        ))
+      );
+
+      return Object.keys(nextValue).length === Object.keys(currentValue).length
+        ? currentValue
+        : nextValue;
+    });
+  }, [receipts]);
 
   const workReceipts = finalizedReceipts.filter(r => r.folder === 'work');
   const personalReceipts = finalizedReceipts.filter(r => r.folder === 'personal');
@@ -775,14 +778,29 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
   const handleCurrencyConfirmation = async (receiptId: string, currency: ReceiptCurrencyConfirmationOption) => {
     const targetReceipt = receipts.find((receipt) => receipt.id === receiptId);
     if (!targetReceipt) return;
+    const processingAttemptStartedAt = new Date().toISOString();
+    const previousProcessingAttemptStartedAt = processingAttemptStartedAtByReceiptId[receiptId];
 
     setCurrencyConfirmationState({ receiptId, currency });
+    setProcessingAttemptStartedAtByReceiptId((currentValue) => ({
+      ...currentValue,
+      [receiptId]: processingAttemptStartedAt,
+    }));
 
     try {
       const { error } = await confirmReceiptCurrency(receiptId, currency);
 
       if (error) {
         console.error('[WalletTab] Error confirming receipt currency:', error);
+        setProcessingAttemptStartedAtByReceiptId((currentValue) => {
+          const nextValue = { ...currentValue };
+          if (previousProcessingAttemptStartedAt) {
+            nextValue[receiptId] = previousProcessingAttemptStartedAt;
+          } else {
+            delete nextValue[receiptId];
+          }
+          return nextValue;
+        });
         showToast('Failed to confirm currency', targetReceipt.merchant);
         return;
       }
@@ -794,6 +812,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
             status: 'processing',
             errorReason: null,
             userConfirmedCurrency: currency,
+            processingAttemptStartedAt,
           }
           : receipt
       )));
@@ -804,9 +823,113 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
       showToast('Currency confirmed', `${targetReceipt.merchant} - ${currency}`);
     } catch (error) {
       console.error('[WalletTab] Unexpected error confirming receipt currency:', error);
+      setProcessingAttemptStartedAtByReceiptId((currentValue) => {
+        const nextValue = { ...currentValue };
+        if (previousProcessingAttemptStartedAt) {
+          nextValue[receiptId] = previousProcessingAttemptStartedAt;
+        } else {
+          delete nextValue[receiptId];
+        }
+        return nextValue;
+      });
       showToast('Failed to confirm currency', targetReceipt.merchant);
     } finally {
       setCurrencyConfirmationState(null);
+    }
+  };
+
+  const handleRetryReceipt = async (receiptId: string) => {
+    const targetReceipt = receipts.find((receipt) => receipt.id === receiptId);
+    if (!targetReceipt) return;
+
+    const processingAttemptStartedAt = new Date().toISOString();
+    const previousProcessingAttemptStartedAt = processingAttemptStartedAtByReceiptId[receiptId];
+
+    setCurrencyConfirmationState({ receiptId, currency: RECEIPT_PRIMARY_CURRENCY_CONFIRMATION_OPTION });
+    setProcessingAttemptStartedAtByReceiptId((currentValue) => ({
+      ...currentValue,
+      [receiptId]: processingAttemptStartedAt,
+    }));
+
+    try {
+      const { error } = await retryReceiptProcessing(receiptId);
+
+      if (error) {
+        console.error('[WalletTab] Error retrying receipt processing:', error);
+        setProcessingAttemptStartedAtByReceiptId((currentValue) => {
+          const nextValue = { ...currentValue };
+          if (previousProcessingAttemptStartedAt) {
+            nextValue[receiptId] = previousProcessingAttemptStartedAt;
+          } else {
+            delete nextValue[receiptId];
+          }
+          return nextValue;
+        });
+        showToast('Failed to retry upload', targetReceipt.merchant);
+        return;
+      }
+
+      setReceipts((currentReceipts) => currentReceipts.map((receipt) => (
+        receipt.id === receiptId
+          ? {
+            ...receipt,
+            status: 'processing',
+            errorReason: null,
+            processingAttemptStartedAt,
+          }
+          : receipt
+      )));
+
+      showToast('Upload retry started', targetReceipt.merchant);
+    } catch (error) {
+      console.error('[WalletTab] Unexpected error retrying receipt processing:', error);
+      setProcessingAttemptStartedAtByReceiptId((currentValue) => {
+        const nextValue = { ...currentValue };
+        if (previousProcessingAttemptStartedAt) {
+          nextValue[receiptId] = previousProcessingAttemptStartedAt;
+        } else {
+          delete nextValue[receiptId];
+        }
+        return nextValue;
+      });
+      showToast('Failed to retry upload', targetReceipt.merchant);
+    } finally {
+      setCurrencyConfirmationState(null);
+    }
+  };
+
+  const handleDeleteReceipt = async (receiptId: string) => {
+    const targetReceipt = receipts.find((receipt) => receipt.id === receiptId);
+    if (!targetReceipt) return;
+
+    if (!confirm(`Delete receipt from ${targetReceipt.merchant || 'Receipt (Seller Unknown)'}?`)) return;
+
+    setIsDeleting(true);
+    try {
+      const { error } = await deleteReceiptRecord({
+        receiptId: targetReceipt.id,
+        storagePath: targetReceipt.storagePath,
+        imageUrl: targetReceipt.imageUrl,
+      });
+
+      if (error) {
+        console.error('[WalletTab] Error deleting stale receipt:', error);
+        showToast('Failed to delete receipt', targetReceipt.merchant);
+        return;
+      }
+
+      setReceipts((currentReceipts) => currentReceipts.filter((receipt) => receipt.id !== receiptId));
+      setProcessingAttemptStartedAtByReceiptId((currentValue) => {
+        const nextValue = { ...currentValue };
+        delete nextValue[receiptId];
+        return nextValue;
+      });
+      showToast('Receipt deleted', targetReceipt.merchant);
+    } catch (error) {
+      console.error('[WalletTab] Unexpected error deleting stale receipt:', error);
+      showToast('Failed to delete receipt', targetReceipt.merchant);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -1098,168 +1221,222 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
           ) : (
             <div className="space-y-3">
               {filteredReceipts.map((receipt, index) => {
-            const MerchantIcon = receipt.merchantIcon;
-            const isProcessing = receipt.status === 'processing';
-            const requiresCurrencyConfirmation = needsCurrencyConfirmation(receipt.status, receipt.errorReason);
-            const isConfirmingCurrency = currencyConfirmationState?.receiptId === receipt.id;
-            const hasActiveWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) > new Date();
-            const hasExpiredWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) <= new Date();
-            const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
-            return (
-              <motion.div
-                key={receipt.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: index * 0.1, ease: [0.22, 1, 0.36, 1] }}
-                whileHover={{ scale: isProcessing ? 1 : 1.02 }}
-                className={`w-full backdrop-blur-xl border rounded-xl p-5 transition-all text-left relative ${
-                  selectMode && selectedReceipts.has(receipt.id)
-                    ? 'bg-teal-400/20 border-teal-400/60'
-                    : isProcessing
-                    ? 'bg-teal-400/5 border-teal-400/30 cursor-default'
-                    : requiresCurrencyConfirmation
-                    ? 'bg-amber-400/5 border-amber-400/30'
-                    : hasActiveWarranty
-                    ? 'bg-gradient-to-br from-emerald-900/10 to-teal-900/5 border-emerald-500/50 hover:bg-gradient-to-br hover:from-emerald-900/15 hover:to-teal-900/10 hover:border-emerald-400/60 shadow-[0_0_20px_rgba(16,185,129,0.2)]'
-                    : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-teal-400/30'
-                }`}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (selectMode && !isProcessing) {
-                      toggleReceiptSelection(receipt.id);
-                    } else if (!isProcessing) {
-                      onReceiptClick(receipt);
-                    }
-                  }}
-                  className={`w-full text-left ${!isProcessing ? 'cursor-pointer' : 'cursor-default'}`}
-                >
-                  <div className="flex items-start gap-4 mb-3">
-                    {selectMode ? (
-                      <div className="w-12 h-12 flex-shrink-0 rounded-xl border border-teal-400/50 bg-teal-400/10 flex items-center justify-center">
-                        {selectedReceipts.has(receipt.id) ? (
-                          <CheckSquare className="w-6 h-6 text-teal-400" strokeWidth={2} />
-                        ) : (
-                          <Square className="w-6 h-6 text-gray-500" strokeWidth={1.5} />
-                        )}
-                      </div>
-                    ) : (
-                      <div className={`w-12 h-12 flex-shrink-0 rounded-xl border flex items-center justify-center ${
-                        isProcessing
-                          ? 'bg-teal-400/10 border-teal-400/30'
-                          : requiresCurrencyConfirmation
-                          ? 'bg-amber-400/10 border-amber-400/30'
-                          : 'bg-gradient-to-br from-white/10 to-white/5 border-white/10'
-                      }`}>
-                        {isProcessing ? (
-                          <Loader2 className="w-6 h-6 text-teal-400 animate-spin" strokeWidth={1.5} />
-                        ) : (
-                          <MerchantIcon className="w-6 h-6 text-teal-400" strokeWidth={1.5} />
-                        )}
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      {isProcessing ? (
-                        <motion.h3 className="text-lg font-bold mb-1 text-teal-400">
-                          Processing<motion.span
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: [0, 1, 1, 0] }}
-                            transition={{ duration: 1.5, repeat: Infinity }}
-                          >
-                            .
-                          </motion.span>
-                          <motion.span
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: [0, 0, 1, 0] }}
-                            transition={{ duration: 1.5, repeat: Infinity }}
-                          >
-                            .
-                          </motion.span>
-                          <motion.span
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: [0, 0, 1, 0] }}
-                            transition={{ duration: 1.5, repeat: Infinity, delay: 0.1 }}
-                          >
-                            .
-                          </motion.span>
-                        </motion.h3>
-                      ) : (
-                        <h3 className="text-lg font-bold mb-1 text-white">
-                          {receipt.merchant}
-                        </h3>
-                      )}
+                const MerchantIcon = receipt.merchantIcon;
+                const isProcessing = receipt.status === 'processing';
+                const isStaleProcessing = isReceiptStaleProcessing(
+                  receipt.status,
+                  receipt.createdAt,
+                  receipt.processingAttemptStartedAt
+                );
+                const isFreshProcessing = isProcessing && !isStaleProcessing;
+                const requiresCurrencyConfirmation = needsCurrencyConfirmation(receipt.status, receipt.errorReason);
+                const isConfirmingCurrency = currencyConfirmationState?.receiptId === receipt.id;
+                const hasActiveWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) > new Date();
+                const hasExpiredWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) <= new Date();
+                const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
 
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm text-gray-400">{getPurchaseDateDisplay(receipt.date, 'short')}</p>
-                        {hasActiveWarranty && !isProcessing && (
-                          <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-400/10 border border-emerald-400/30 rounded-full">
-                            <Shield className="w-3 h-3 text-emerald-400" strokeWidth={2} />
-                            <span className="text-emerald-400 text-xs font-bold">Active</span>
+                return (
+                  <motion.div
+                    key={receipt.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: index * 0.1, ease: [0.22, 1, 0.36, 1] }}
+                    whileHover={{ scale: isFreshProcessing ? 1 : 1.02 }}
+                    className={`w-full backdrop-blur-xl border rounded-xl p-5 transition-all text-left relative ${
+                      selectMode && selectedReceipts.has(receipt.id)
+                        ? 'bg-teal-400/20 border-teal-400/60'
+                        : isFreshProcessing
+                        ? 'bg-teal-400/5 border-teal-400/30 cursor-default'
+                        : isStaleProcessing
+                        ? 'bg-red-500/5 border-red-500/30'
+                        : requiresCurrencyConfirmation
+                        ? 'bg-amber-400/5 border-amber-400/30'
+                        : hasActiveWarranty
+                        ? 'bg-gradient-to-br from-emerald-900/10 to-teal-900/5 border-emerald-500/50 hover:bg-gradient-to-br hover:from-emerald-900/15 hover:to-teal-900/10 hover:border-emerald-400/60 shadow-[0_0_20px_rgba(16,185,129,0.2)]'
+                        : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-teal-400/30'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectMode && !isFreshProcessing) {
+                          toggleReceiptSelection(receipt.id);
+                        } else if (!isFreshProcessing) {
+                          onReceiptClick(receipt);
+                        }
+                      }}
+                      className={`w-full text-left ${!isFreshProcessing ? 'cursor-pointer' : 'cursor-default'}`}
+                    >
+                      <div className="flex items-start gap-4 mb-3">
+                        {selectMode ? (
+                          <div className="w-12 h-12 flex-shrink-0 rounded-xl border border-teal-400/50 bg-teal-400/10 flex items-center justify-center">
+                            {selectedReceipts.has(receipt.id) ? (
+                              <CheckSquare className="w-6 h-6 text-teal-400" strokeWidth={2} />
+                            ) : (
+                              <Square className="w-6 h-6 text-gray-500" strokeWidth={1.5} />
+                            )}
+                          </div>
+                        ) : (
+                          <div className={`w-12 h-12 flex-shrink-0 rounded-xl border flex items-center justify-center ${
+                            isFreshProcessing
+                              ? 'bg-teal-400/10 border-teal-400/30'
+                              : isStaleProcessing
+                              ? 'bg-red-500/10 border-red-500/30'
+                              : requiresCurrencyConfirmation
+                              ? 'bg-amber-400/10 border-amber-400/30'
+                              : 'bg-gradient-to-br from-white/10 to-white/5 border-white/10'
+                          }`}>
+                            {isFreshProcessing ? (
+                              <Loader2 className="w-6 h-6 text-teal-400 animate-spin" strokeWidth={1.5} />
+                            ) : (
+                              <MerchantIcon className="w-6 h-6 text-teal-400" strokeWidth={1.5} />
+                            )}
                           </div>
                         )}
-                        {hasExpiredWarranty && !isProcessing && (
-                          <div className="flex items-center gap-1 px-2 py-0.5 bg-red-400/10 border border-red-400/30 rounded-full">
-                            <Shield className="w-3 h-3 text-red-400" strokeWidth={2} />
-                            <span className="text-red-400 text-xs font-bold">Expired</span>
+                        <div className="flex-1 min-w-0">
+                          {isFreshProcessing ? (
+                            <motion.h3 className="text-lg font-bold mb-1 text-teal-400">
+                              Processing<motion.span
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: [0, 1, 1, 0] }}
+                                transition={{ duration: 1.5, repeat: Infinity }}
+                              >
+                                .
+                              </motion.span>
+                              <motion.span
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: [0, 0, 1, 0] }}
+                                transition={{ duration: 1.5, repeat: Infinity }}
+                              >
+                                .
+                              </motion.span>
+                              <motion.span
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: [0, 0, 1, 0] }}
+                                transition={{ duration: 1.5, repeat: Infinity, delay: 0.1 }}
+                              >
+                                .
+                              </motion.span>
+                            </motion.h3>
+                          ) : isStaleProcessing ? (
+                            <>
+                              <h3 className="text-lg font-bold mb-1 text-red-400">Upload failed</h3>
+                              <p className="text-sm text-gray-400">{receipt.merchant}</p>
+                            </>
+                          ) : (
+                            <h3 className="text-lg font-bold mb-1 text-white">
+                              {receipt.merchant}
+                            </h3>
+                          )}
+
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm text-gray-400">{getPurchaseDateDisplay(receipt.date, 'short')}</p>
+                            {hasActiveWarranty && !isFreshProcessing && (
+                              <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-400/10 border border-emerald-400/30 rounded-full">
+                                <Shield className="w-3 h-3 text-emerald-400" strokeWidth={2} />
+                                <span className="text-emerald-400 text-xs font-bold">Active</span>
+                              </div>
+                            )}
+                            {hasExpiredWarranty && !isFreshProcessing && (
+                              <div className="flex items-center gap-1 px-2 py-0.5 bg-red-400/10 border border-red-400/30 rounded-full">
+                                <Shield className="w-3 h-3 text-red-400" strokeWidth={2} />
+                                <span className="text-red-400 text-xs font-bold">Expired</span>
+                              </div>
+                            )}
+                            {returnWindowStatus.status === 'active' && !isFreshProcessing && (
+                              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-red-400/10 border border-red-400/20 rounded-full">
+                                <Undo2 className="w-2.5 h-2.5 text-red-400" strokeWidth={2.5} />
+                                <span className="text-red-400 text-[10px] font-bold">{returnWindowStatus.message}</span>
+                              </div>
+                            )}
+                            {returnWindowStatus.status === 'urgent' && !isFreshProcessing && (
+                              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-red-500/20 border border-red-500/40 rounded-full animate-pulse">
+                                <Undo2 className="w-2.5 h-2.5 text-red-400" strokeWidth={2.5} />
+                                <span className="text-red-400 text-[10px] font-bold">{returnWindowStatus.message}</span>
+                              </div>
+                            )}
+                            {returnWindowStatus.status === 'expired' && !isFreshProcessing && (
+                              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-400/10 border border-gray-400/20 rounded-full">
+                                <Undo2 className="w-2.5 h-2.5 text-gray-500" strokeWidth={2.5} />
+                                <span className="text-gray-500 text-[10px] font-bold">{returnWindowStatus.message}</span>
+                              </div>
+                            )}
                           </div>
-                        )}
-                        {returnWindowStatus.status === 'active' && !isProcessing && (
-                          <div className="flex items-center gap-1 px-1.5 py-0.5 bg-red-400/10 border border-red-400/20 rounded-full">
-                            <Undo2 className="w-2.5 h-2.5 text-red-400" strokeWidth={2.5} />
-                            <span className="text-red-400 text-[10px] font-bold">{returnWindowStatus.message}</span>
-                          </div>
-                        )}
-                        {returnWindowStatus.status === 'urgent' && !isProcessing && (
-                          <div className="flex items-center gap-1 px-1.5 py-0.5 bg-red-500/20 border border-red-500/40 rounded-full animate-pulse">
-                            <Undo2 className="w-2.5 h-2.5 text-red-400" strokeWidth={2.5} />
-                            <span className="text-red-400 text-[10px] font-bold">{returnWindowStatus.message}</span>
-                          </div>
-                        )}
-                        {returnWindowStatus.status === 'expired' && !isProcessing && (
-                          <div className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-400/10 border border-gray-400/20 rounded-full">
-                            <Undo2 className="w-2.5 h-2.5 text-gray-500" strokeWidth={2.5} />
-                            <span className="text-gray-500 text-[10px] font-bold">{returnWindowStatus.message}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    {!isProcessing && (
-                      <div className="text-right">
-                        <div className="text-2xl font-bold text-white">
-                          {requiresCurrencyConfirmation ? receipt.amount.toFixed(2) : formatCurrencyAmount(receipt.currency, receipt.amount)}
                         </div>
-                        {requiresCurrencyConfirmation ? (
-                          <div className="text-xs pt-1 text-amber-300">
-                            Awaiting currency
-                          </div>
-                        ) : (
-                          receipt.currency && receipt.currency.toUpperCase() !== 'GBP' && receipt.amount_gbp !== null && (
-                            <div className="text-xs pt-1 text-gray-400">
-                              Approx. £{receipt.amount_gbp.toFixed(2)}
+                        {!isFreshProcessing && (
+                          <div className="text-right">
+                            <div className="text-2xl font-bold text-white">
+                              {requiresCurrencyConfirmation || isStaleProcessing ? receipt.amount.toFixed(2) : formatCurrencyAmount(receipt.currency, receipt.amount)}
                             </div>
-                          )
+                            {requiresCurrencyConfirmation ? (
+                              <div className="text-xs pt-1 text-amber-300">
+                                Awaiting currency
+                              </div>
+                            ) : isStaleProcessing ? (
+                              <div className="text-xs pt-1 text-red-300">
+                                Upload failed
+                              </div>
+                            ) : (
+                              receipt.currency && receipt.currency.toUpperCase() !== 'GBP' && receipt.amount_gbp !== null && (
+                                <div className="text-xs pt-1 text-gray-400">
+                                  Approx. £{receipt.amount_gbp.toFixed(2)}
+                                </div>
+                              )
+                            )}
+                          </div>
                         )}
                       </div>
-                    )}
-                  </div>
 
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {isProcessing ? (
-                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md text-teal-400 bg-teal-400/10 border-teal-400/30">
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                        Processing...
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {isFreshProcessing ? (
+                          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md text-teal-400 bg-teal-400/10 border-teal-400/30">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Processing...
+                          </div>
+                        ) : isStaleProcessing ? (
+                          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md text-red-400 bg-red-500/10 border-red-500/30">
+                            <X className="w-3 h-3" />
+                            Upload failed
+                          </div>
+                        ) : (
+                          <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md ${getTagColor(receipt.category)}`}>
+                            <Tag className="w-3 h-3" />
+                            {receipt.category}
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md ${getTagColor(receipt.category)}`}>
-                        <Tag className="w-3 h-3" />
-                        {receipt.category}
+                    </button>
+
+                    {isStaleProcessing && (
+                      <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-sm font-semibold text-red-300">Upload failed</p>
+                            <p className="text-xs text-red-100/80">This receipt has been processing for more than 5 minutes.</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void handleRetryReceipt(receipt.id)}
+                              disabled={isDeleting || isConfirmingCurrency}
+                              className="px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {isConfirmingCurrency ? 'Retrying...' : 'Retry'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteReceipt(receipt.id)}
+                              disabled={isDeleting || isConfirmingCurrency}
+                              className="px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {isDeleting ? 'Deleting...' : 'Delete'}
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     )}
-                  </div>
-                </button>
 
-                {requiresCurrencyConfirmation && (
+                    {requiresCurrencyConfirmation && (
                   <div className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
@@ -1323,10 +1500,10 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                       </div>
                     </div>
                   </div>
-                )}
-              </motion.div>
-            );
-          })}
+                    )}
+                  </motion.div>
+                );
+              })}
             </div>
           )}
         </AnimatePresence>

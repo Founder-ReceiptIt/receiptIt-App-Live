@@ -4,10 +4,13 @@ import { Receipt } from './WalletTab';
 import { useState, useEffect } from 'react';
 import {
   confirmReceiptCurrency,
+  deleteReceiptRecord,
   isReceiptCurrencyConfirmationOption,
+  isReceiptStaleProcessing,
   needsCurrencyConfirmation,
   RECEIPT_CURRENCY_CONFIRMATION_OPTIONS,
   RECEIPT_PRIMARY_CURRENCY_CONFIRMATION_OPTION,
+  retryReceiptProcessing,
   supabase,
 } from '../../lib/supabase';
 import type { ReceiptCurrencyConfirmationOption } from '../../lib/supabase';
@@ -135,6 +138,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     receiptId: string;
     currency: ReceiptCurrencyConfirmationOption;
   } | null>(null);
+  const [processingAttemptStartedAt, setProcessingAttemptStartedAt] = useState<string | null>(null);
   const [showOtherCurrencyOptions, setShowOtherCurrencyOptions] = useState(false);
 
   useEffect(() => {
@@ -146,6 +150,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
       setEditWarrantyDate(receipt.warrantyDate || '');
       setEditReturnDate(receipt.returnDate || '');
     }
+    setProcessingAttemptStartedAt(receipt?.processingAttemptStartedAt || null);
     setShowOtherCurrencyOptions(false);
   }, [receipt]);
 
@@ -225,30 +230,12 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
 
       setIsDeleting(true);
       try {
-        // Step 1: Try to delete storage file if it exists (don't block if this fails)
-        if (receipt.storagePath || receipt.imageUrl) {
-          const storagePath = receipt.storagePath || receipt.imageUrl;
-          if (storagePath && !storagePath.startsWith('http')) {
-            console.log('[Delete] Attempting to delete storage file:', storagePath);
-            const { error: storageError } = await supabase
-              .storage
-              .from('receipts')
-              .remove([storagePath]);
-
-            if (storageError) {
-              console.warn('[Delete] Storage deletion failed (non-critical):', storageError);
-            } else {
-              console.log('[Delete] Storage file deleted successfully');
-            }
-          }
-        }
-
-        // Step 2: Delete database record (this must succeed)
-        console.log('[Delete] Deleting database record:', receipt.id);
-        const { error: dbError } = await supabase
-          .from('receipts')
-          .delete()
-          .eq('id', receipt.id);
+        console.log('[Delete] Deleting receipt:', receipt.id);
+        const { error: dbError } = await deleteReceiptRecord({
+          receiptId: receipt.id,
+          storagePath: receipt.storagePath,
+          imageUrl: receipt.imageUrl,
+        });
 
         if (dbError) {
           console.error('[Delete] Database deletion failed:', dbError);
@@ -307,14 +294,18 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
 
   const handleCurrencyConfirmation = async (currency: ReceiptCurrencyConfirmationOption) => {
     if (!receipt) return;
+    const nextProcessingAttemptStartedAt = new Date().toISOString();
+    const previousProcessingAttemptStartedAt = processingAttemptStartedAt;
 
     setCurrencyConfirmationState({ receiptId: receipt.id, currency });
+    setProcessingAttemptStartedAt(nextProcessingAttemptStartedAt);
 
     try {
       const { error } = await confirmReceiptCurrency(receipt.id, currency);
 
       if (error) {
         console.error('[ReceiptModal] Error confirming receipt currency:', error);
+        setProcessingAttemptStartedAt(previousProcessingAttemptStartedAt);
         showToast('Failed to confirm currency', receipt.merchant);
         return;
       }
@@ -323,7 +314,40 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
       showToast('Currency confirmed', `${receipt.merchant} - ${currency}`);
     } catch (error) {
       console.error('[ReceiptModal] Unexpected error confirming receipt currency:', error);
+      setProcessingAttemptStartedAt(previousProcessingAttemptStartedAt);
       showToast('Failed to confirm currency', receipt.merchant);
+    } finally {
+      setCurrencyConfirmationState(null);
+    }
+  };
+
+  const handleRetryReceipt = async () => {
+    if (!receipt) return;
+
+    const nextProcessingAttemptStartedAt = new Date().toISOString();
+    const previousProcessingAttemptStartedAt = processingAttemptStartedAt;
+
+    setCurrencyConfirmationState({
+      receiptId: receipt.id,
+      currency: RECEIPT_PRIMARY_CURRENCY_CONFIRMATION_OPTION,
+    });
+    setProcessingAttemptStartedAt(nextProcessingAttemptStartedAt);
+
+    try {
+      const { error } = await retryReceiptProcessing(receipt.id);
+
+      if (error) {
+        console.error('[ReceiptModal] Error retrying receipt processing:', error);
+        setProcessingAttemptStartedAt(previousProcessingAttemptStartedAt);
+        showToast('Failed to retry upload', receipt.merchant);
+        return;
+      }
+
+      showToast('Upload retry started', receipt.merchant);
+    } catch (error) {
+      console.error('[ReceiptModal] Unexpected error retrying receipt processing:', error);
+      setProcessingAttemptStartedAt(previousProcessingAttemptStartedAt);
+      showToast('Failed to retry upload', receipt.merchant);
     } finally {
       setCurrencyConfirmationState(null);
     }
@@ -351,6 +375,11 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     return quantityUnit ? `${formattedValue} ${quantityUnit}` : formattedValue;
   };
   const receiptCurrencyCode = receipt.currency?.toUpperCase() || 'GBP';
+  const isStaleProcessing = isReceiptStaleProcessing(
+    receipt.status,
+    receipt.createdAt,
+    processingAttemptStartedAt
+  );
   const requiresCurrencyConfirmation = needsCurrencyConfirmation(receipt.status, receipt.errorReason);
   const isConfirmingCurrency = currencyConfirmationState?.receiptId === receipt.id;
   const receiptCurrencySymbol = getCurrencySymbol(receipt.currency);
@@ -776,6 +805,35 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   )}
                 </AnimatePresence>
               </div>
+
+              {isStaleProcessing && (
+                <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-red-300">Upload failed</p>
+                      <p className="text-xs text-red-100/80">This receipt has been processing for more than 5 minutes.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleRetryReceipt()}
+                        disabled={isDeleting || isConfirmingCurrency}
+                        className="px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isConfirmingCurrency ? 'Retrying...' : 'Retry'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDelete('now')}
+                        disabled={isDeleting || isConfirmingCurrency}
+                        className="px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isDeleting ? 'Deleting...' : 'Delete'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {requiresCurrencyConfirmation && (
                 <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-4">

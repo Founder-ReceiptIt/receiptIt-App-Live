@@ -14,6 +14,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 console.log('[Supabase] Client initialized successfully');
 
 export const FINALIZED_RECEIPT_STATUSES = ['parsed', 'completed'] as const;
+export const STALE_PROCESSING_TIMEOUT_MS = 5 * 60 * 1000;
 export const RECEIPT_PRIMARY_CURRENCY_CONFIRMATION_OPTION = 'GBP' as const;
 export const RECEIPT_PRIORITY_CURRENCY_CONFIRMATION_OPTIONS = [
   'GBP',
@@ -201,6 +202,68 @@ export const confirmReceiptCurrency = async (
     error_reason: null,
   })
   .eq('id', receiptId);
+
+export const retryReceiptProcessing = async (
+  receiptId: string
+) => supabase
+  .from('receipts')
+  .update({
+    status: 'processing',
+    error_reason: null,
+  })
+  .eq('id', receiptId);
+
+export const deleteReceiptRecord = async ({
+  receiptId,
+  storagePath,
+  imageUrl,
+}: {
+  receiptId: string,
+  storagePath?: string | null,
+  imageUrl?: string | null,
+}) => {
+  const removableStoragePath = storagePath || imageUrl;
+
+  if (removableStoragePath && !removableStoragePath.startsWith('http')) {
+    const { error: storageError } = await supabase
+      .storage
+      .from('receipts')
+      .remove([removableStoragePath]);
+
+    if (storageError) {
+      console.warn('[DeleteReceiptRecord] Storage deletion failed (non-critical):', storageError);
+    }
+  }
+
+  return supabase
+    .from('receipts')
+    .delete()
+    .eq('id', receiptId);
+};
+
+const getProcessingReferenceTimestampMs = (
+  createdAt?: string | null,
+  processingAttemptStartedAt?: string | null
+): number | null => {
+  const referenceTimestamp = processingAttemptStartedAt || createdAt;
+  if (!referenceTimestamp) return null;
+
+  const timestampMs = new Date(referenceTimestamp).getTime();
+  return Number.isFinite(timestampMs) ? timestampMs : null;
+};
+
+export const isReceiptStaleProcessing = (
+  status: unknown,
+  createdAt?: string | null,
+  processingAttemptStartedAt?: string | null
+): boolean => {
+  if (status !== 'processing') return false;
+
+  const referenceTimestampMs = getProcessingReferenceTimestampMs(createdAt, processingAttemptStartedAt);
+  if (referenceTimestampMs === null) return false;
+
+  return Date.now() - referenceTimestampMs > STALE_PROCESSING_TIMEOUT_MS;
+};
 
 export interface ReceiptItem {
   id: string;
