@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LoadingScreen } from './components/landing/LoadingScreen';
 import { TopNav } from './components/app/TopNav';
@@ -23,6 +23,16 @@ function App() {
   const [refreshKey, setRefreshKey] = useState(0);
   const isAuthenticated = Boolean(user && session);
   const shouldShowBootSplash = authLoading || (isAuthenticated && !needsAliasSetup && !showApp);
+
+  const handleWalletReceiptsChange = useCallback((receipts: Receipt[]) => {
+    setSelectedReceipt((currentReceipt) => {
+      if (!currentReceipt) {
+        return currentReceipt;
+      }
+
+      return receipts.find((receipt) => receipt.id === currentReceipt.id) || null;
+    });
+  }, []);
 
   useEffect(() => {
     const isScanning = localStorage.getItem('isScanning');
@@ -110,7 +120,11 @@ function App() {
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.3 }}
                   >
-                    <WalletTab key={refreshKey} onReceiptClick={setSelectedReceipt} />
+                    <WalletTab
+                      key={refreshKey}
+                      onReceiptClick={setSelectedReceipt}
+                      onReceiptsChange={handleWalletReceiptsChange}
+                    />
                   </motion.div>
                 )}
 

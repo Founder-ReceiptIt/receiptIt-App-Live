@@ -4,9 +4,11 @@ import { Video as LucideIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import {
   confirmReceiptCurrency,
+  isReceiptCurrencyConfirmationOption,
   needsCurrencyConfirmation,
   isFinalizedReceiptStatus,
   RECEIPT_CURRENCY_CONFIRMATION_OPTIONS,
+  RECEIPT_PRIMARY_CURRENCY_CONFIRMATION_OPTION,
   supabase,
   Receipt as SupabaseReceiptRow,
 } from '../../lib/supabase';
@@ -18,6 +20,7 @@ import { useToast } from '../../contexts/ToastContext';
 
 interface WalletTabProps {
   onReceiptClick: (receipt: Receipt) => void;
+  onReceiptsChange?: (receipts: Receipt[]) => void;
 }
 
 const getCategoryIcon = (category: string): LucideIcon => {
@@ -179,6 +182,10 @@ const dedupeWalletReceipts = (receipts: Receipt[]): Receipt[] => {
   return receipts.filter((receipt) => groupedReceipts.get(receipt.groupingKey)?.id === receipt.id);
 };
 
+const getSafeWalletReceipts = (receipts: Receipt[]): Receipt[] => (
+  filterVisibleWalletReceipts(dedupeWalletReceipts(receipts))
+);
+
 const filterVisibleReceiptRows = (rows: SupabaseReceiptRow[]): SupabaseReceiptRow[] =>
   rows.filter((row) => {
     if (isFinalizedReceiptStatus(row.status)) return true;
@@ -297,6 +304,90 @@ const buildReceiptSearchText = ({
     .join(' ')
 );
 
+const mapReceiptRowToWalletReceipt = (
+  row: SupabaseReceiptRow,
+  itemDescriptions: string[] = []
+): Receipt => {
+  const total = getNullableNumber(row.amount) ?? 0;
+  const totalGbp = getNullableNumber(row.amount_gbp);
+  const subtotal = getNullableNumber(row.subtotal);
+  const vatAmount = getNullableNumber(row.vat_amount);
+  const discountAmount = getNullableNumber(row.discount_amount);
+  const currencyCode = row.currency || 'GBP';
+  const currencySymbol = getCurrencySymbol(currencyCode);
+  const merchantName = row.merchant && row.merchant.trim() ? row.merchant : 'Receipt (Seller Unknown)';
+  const category = row.category || 'Other';
+  const date = row.transaction_date || undefined;
+  const referenceNumber = row.reference_number || `REF-${row.id.slice(0, 8)}`;
+
+  return {
+    id: row.id,
+    userId: row.user_id,
+    merchant: merchantName,
+    merchantIcon: getCategoryIcon(category),
+    merchantPhone: getNonEmptyString(row.merchant_phone),
+    merchantEmail: getNonEmptyString(row.merchant_email),
+    merchantWebsite: getNonEmptyString(row.merchant_website),
+    merchantAddress: getNonEmptyString(row.merchant_address),
+    merchantVatNumber: getNonEmptyString(row.merchant_vat_number),
+    merchantCompanyNumber: getNonEmptyString(row.merchant_company_number),
+    amount: total,
+    amount_gbp: totalGbp,
+    subtotal: subtotal ?? undefined,
+    vatAmount: vatAmount ?? undefined,
+    discountAmount: discountAmount ?? undefined,
+    currency: currencyCode,
+    currencySymbol,
+    date,
+    category,
+    tagColor: getTagColor(category),
+    hasWarranty: !!row.warranty_date,
+    warrantyDate: row.warranty_date || undefined,
+    returnDate: row.return_date || undefined,
+    referenceNumber,
+    customerNumber: row.customer_number || undefined,
+    orderNumber: row.order_number || undefined,
+    invoiceNumber: row.invoice_number || undefined,
+    loyaltyMemberId: row.loyalty_member_id || undefined,
+    summary: row.short_summary || '',
+    cardLast4: row.card_last_4 || '',
+    itemDescriptions,
+    searchText: buildReceiptSearchText({
+      merchant: merchantName,
+      summary: row.short_summary || undefined,
+      orderNumber: row.order_number || undefined,
+      invoiceNumber: row.invoice_number || undefined,
+      referenceNumber,
+      customerNumber: row.customer_number || undefined,
+      amount: total,
+      amountGbp: totalGbp,
+      date,
+      itemDescriptions,
+    }),
+    paymentMethod: '',
+    location: '',
+    folder: row.folder === 'work' || row.folder === 'personal' ? row.folder : null,
+    status: row.status || '',
+    errorReason: row.error_reason,
+    userConfirmedCurrency: row.user_confirmed_currency,
+    imageUrl: row.image_url || '',
+    storagePath: row.storage_path || '',
+    createdAt: row.created_at || undefined,
+    groupingKey: getReceiptGroupingKeyFromRow(row),
+  };
+};
+
+const mergeRealtimeReceiptIntoWallet = (
+  currentReceipts: Receipt[],
+  row: SupabaseReceiptRow
+): Receipt[] => {
+  const existingReceipt = currentReceipts.find((receipt) => receipt.id === row.id);
+  const nextReceipts = currentReceipts.filter((receipt) => receipt.id !== row.id);
+  const mergedReceipt = mapReceiptRowToWalletReceipt(row, existingReceipt?.itemDescriptions || []);
+
+  return getSafeWalletReceipts([...nextReceipts, mergedReceipt]);
+};
+
 export interface Receipt {
   id: string;
   userId: string;
@@ -354,7 +445,7 @@ export interface Receipt {
   groupingKey: string;
 }
 
-export function WalletTab({ onReceiptClick }: WalletTabProps) {
+export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) {
   const { user, username, emailAlias, fullName } = useAuth();
   const { showToast } = useToast();
 
@@ -382,6 +473,7 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
     receiptId: string;
     currency: ReceiptCurrencyConfirmationOption;
   } | null>(null);
+  const [otherCurrencyReceiptId, setOtherCurrencyReceiptId] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [moveMenuOpen, setMoveMenuOpen] = useState(false);
   const previousReceiptIdsRef = useRef<Set<string>>(new Set());
@@ -439,78 +531,10 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
 
         const formattedReceipts: Receipt[] = visibleDedupedRows.map((row) => {
           console.log('[WalletTab] Processing row:', row);
-
-          const total = getNullableNumber(row.amount) ?? 0;
-          const totalGbp = getNullableNumber(row.amount_gbp);
-          const subtotal = getNullableNumber(row.subtotal);
-          const vatAmount = getNullableNumber(row.vat_amount);
-          const discountAmount = getNullableNumber(row.discount_amount);
-          const currencyCode = row.currency || 'GBP';
-          const currencySymbol = getCurrencySymbol(currencyCode);
-          const merchantName = row.merchant && row.merchant.trim() ? row.merchant : 'Receipt (Seller Unknown)';
-          const category = row.category || 'Other';
-          const date = row.transaction_date || undefined;
-          const referenceNumber = row.reference_number || `REF-${row.id.slice(0, 8)}`;
-          const itemDescriptions = itemDescriptionsByReceipt.get(row.id) || [];
-
-          return {
-            id: row.id,
-            userId: row.user_id,
-            merchant: merchantName,
-            merchantIcon: getCategoryIcon(category),
-            merchantPhone: getNonEmptyString(row.merchant_phone),
-            merchantEmail: getNonEmptyString(row.merchant_email),
-            merchantWebsite: getNonEmptyString(row.merchant_website),
-            merchantAddress: getNonEmptyString(row.merchant_address),
-            merchantVatNumber: getNonEmptyString(row.merchant_vat_number),
-            merchantCompanyNumber: getNonEmptyString(row.merchant_company_number),
-            amount: total,
-            amount_gbp: totalGbp,
-            subtotal: subtotal ?? undefined,
-            vatAmount: vatAmount ?? undefined,
-            discountAmount: discountAmount ?? undefined,
-            currency: currencyCode,
-            currencySymbol: currencySymbol,
-            date,
-            category: category,
-            tagColor: getTagColor(category),
-            hasWarranty: !!row.warranty_date,
-            warrantyDate: row.warranty_date || undefined,
-            returnDate: row.return_date || undefined,
-            referenceNumber,
-            customerNumber: row.customer_number || undefined,
-            orderNumber: row.order_number || undefined,
-            invoiceNumber: row.invoice_number || undefined,
-            loyaltyMemberId: row.loyalty_member_id || undefined,
-            summary: row.short_summary || '',
-            cardLast4: row.card_last_4 || '',
-            itemDescriptions,
-            searchText: buildReceiptSearchText({
-              merchant: merchantName,
-              summary: row.short_summary || undefined,
-              orderNumber: row.order_number || undefined,
-              invoiceNumber: row.invoice_number || undefined,
-              referenceNumber,
-              customerNumber: row.customer_number || undefined,
-              amount: total,
-              amountGbp: totalGbp,
-              date,
-              itemDescriptions,
-            }),
-            paymentMethod: '',
-            location: '',
-            folder: row.folder === 'work' || row.folder === 'personal' ? row.folder : null,
-            status: row.status || '',
-            errorReason: row.error_reason,
-            userConfirmedCurrency: row.user_confirmed_currency,
-            imageUrl: row.image_url || '',
-            storagePath: row.storage_path || '',
-            createdAt: row.created_at || undefined,
-            groupingKey: getReceiptGroupingKeyFromRow(row),
-          };
+          return mapReceiptRowToWalletReceipt(row, itemDescriptionsByReceipt.get(row.id) || []);
         });
 
-        const safeReceipts = filterVisibleWalletReceipts(dedupeWalletReceipts(formattedReceipts));
+        const safeReceipts = getSafeWalletReceipts(formattedReceipts);
 
         // Track receipt IDs for notification detection
         previousReceiptIdsRef.current = new Set(safeReceipts.map(r => r.id));
@@ -556,6 +580,8 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
               return;
             }
 
+            setReceipts((currentReceipts) => mergeRealtimeReceiptIntoWallet(currentReceipts, newRow as SupabaseReceiptRow));
+
             if (isFinalizedReceiptStatus(newRow.status)) {
               const merchantName = newRow.merchant && newRow.merchant.trim() ? newRow.merchant : 'Receipt (Seller Unknown)';
               const amount = parseFloat(String(newRow.amount ?? '')) || parseFloat(String((newRow as any).total ?? '')) || 0;
@@ -575,10 +601,13 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
               const merchantDescription = updatedRow.merchant && updatedRow.merchant.trim()
                 ? updatedRow.merchant
                 : 'This receipt was already in your wallet';
+              setReceipts((currentReceipts) => currentReceipts.filter((receipt) => receipt.id !== updatedRow.id));
               showToast('Duplicate receipt rejected', merchantDescription);
               fetchReceipts();
               return;
             }
+
+            setReceipts((currentReceipts) => mergeRealtimeReceiptIntoWallet(currentReceipts, updatedRow as SupabaseReceiptRow));
 
             // Check if amount was just processed (changed from 0 or null to a value)
             const oldAmount = parseFloat(String(oldRow.amount ?? '')) || parseFloat(String((oldRow as any).total ?? '')) || 0;
@@ -593,6 +622,8 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
             fetchReceipts();
           } else if (payload.eventType === 'DELETE') {
             console.log('[WalletTab] Receipt deleted');
+            const deletedRow = payload.old as Partial<SupabaseReceiptRow>;
+            setReceipts((currentReceipts) => currentReceipts.filter((receipt) => receipt.id !== deletedRow.id));
             fetchReceipts();
           }
         }
@@ -641,6 +672,10 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
   };
 
   const filteredReceipts = visibleReceipts.filter(matchesReceiptFilters);
+
+  useEffect(() => {
+    onReceiptsChange?.(visibleReceipts);
+  }, [onReceiptsChange, visibleReceipts]);
 
   const workReceipts = finalizedReceipts.filter(r => r.folder === 'work');
   const personalReceipts = finalizedReceipts.filter(r => r.folder === 'personal');
@@ -763,6 +798,9 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
           : receipt
       )));
 
+      setOtherCurrencyReceiptId((currentReceiptId) => (
+        currentReceiptId === receiptId ? null : currentReceiptId
+      ));
       showToast('Currency confirmed', `${targetReceipt.merchant} - ${currency}`);
     } catch (error) {
       console.error('[WalletTab] Unexpected error confirming receipt currency:', error);
@@ -1228,21 +1266,60 @@ export function WalletTab({ onReceiptClick }: WalletTabProps) {
                         <p className="text-sm font-semibold text-amber-200">Currency missing, please confirm</p>
                         <p className="text-xs text-amber-100/80">Choose the currency for this receipt to send it back into processing.</p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {RECEIPT_CURRENCY_CONFIRMATION_OPTIONS.map((currencyOption) => (
+                      <div className="flex flex-col gap-2 sm:items-end">
+                        <div className="flex items-center gap-2">
                           <button
-                            key={currencyOption}
                             type="button"
-                            onClick={() => void handleCurrencyConfirmation(receipt.id, currencyOption)}
+                            onClick={() => void handleCurrencyConfirmation(receipt.id, RECEIPT_PRIMARY_CURRENCY_CONFIRMATION_OPTION)}
                             disabled={isConfirmingCurrency}
                             className="px-3 py-1.5 rounded-lg border border-amber-300/30 bg-black/20 text-sm font-semibold text-amber-100 hover:bg-amber-300/10 hover:border-amber-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             {currencyConfirmationState?.receiptId === receipt.id
-                              && currencyConfirmationState.currency === currencyOption
+                              && currencyConfirmationState.currency === RECEIPT_PRIMARY_CURRENCY_CONFIRMATION_OPTION
                               ? 'Saving...'
-                              : currencyOption}
+                              : 'GBP'}
                           </button>
-                        ))}
+                          <button
+                            type="button"
+                            onClick={() => setOtherCurrencyReceiptId((currentReceiptId) => (
+                              currentReceiptId === receipt.id ? null : receipt.id
+                            ))}
+                            disabled={isConfirmingCurrency}
+                            className={`px-3 py-1.5 rounded-lg border text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                              otherCurrencyReceiptId === receipt.id
+                                ? 'border-amber-200/50 bg-amber-300/10 text-amber-50'
+                                : 'border-amber-300/30 bg-black/20 text-amber-100 hover:bg-amber-300/10 hover:border-amber-200/50'
+                            }`}
+                          >
+                            Other
+                          </button>
+                        </div>
+                        {otherCurrencyReceiptId === receipt.id && (
+                          <select
+                            defaultValue=""
+                            onChange={(event) => {
+                              const selectedCurrency = event.target.value;
+                              if (isReceiptCurrencyConfirmationOption(selectedCurrency)) {
+                                void handleCurrencyConfirmation(receipt.id, selectedCurrency);
+                              }
+                            }}
+                            disabled={isConfirmingCurrency}
+                            className="w-full min-w-[200px] rounded-lg border border-amber-300/30 bg-black/30 px-3 py-2 text-sm font-semibold text-amber-50 outline-none transition-colors hover:border-amber-200/50 focus:border-amber-200/60 disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto"
+                          >
+                            <option value="" disabled className="bg-neutral-950 text-gray-400">
+                              Select currency
+                            </option>
+                            {RECEIPT_CURRENCY_CONFIRMATION_OPTIONS.map((currencyOption) => (
+                              <option
+                                key={currencyOption}
+                                value={currencyOption}
+                                className="bg-neutral-950 text-white"
+                              >
+                                {currencyOption}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                       </div>
                     </div>
                   </div>

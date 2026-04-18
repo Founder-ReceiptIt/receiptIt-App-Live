@@ -2,9 +2,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Download, MoreVertical, Undo2, CreditCard as Edit2, Save, ChevronDown } from 'lucide-react';
 import { Receipt } from './WalletTab';
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+import {
+  confirmReceiptCurrency,
+  isReceiptCurrencyConfirmationOption,
+  needsCurrencyConfirmation,
+  RECEIPT_CURRENCY_CONFIRMATION_OPTIONS,
+  RECEIPT_PRIMARY_CURRENCY_CONFIRMATION_OPTION,
+  supabase,
+} from '../../lib/supabase';
+import type { ReceiptCurrencyConfirmationOption } from '../../lib/supabase';
 import { formatReceiptDate, getPurchaseDateDisplay } from '../../lib/receiptDateUtils';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
+import { useToast } from '../../contexts/ToastContext';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -108,6 +117,7 @@ interface ReceiptModalProps {
 }
 
 export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) {
+  const { showToast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteMenu, setShowDeleteMenu] = useState(false);
   const [showMoreDetails, setShowMoreDetails] = useState(false);
@@ -121,6 +131,11 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const [receiptPayments, setReceiptPayments] = useState<ReceiptPaymentDisplay[]>([]);
   const [itemsLoading, setItemsLoading] = useState(false);
   const [itemsLoaded, setItemsLoaded] = useState(false);
+  const [currencyConfirmationState, setCurrencyConfirmationState] = useState<{
+    receiptId: string;
+    currency: ReceiptCurrencyConfirmationOption;
+  } | null>(null);
+  const [showOtherCurrencyOptions, setShowOtherCurrencyOptions] = useState(false);
 
   useEffect(() => {
     setShowDeleteMenu(false);
@@ -131,6 +146,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
       setEditWarrantyDate(receipt.warrantyDate || '');
       setEditReturnDate(receipt.returnDate || '');
     }
+    setShowOtherCurrencyOptions(false);
   }, [receipt]);
 
   useEffect(() => {
@@ -289,6 +305,30 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     }
   };
 
+  const handleCurrencyConfirmation = async (currency: ReceiptCurrencyConfirmationOption) => {
+    if (!receipt) return;
+
+    setCurrencyConfirmationState({ receiptId: receipt.id, currency });
+
+    try {
+      const { error } = await confirmReceiptCurrency(receipt.id, currency);
+
+      if (error) {
+        console.error('[ReceiptModal] Error confirming receipt currency:', error);
+        showToast('Failed to confirm currency', receipt.merchant);
+        return;
+      }
+
+      setShowOtherCurrencyOptions(false);
+      showToast('Currency confirmed', `${receipt.merchant} - ${currency}`);
+    } catch (error) {
+      console.error('[ReceiptModal] Unexpected error confirming receipt currency:', error);
+      showToast('Failed to confirm currency', receipt.merchant);
+    } finally {
+      setCurrencyConfirmationState(null);
+    }
+  };
+
   if (!receipt) return null;
 
   // --- LOGIC FIX: BETTER DATE HANDLING ---
@@ -311,6 +351,8 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     return quantityUnit ? `${formattedValue} ${quantityUnit}` : formattedValue;
   };
   const receiptCurrencyCode = receipt.currency?.toUpperCase() || 'GBP';
+  const requiresCurrencyConfirmation = needsCurrencyConfirmation(receipt.status, receipt.errorReason);
+  const isConfirmingCurrency = currencyConfirmationState?.receiptId === receipt.id;
   const receiptCurrencySymbol = getCurrencySymbol(receipt.currency);
   const subtotal = getValidMoneyValue(receipt.subtotal);
   const vatAmount = getValidMoneyValue(receipt.vatAmount);
@@ -734,6 +776,70 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   )}
                 </AnimatePresence>
               </div>
+
+              {requiresCurrencyConfirmation && (
+                <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-amber-200">Currency missing, please confirm</p>
+                      <p className="text-xs text-amber-100/80">Choose the currency for this receipt to send it back into processing.</p>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:items-end">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleCurrencyConfirmation(RECEIPT_PRIMARY_CURRENCY_CONFIRMATION_OPTION)}
+                          disabled={isConfirmingCurrency}
+                          className="px-3 py-1.5 rounded-lg border border-amber-300/30 bg-black/20 text-sm font-semibold text-amber-100 hover:bg-amber-300/10 hover:border-amber-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {currencyConfirmationState?.receiptId === receipt.id
+                            && currencyConfirmationState.currency === RECEIPT_PRIMARY_CURRENCY_CONFIRMATION_OPTION
+                            ? 'Saving...'
+                            : 'GBP'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowOtherCurrencyOptions((currentValue) => !currentValue)}
+                          disabled={isConfirmingCurrency}
+                          className={`px-3 py-1.5 rounded-lg border text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                            showOtherCurrencyOptions
+                              ? 'border-amber-200/50 bg-amber-300/10 text-amber-50'
+                              : 'border-amber-300/30 bg-black/20 text-amber-100 hover:bg-amber-300/10 hover:border-amber-200/50'
+                          }`}
+                        >
+                          Other
+                        </button>
+                      </div>
+                      {showOtherCurrencyOptions && (
+                        <select
+                          defaultValue=""
+                          onChange={(event) => {
+                            const selectedCurrency = event.target.value;
+                            if (isReceiptCurrencyConfirmationOption(selectedCurrency)) {
+                              void handleCurrencyConfirmation(selectedCurrency);
+                            }
+                          }}
+                          disabled={isConfirmingCurrency}
+                          className="w-full min-w-[200px] rounded-lg border border-amber-300/30 bg-black/30 px-3 py-2 text-sm font-semibold text-amber-50 outline-none transition-colors hover:border-amber-200/50 focus:border-amber-200/60 disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto"
+                        >
+                          <option value="" disabled className="bg-neutral-950 text-gray-400">
+                            Select currency
+                          </option>
+                          {RECEIPT_CURRENCY_CONFIRMATION_OPTIONS.map((currencyOption) => (
+                            <option
+                              key={currencyOption}
+                              value={currencyOption}
+                              className="bg-neutral-950 text-white"
+                            >
+                              {currencyOption}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* --- WARRANTY SECTION (Animated & Glowing) --- */}
               {isWarrantyActive && (
