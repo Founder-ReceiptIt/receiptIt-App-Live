@@ -8,7 +8,6 @@ import {
   DollarSign,
   RefreshCw,
   Store,
-  Tag,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { FINALIZED_RECEIPT_STATUSES, supabase } from '../../lib/supabase';
@@ -26,20 +25,6 @@ interface InsightReceipt {
 }
 
 const currencySymbol = '£';
-const budgetLimit = 2500;
-
-const getTagColor = (category: string): string => {
-  const categoryLower = category.toLowerCase();
-
-  if (categoryLower.includes('tech') || categoryLower.includes('electronics')) return 'text-blue-400 bg-blue-400/10 border-blue-400/30';
-  if (categoryLower.includes('food') || categoryLower.includes('restaurant')) return 'text-orange-400 bg-orange-400/10 border-orange-400/30';
-  if (categoryLower.includes('clothing') || categoryLower.includes('fashion')) return 'text-purple-400 bg-purple-400/10 border-purple-400/30';
-  if (categoryLower.includes('groceries') || categoryLower.includes('grocery')) return 'text-green-400 bg-green-400/10 border-green-400/30';
-  if (categoryLower.includes('transport') || categoryLower.includes('travel')) return 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30';
-
-  return 'text-gray-400 bg-gray-400/10 border-gray-400/30';
-};
-
 const parseNullableNumber = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -206,28 +191,6 @@ export function InsightsTab() {
   const monthlyDelta = previousMonthSpend > 0
     ? ((spendThisMonth - previousMonthSpend) / previousMonthSpend) * 100
     : null;
-  const remainingBudget = budgetLimit - totalSpent;
-
-  const categoryBreakdown = Object.entries(
-    receipts.reduce((accumulator, receipt) => {
-      if (!accumulator[receipt.category]) {
-        accumulator[receipt.category] = { amount: 0, count: 0 };
-      }
-
-      accumulator[receipt.category].amount += receipt.rollupAmount;
-      accumulator[receipt.category].count += 1;
-      return accumulator;
-    }, {} as Record<string, { amount: number; count: number }>)
-  )
-    .map(([category, data]) => ({
-      category,
-      amount: data.amount,
-      count: data.count,
-      percentage: totalSpent > 0 ? (data.amount / totalSpent) * 100 : 0,
-      color: getTagColor(category),
-    }))
-    .sort((left, right) => right.amount - left.amount);
-
   const merchantBreakdown = Object.entries(
     receipts.reduce((accumulator, receipt) => {
       if (!accumulator[receipt.merchant]) {
@@ -359,7 +322,7 @@ export function InsightsTab() {
             <BarChart3 className="w-16 h-16 text-gray-500 mx-auto mb-6" />
             <h2 className="text-2xl font-bold text-white mb-3">Your insights will appear once finalised receipts land in the wallet</h2>
             <p className="text-gray-400 max-w-xl mx-auto">
-              We will show total spend, this month&apos;s spend, merchant and category rollups, plus a recent receipt feed for quick sanity-checks.
+              We will show total spend, this month&apos;s spend, merchant rollups and a recent receipt feed for quick sanity-checks.
             </p>
           </div>
         </motion.div>
@@ -473,7 +436,7 @@ export function InsightsTab() {
               <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
                 <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Top merchant</div>
                 <div className="mt-1 text-lg font-bold text-white truncate">{topMerchant?.merchant || 'No data'}</div>
-                <div className={`mt-1 text-xs ${remainingBudget >= 0 ? 'text-gray-400' : 'text-amber-300'}`}>
+                <div className="mt-1 text-xs text-gray-400">
                   {topMerchant
                     ? `${formatCompactCurrency(topMerchant.amount)} across ${topMerchant.count} receipts`
                     : 'Waiting for merchant data'}
@@ -646,51 +609,49 @@ export function InsightsTab() {
           </motion.div>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
-            className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6"
-          >
-            <div className="flex items-start justify-between gap-4 mb-6">
-              <div>
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <Store className="w-5 h-5 text-teal-400" />
-                  Top Merchants
-                </h2>
-                <p className="mt-2 text-sm text-gray-400">Where the most spend is landing</p>
-              </div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">By GBP rollup</div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
+          className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6"
+        >
+          <div className="flex items-start justify-between gap-4 mb-6">
+            <div>
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <Store className="w-5 h-5 text-teal-400" />
+                Top Merchants
+              </h2>
+              <p className="mt-2 text-sm text-gray-400">Where the most spend is landing</p>
             </div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">By GBP rollup</div>
+          </div>
 
-            <div className="space-y-3">
-              {topMerchants.map((merchant, index) => (
-                <div
-                  key={merchant.merchant}
-                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-3"
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="min-w-0 flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full border border-white/10 bg-black/20 flex items-center justify-center text-xs font-bold text-teal-300">
-                        {index + 1}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-sm font-bold text-white truncate">{merchant.merchant}</div>
-                        <div className="mt-1 text-xs text-gray-400">
-                          {merchant.count} {merchant.count === 1 ? 'receipt' : 'receipts'} • {merchant.percentage.toFixed(1)}% of total
-                        </div>
-                      </div>
+          <div className="space-y-3">
+            {topMerchants.map((merchant, index) => (
+              <div
+                key={merchant.merchant}
+                className="rounded-xl border border-white/10 bg-white/5 px-4 py-3"
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full border border-white/10 bg-black/20 flex items-center justify-center text-xs font-bold text-teal-300">
+                      {index + 1}
                     </div>
-                    <div className="text-right">
-                      <div className="text-sm font-bold text-white">{formatCurrency(merchant.amount)}</div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-bold text-white truncate">{merchant.merchant}</div>
+                      <div className="mt-1 text-xs text-gray-400">
+                        {merchant.count} {merchant.count === 1 ? 'receipt' : 'receipts'} • {merchant.percentage.toFixed(1)}% of total
+                      </div>
                     </div>
                   </div>
+                  <div className="text-right">
+                    <div className="text-sm font-bold text-white">{formatCurrency(merchant.amount)}</div>
+                  </div>
                 </div>
-              ))}
-            </div>
-          </motion.div>
-        </div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
       </motion.div>
     </div>
   );
