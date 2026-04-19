@@ -6,7 +6,6 @@ import {
   BarChart3,
   Calendar,
   DollarSign,
-  PieChart,
   RefreshCw,
   Store,
   Tag,
@@ -248,9 +247,7 @@ export function InsightsTab() {
     }))
     .sort((left, right) => right.amount - left.amount);
 
-  const topCategory = categoryBreakdown[0];
   const topMerchant = merchantBreakdown[0];
-  const topCategories = categoryBreakdown.slice(0, 5);
   const topMerchants = merchantBreakdown.slice(0, 5);
   const recentReceipts = receipts.slice(0, 6);
 
@@ -286,7 +283,7 @@ export function InsightsTab() {
         >
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-white">Spending Insights</h1>
-            <p className="mt-2 text-sm text-gray-400">Preparing your GBP-normalized overview</p>
+            <p className="mt-2 text-sm text-gray-400">Preparing your GBP-normalised overview</p>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2 mb-4">
@@ -324,7 +321,7 @@ export function InsightsTab() {
         >
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-white">Spending Insights</h1>
-            <p className="mt-2 text-sm text-gray-400">Monitor finalized spend while you are away</p>
+            <p className="mt-2 text-sm text-gray-400">Monitor finalised spend while you are away</p>
           </div>
 
           <div className="backdrop-blur-xl bg-white/5 border border-red-400/20 rounded-2xl p-8 text-center">
@@ -355,12 +352,12 @@ export function InsightsTab() {
         >
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-white">Spending Insights</h1>
-            <p className="mt-2 text-sm text-gray-400">Monitor finalized spend while you are away</p>
+            <p className="mt-2 text-sm text-gray-400">Monitor finalised spend while you are away</p>
           </div>
 
           <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-16 text-center">
             <BarChart3 className="w-16 h-16 text-gray-500 mx-auto mb-6" />
-            <h2 className="text-2xl font-bold text-white mb-3">Your insights will appear once finalized receipts land in the wallet</h2>
+            <h2 className="text-2xl font-bold text-white mb-3">Your insights will appear once finalised receipts land in the wallet</h2>
             <p className="text-gray-400 max-w-xl mx-auto">
               We will show total spend, this month&apos;s spend, merchant and category rollups, plus a recent receipt feed for quick sanity-checks.
             </p>
@@ -380,7 +377,12 @@ export function InsightsTab() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-white">Spending Insights</h1>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-gray-400">
-            <span>Finalized receipts only</span>
+            <span className="inline-flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse" />
+              Live updates
+            </span>
+            <span className="text-gray-600">•</span>
+            <span>Finalised receipts only</span>
             <span className="text-gray-600">•</span>
             <span>{gbpNormalizedCount}/{totalReceipts} using `amount_gbp`</span>
             {fallbackAmountCount > 0 && (
@@ -407,7 +409,7 @@ export function InsightsTab() {
                 </div>
                 <div className="mt-3 text-4xl font-bold text-white">{formatCurrency(totalSpent)}</div>
                 <p className="mt-2 text-sm text-gray-400">
-                  Across {totalReceipts} finalized {totalReceipts === 1 ? 'receipt' : 'receipts'}
+                  Across {totalReceipts} finalised {totalReceipts === 1 ? 'receipt' : 'receipts'}
                 </p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-right">
@@ -416,20 +418,15 @@ export function InsightsTab() {
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-                <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Top merchant</div>
-                <div className="mt-1 text-sm font-bold text-white">{topMerchant?.merchant || 'No data'}</div>
-                <div className="mt-1 text-xs text-gray-400">
-                  {topMerchant ? `${formatCompactCurrency(topMerchant.amount)} • ${topMerchant.count} receipts` : 'Waiting for data'}
-                </div>
+            <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Coverage</div>
+              <div className="mt-1 text-sm font-bold text-white">
+                {gbpNormalizedCount}/{totalReceipts} receipts using `amount_gbp`
               </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-                <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Top category</div>
-                <div className="mt-1 text-sm font-bold text-white">{topCategory?.category || 'No data'}</div>
-                <div className="mt-1 text-xs text-gray-400">
-                  {topCategory ? `${formatCompactCurrency(topCategory.amount)} • ${topCategory.count} receipts` : 'Waiting for data'}
-                </div>
+              <div className="mt-1 text-xs text-gray-400">
+                {fallbackAmountCount > 0
+                  ? `${fallbackAmountCount} receipts currently fall back to raw amount`
+                  : 'All current rollups are GBP-normalised'}
               </div>
             </div>
           </motion.div>
@@ -474,61 +471,15 @@ export function InsightsTab() {
                 </div>
               </div>
               <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-                <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Budget check</div>
-                <div className="mt-1 text-lg font-bold text-white">{formatCurrency(Math.abs(remainingBudget))}</div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Top merchant</div>
+                <div className="mt-1 text-lg font-bold text-white truncate">{topMerchant?.merchant || 'No data'}</div>
                 <div className={`mt-1 text-xs ${remainingBudget >= 0 ? 'text-gray-400' : 'text-amber-300'}`}>
-                  {remainingBudget >= 0 ? 'Remaining against £2500 target' : 'Over the £2500 target'}
+                  {topMerchant
+                    ? `${formatCompactCurrency(topMerchant.amount)} across ${topMerchant.count} receipts`
+                    : 'Waiting for merchant data'}
                 </div>
               </div>
             </div>
-          </motion.div>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 mb-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.18, ease: [0.22, 1, 0.36, 1] }}
-            className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-5"
-          >
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-gray-500 mb-3">
-              <BarChart3 className="w-4 h-4 text-teal-400" />
-              Average Receipt
-            </div>
-            <div className="text-3xl font-bold text-white">{formatCurrency(avgTransaction)}</div>
-            <p className="mt-2 text-sm text-gray-400">Helpful for spotting unusually large uploads while travelling</p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.24, ease: [0.22, 1, 0.36, 1] }}
-            className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-5"
-          >
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-gray-500 mb-3">
-              <Store className="w-4 h-4 text-teal-400" />
-              Top Merchant
-            </div>
-            <div className="text-2xl font-bold text-white truncate">{topMerchant?.merchant || 'No data'}</div>
-            <p className="mt-2 text-sm text-gray-400">
-              {topMerchant ? `${formatCurrency(topMerchant.amount)} across ${topMerchant.count} receipts` : 'Waiting for merchant data'}
-            </p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
-            className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-5 sm:col-span-2 xl:col-span-1"
-          >
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-gray-500 mb-3">
-              <DollarSign className="w-4 h-4 text-teal-400" />
-              GBP Coverage
-            </div>
-            <div className="text-3xl font-bold text-white">{gbpNormalizedCount}/{totalReceipts}</div>
-            <p className="mt-2 text-sm text-gray-400">
-              Rollups prefer `amount_gbp`; {fallbackAmountCount > 0 ? `${fallbackAmountCount} receipts currently fall back to raw amount` : 'all current rollups are GBP-normalized'}
-            </p>
           </motion.div>
         </div>
 
@@ -536,7 +487,7 @@ export function InsightsTab() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.36, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.6, delay: 0.18, ease: [0.22, 1, 0.36, 1] }}
             className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6"
           >
             <div className="flex items-start justify-between gap-4 mb-6">
@@ -647,7 +598,7 @@ export function InsightsTab() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.42, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.6, delay: 0.24, ease: [0.22, 1, 0.36, 1] }}
             className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6"
           >
             <div className="flex items-start justify-between gap-4 mb-6">
@@ -656,7 +607,7 @@ export function InsightsTab() {
                   <Calendar className="w-5 h-5 text-teal-400" />
                   Recent Receipts
                 </h2>
-                <p className="mt-2 text-sm text-gray-400">Latest finalized receipts for a quick sanity-check</p>
+                <p className="mt-2 text-sm text-gray-400">Latest finalised receipts for a quick sanity-check</p>
               </div>
               <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Newest first</div>
             </div>
@@ -699,7 +650,7 @@ export function InsightsTab() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.48, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.6, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
             className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6"
           >
             <div className="flex items-start justify-between gap-4 mb-6">
@@ -734,55 +685,6 @@ export function InsightsTab() {
                     <div className="text-right">
                       <div className="text-sm font-bold text-white">{formatCurrency(merchant.amount)}</div>
                     </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.54, ease: [0.22, 1, 0.36, 1] }}
-            className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6"
-          >
-            <div className="flex items-start justify-between gap-4 mb-6">
-              <div>
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <PieChart className="w-5 h-5 text-teal-400" />
-                  Top Categories
-                </h2>
-                <p className="mt-2 text-sm text-gray-400">Category rollup for quick scanning</p>
-              </div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Share of total</div>
-            </div>
-
-            <div className="space-y-4">
-              {topCategories.map((category) => (
-                <div key={category.category}>
-                  <div className="flex items-center justify-between gap-4 mb-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md ${category.color}`}>
-                        <Tag className="w-3 h-3" />
-                        <span className="truncate max-w-[140px]">{category.category}</span>
-                      </div>
-                      <span className="text-xs text-gray-400 whitespace-nowrap">
-                        {category.count} {category.count === 1 ? 'receipt' : 'receipts'}
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm font-bold text-white">{formatCurrency(category.amount)}</div>
-                      <div className="text-xs text-gray-500">{category.percentage.toFixed(1)}%</div>
-                    </div>
-                  </div>
-
-                  <div className="relative h-2 bg-white/5 rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${category.percentage}%` }}
-                      transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
-                      className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-teal-500 to-teal-300"
-                    />
                   </div>
                 </div>
               ))}
