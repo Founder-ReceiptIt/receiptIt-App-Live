@@ -17,7 +17,7 @@ import {
   Receipt as SupabaseReceiptRow,
 } from '../../lib/supabase';
 import type { ReceiptCurrencyConfirmationOption } from '../../lib/supabase';
-import { getPurchaseDateDisplay } from '../../lib/receiptDateUtils';
+import { getPurchaseDateDisplay, PURCHASE_DATE_PENDING_LABEL } from '../../lib/receiptDateUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { useToast } from '../../contexts/ToastContext';
@@ -1332,7 +1332,13 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                           )}
 
                           <div className="flex items-center gap-2">
-                            <p className="text-sm text-gray-400">{getPurchaseDateDisplay(receipt.date, 'short')}</p>
+                            <p className="text-sm text-gray-400">
+                              {getPurchaseDateDisplay(
+                                receipt.date,
+                                'short',
+                                isProcessing ? PURCHASE_DATE_PENDING_LABEL : undefined
+                              )}
+                            </p>
                             {hasActiveWarranty && !isFreshProcessing && (
                               <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-400/10 border border-emerald-400/30 rounded-full">
                                 <Shield className="w-3 h-3 text-emerald-400" strokeWidth={2} />

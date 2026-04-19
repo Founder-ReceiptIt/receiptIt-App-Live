@@ -15,7 +15,7 @@ import {
   supabase,
 } from '../../lib/supabase';
 import type { ReceiptCurrencyConfirmationOption } from '../../lib/supabase';
-import { formatReceiptDate, getPurchaseDateDisplay } from '../../lib/receiptDateUtils';
+import { formatReceiptDate, getPurchaseDateDisplay, PURCHASE_DATE_PENDING_LABEL } from '../../lib/receiptDateUtils';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -148,14 +148,20 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     setShowMoreDetails(false);
     setShowCompanyDetails(false);
     setIsEditingDates(false);
+    setShowOtherCurrencyOptions(false);
+    setShowReportProblemDialog(false);
+  }, [receipt?.id]);
+
+  useEffect(() => {
     if (receipt) {
       setEditWarrantyDate(receipt.warrantyDate || '');
       setEditReturnDate(receipt.returnDate || '');
+    } else {
+      setEditWarrantyDate('');
+      setEditReturnDate('');
     }
     setProcessingAttemptStartedAt(receipt?.processingAttemptStartedAt || null);
-    setShowOtherCurrencyOptions(false);
-    setShowReportProblemDialog(false);
-  }, [receipt]);
+  }, [receipt?.id, receipt?.warrantyDate, receipt?.returnDate, receipt?.processingAttemptStartedAt]);
 
   useEffect(() => {
     if (!receipt?.id) {
@@ -383,6 +389,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     receipt.createdAt,
     processingAttemptStartedAt
   );
+  const isProcessingReceipt = receipt.status === 'processing';
   const requiresCurrencyConfirmation = needsCurrencyConfirmation(receipt.status, receipt.errorReason);
   const isConfirmingCurrency = currencyConfirmationState?.receiptId === receipt.id;
   const receiptCurrencySymbol = getCurrencySymbol(receipt.currency);
@@ -438,7 +445,11 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
       : item
   ));
   const formattedPurchaseDate = formatReceiptDate(receipt.date, 'long');
-  const purchaseDateDisplay = getPurchaseDateDisplay(receipt.date, 'long');
+  const purchaseDateDisplay = getPurchaseDateDisplay(
+    receipt.date,
+    'long',
+    isProcessingReceipt ? PURCHASE_DATE_PENDING_LABEL : undefined
+  );
   const importedOnDisplay = !formattedPurchaseDate ? formatReceiptDate(receipt.createdAt, 'long') : null;
   const hasReceiptItems = displayReceiptItems.length > 0;
   const showItemsLoadingState = !isCurrentReceiptDetails || itemsLoading || !itemsLoaded;
@@ -658,9 +669,17 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                     {receipt.summary && (
                       <p className="text-teal-400 text-sm mb-2">{receipt.summary}</p>
                     )}
-                    <p className="text-gray-400 text-sm">
-                      {purchaseDateDisplay}
-                    </p>
+                    <p className="text-gray-400 text-sm">{purchaseDateDisplay}</p>
+                    {downloadUrl && (
+                      <button
+                        type="button"
+                        onClick={handleDownloadClick}
+                        className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-teal-400 transition-colors hover:text-teal-300"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Open original receipt
+                      </button>
+                    )}
                     {receipt.location && (
                       <div className="flex items-center gap-1.5 mt-2 text-gray-400 text-xs">
                         <MapPin className="w-3 h-3" />
@@ -697,9 +716,11 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   })}
                   {hasCompanyDetails && (
                     <motion.button
+                      type="button"
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={() => setShowCompanyDetails((current) => !current)}
+                      aria-expanded={showCompanyDetails}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md text-gray-400 bg-white/5 border-white/10 hover:bg-white/10 hover:text-white hover:border-white/20 transition-colors"
                     >
                       <span>Company</span>
@@ -713,9 +734,11 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   )}
                   {moreDetails.length > 0 && (
                     <motion.button
+                      type="button"
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={() => setShowMoreDetails((current) => !current)}
+                      aria-expanded={showMoreDetails}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md text-gray-400 bg-white/5 border-white/10 hover:bg-white/10 hover:text-white hover:border-white/20 transition-colors"
                     >
                       <span>More</span>
@@ -1225,6 +1248,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                 className="relative"
               >
                 <motion.button
+                  type="button"
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setShowDeleteMenu(!showDeleteMenu)}
@@ -1256,6 +1280,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                     className="absolute bottom-full left-0 right-0 mb-2 backdrop-blur-xl bg-black/95 border border-white/10 rounded-xl overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.5)] z-20"
                   >
                     <button
+                      type="button"
                       onClick={() => handleDelete('now')}
                       className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-red-500/10 transition-colors text-left text-red-400 hover:text-red-300 border-b border-white/10 group"
                     >
@@ -1264,6 +1289,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                     </button>
                     {hasWarrantyInfo && (
                       <button
+                        type="button"
                         onClick={() => handleDelete('warranty')}
                         className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-white/5 transition-colors text-gray-400 hover:text-white group"
                       >

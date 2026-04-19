@@ -11,6 +11,7 @@ const LONG_DATE_FORMAT: Intl.DateTimeFormatOptions = {
 };
 
 export const PURCHASE_DATE_MISSING_LABEL = 'Purchase date missing';
+export const PURCHASE_DATE_PENDING_LABEL = 'Purchase date pending';
 
 type ReceiptDateFormat = 'short' | 'long';
 
@@ -36,7 +37,8 @@ export const formatReceiptDate = (
 
 export const getPurchaseDateDisplay = (
   value?: string | null,
-  format: ReceiptDateFormat = 'short'
+  format: ReceiptDateFormat = 'short',
+  fallbackLabel: string = PURCHASE_DATE_MISSING_LABEL
 ): string => (
-  formatReceiptDate(value, format) || PURCHASE_DATE_MISSING_LABEL
+  formatReceiptDate(value, format) || fallbackLabel
 );
