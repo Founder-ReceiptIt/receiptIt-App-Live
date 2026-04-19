@@ -16,10 +16,9 @@ import {
 } from '../../lib/supabase';
 import type { ReceiptCurrencyConfirmationOption } from '../../lib/supabase';
 import { formatReceiptDate, getPurchaseDateDisplay, PURCHASE_DATE_PENDING_LABEL } from '../../lib/receiptDateUtils';
+import { getReceiptOriginalUrl, openReceiptOriginal } from '../../lib/receiptOriginalUtils';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { useToast } from '../../contexts/ToastContext';
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 const getCurrencySymbol = (currencyCode: string): string => {
   const code = (currencyCode || 'GBP').toUpperCase();
@@ -535,28 +534,15 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   // Return window status
   const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
 
-  const getDownloadUrl = () => {
-    if (receipt.imageUrl) {
-      if (receipt.imageUrl.startsWith('http')) return receipt.imageUrl;
-      return `${SUPABASE_URL}/storage/v1/object/public/receipts/${receipt.imageUrl}`;
-    }
-
-    if (receipt.storagePath) {
-      return `${SUPABASE_URL}/storage/v1/object/public/receipts/${receipt.storagePath}`;
-    }
-
-    return null;
-  };
-
-  const downloadUrl = getDownloadUrl();
+  const downloadUrl = getReceiptOriginalUrl(receipt);
 
   const handleDownloadClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (downloadUrl) {
-      console.log('Opening receipt image:', downloadUrl);
+    const openedUrl = openReceiptOriginal(receipt);
+    if (openedUrl) {
+      console.log('Opening receipt image:', openedUrl);
       console.log('Receipt image_url field:', receipt.imageUrl);
       console.log('Is external URL:', receipt.imageUrl?.startsWith('http'));
-      window.open(downloadUrl, '_blank', 'noopener,noreferrer');
     } else {
       console.warn('No download URL available for this receipt');
     }

@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Shield, Loader2, Car, Home, Plane, Zap, Utensils, Undo2, Trash2, CheckSquare, Square, ChevronDown } from 'lucide-react';
+import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Shield, Loader2, Car, Home, Plane, Zap, Utensils, Undo2, Trash2, CheckSquare, Square, ChevronDown, Download } from 'lucide-react';
 import { Video as LucideIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { ReportProblemDialog } from './ReportProblemDialog';
@@ -18,6 +18,7 @@ import {
 } from '../../lib/supabase';
 import type { ReceiptCurrencyConfirmationOption } from '../../lib/supabase';
 import { getPurchaseDateDisplay, PURCHASE_DATE_PENDING_LABEL } from '../../lib/receiptDateUtils';
+import { getReceiptOriginalUrl, openReceiptOriginal } from '../../lib/receiptOriginalUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { useToast } from '../../contexts/ToastContext';
@@ -1231,11 +1232,15 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                   receipt.processingAttemptStartedAt
                 );
                 const isFreshProcessing = isProcessing && !isStaleProcessing;
+                const isNeedsInput = receipt.status === 'needs_input';
+                const isNonFinalReceipt = isProcessing || isNeedsInput;
                 const requiresCurrencyConfirmation = needsCurrencyConfirmation(receipt.status, receipt.errorReason);
                 const isConfirmingCurrency = currencyConfirmationState?.receiptId === receipt.id;
                 const hasActiveWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) > new Date();
                 const hasExpiredWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) <= new Date();
                 const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
+                const originalReceiptUrl = getReceiptOriginalUrl(receipt);
+                const showOpenOriginalReceiptAction = isNonFinalReceipt && Boolean(originalReceiptUrl);
 
                 return (
                   <motion.div
@@ -1414,6 +1419,25 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                         )}
                       </div>
                     </button>
+
+                    {showOpenOriginalReceiptAction && (
+                      <div className="mt-3 flex items-center">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            const openedUrl = openReceiptOriginal(receipt);
+                            if (!openedUrl) {
+                              console.warn('No download URL available for this receipt');
+                            }
+                          }}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 transition-colors hover:text-teal-300"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          Open original receipt
+                        </button>
+                      </div>
+                    )}
 
                     {isStaleProcessing && (
                       <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3">
