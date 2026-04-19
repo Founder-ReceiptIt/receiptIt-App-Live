@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Download, MoreVertical, Undo2, CreditCard as Edit2, Save, ChevronDown } from 'lucide-react';
+import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Download, MoreVertical, Undo2, ChevronDown } from 'lucide-react';
 import { Receipt } from './WalletTab';
 import { ReportProblemDialog } from './ReportProblemDialog';
 import { useState, useEffect } from 'react';
@@ -125,10 +125,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const [showDeleteMenu, setShowDeleteMenu] = useState(false);
   const [showMoreDetails, setShowMoreDetails] = useState(false);
   const [showCompanyDetails, setShowCompanyDetails] = useState(false);
-  const [isEditingDates, setIsEditingDates] = useState(false);
-  const [editWarrantyDate, setEditWarrantyDate] = useState('');
-  const [editReturnDate, setEditReturnDate] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
   const [detailReceiptId, setDetailReceiptId] = useState<string | null>(receipt?.id ?? null);
   const [receiptItems, setReceiptItems] = useState<ReceiptModalItem[]>([]);
   const [receiptPayments, setReceiptPayments] = useState<ReceiptPaymentDisplay[]>([]);
@@ -146,21 +142,13 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     setShowDeleteMenu(false);
     setShowMoreDetails(false);
     setShowCompanyDetails(false);
-    setIsEditingDates(false);
     setShowOtherCurrencyOptions(false);
     setShowReportProblemDialog(false);
   }, [receipt?.id]);
 
   useEffect(() => {
-    if (receipt) {
-      setEditWarrantyDate(receipt.warrantyDate || '');
-      setEditReturnDate(receipt.returnDate || '');
-    } else {
-      setEditWarrantyDate('');
-      setEditReturnDate('');
-    }
     setProcessingAttemptStartedAt(receipt?.processingAttemptStartedAt || null);
-  }, [receipt?.id, receipt?.warrantyDate, receipt?.returnDate, receipt?.processingAttemptStartedAt]);
+  }, [receipt?.id, receipt?.processingAttemptStartedAt]);
 
   useEffect(() => {
     if (!receipt?.id) {
@@ -266,40 +254,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     }
   };
 
-  const handleSaveDates = async () => {
-    if (!receipt) return;
-
-    setIsSaving(true);
-    try {
-      const { error } = await supabase
-        .from('receipts')
-        .update({
-          warranty_date: editWarrantyDate || null,
-          return_date: editReturnDate || null,
-        })
-        .eq('id', receipt.id);
-
-      if (error) {
-        console.error('[SaveDates] Error updating dates:', error);
-        alert('Failed to save dates. Please try again.');
-        return;
-      }
-
-      console.log('[SaveDates] Dates updated successfully');
-      setIsEditingDates(false);
-
-      // Update local receipt object
-      if (receipt.warrantyDate !== editWarrantyDate || receipt.returnDate !== editReturnDate) {
-        window.location.reload();
-      }
-    } catch (error) {
-      console.error('[SaveDates] Unexpected error:', error);
-      alert('Failed to save dates. Please try again.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleCurrencyConfirmation = async (currency: ReceiptCurrencyConfirmationOption) => {
     if (!receipt) return;
     const nextProcessingAttemptStartedAt = new Date().toISOString();
@@ -389,6 +343,8 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     processingAttemptStartedAt
   );
   const isProcessingReceipt = receipt.status === 'processing';
+  const isNeedsInputReceipt = receipt.status === 'needs_input';
+  const isNonFinalReceipt = isProcessingReceipt || isNeedsInputReceipt;
   const requiresCurrencyConfirmation = needsCurrencyConfirmation(receipt.status, receipt.errorReason);
   const isConfirmingCurrency = currencyConfirmationState?.receiptId === receipt.id;
   const receiptCurrencySymbol = getCurrencySymbol(receipt.currency);
@@ -399,6 +355,8 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const gbpAmount = getValidMoneyValue(receipt.amount_gbp);
   const displayOriginalTotal = originalTotal ?? gbpAmount ?? 0;
   const displayOriginalCurrencySymbol = originalTotal !== null || receiptCurrencyCode === 'GBP' ? receiptCurrencySymbol : '£';
+  const hasMeaningfulOriginalTotal = (originalTotal !== null && Math.abs(originalTotal) > 0)
+    || (gbpAmount !== null && Math.abs(gbpAmount) > 0);
   const getReceiptItemGroup = (item: NonNullable<Receipt['items']>[number]) => {
     const normalizedType = item.itemType?.trim().toLowerCase();
 
@@ -492,6 +450,10 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     ),
     { label: 'VAT', value: vatAmount },
   ];
+  const visibleSummaryRows = summaryRows.filter((row) => (
+    row.value !== null
+    && (row.isDiscount || Math.abs(row.value) > 0)
+  ));
   const moreDetails = [
     receipt.referenceNumber ? { label: 'Reference number', value: receipt.referenceNumber, icon: FileText } : null,
     receipt.invoiceNumber ? { label: 'Invoice number', value: receipt.invoiceNumber, icon: FileText } : null,
@@ -535,6 +497,18 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
 
   const downloadUrl = getReceiptOriginalUrl(receipt);
+  const shouldHideBreakdownSection = isNonFinalReceipt
+    && !showItemsLoadingState
+    && !hasReceiptItems
+    && visibleSummaryRows.length === 0
+    && activeReceiptPayments.length === 0
+    && !hasMeaningfulOriginalTotal;
+  const shouldShowReceiptBreakdown = !shouldHideBreakdownSection;
+  const shouldShowApproximateGbpAmount = receiptCurrencyCode !== 'GBP' && gbpAmount !== null && originalTotal !== null;
+  const shouldShowHeroAmount = !isNonFinalReceipt || hasMeaningfulOriginalTotal;
+  const heroAmountDisplay = shouldShowHeroAmount
+    ? formatMoney(displayOriginalCurrencySymbol, displayOriginalTotal)
+    : '—';
 
   const handleDownloadClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -578,56 +552,21 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
             <div className="p-6 border-b border-white/10 flex items-center justify-between">
               <h2 className="text-2xl font-bold text-white">Receipt Details</h2>
               <div className="flex items-center gap-2">
-                {!isEditingDates ? (
-                  <motion.button
-                    onClick={() => setIsEditingDates(true)}
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                    className="w-10 h-10 rounded-full backdrop-blur-md bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-teal-400 hover:border-teal-400/30 transition-colors"
-                    title="Edit Receipt"
-                  >
-                    <Edit2 className="w-5 h-5" />
-                  </motion.button>
-                ) : (
-                  <>
-                    <motion.button
-                      onClick={() => {
-                        setIsEditingDates(false);
-                        setEditWarrantyDate(receipt.warrantyDate || '');
-                        setEditReturnDate(receipt.returnDate || '');
-                      }}
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                      className="w-10 h-10 rounded-full backdrop-blur-md bg-gray-400/10 border border-gray-400/30 flex items-center justify-center text-gray-400 hover:text-white hover:border-white/20 transition-colors"
-                      title="Cancel"
-                      disabled={isSaving}
-                    >
-                      <X className="w-5 h-5" />
-                    </motion.button>
-                    <motion.button
-                      onClick={handleSaveDates}
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                      className="w-10 h-10 rounded-full backdrop-blur-md bg-teal-400/10 border border-teal-400/30 flex items-center justify-center text-teal-400 hover:text-teal-300 hover:border-teal-400/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Save Changes"
-                      disabled={isSaving}
-                    >
-                      <Save className="w-5 h-5" />
-                    </motion.button>
-                  </>
-                )}
                 {downloadUrl && (
                   <motion.button
+                    type="button"
                     onClick={handleDownloadClick}
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                    className="w-10 h-10 rounded-full backdrop-blur-md bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-teal-400 hover:border-teal-400/30 transition-colors"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="inline-flex h-10 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 text-sm font-semibold text-gray-300 transition-colors hover:border-teal-400/30 hover:text-teal-300"
                     title="View Original Receipt"
                   >
-                    <Download className="w-5 h-5" />
+                    <Download className="w-4 h-4" />
+                    <span>View original</span>
                   </motion.button>
                 )}
                 <motion.button
+                  type="button"
                   whileHover={{ scale: 1.1, rotate: 90 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={onClose}
@@ -656,16 +595,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                       <p className="text-teal-400 text-sm mb-2">{receipt.summary}</p>
                     )}
                     <p className="text-gray-400 text-sm">{purchaseDateDisplay}</p>
-                    {downloadUrl && (
-                      <button
-                        type="button"
-                        onClick={handleDownloadClick}
-                        className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-teal-400 transition-colors hover:text-teal-300"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        Open original receipt
-                      </button>
-                    )}
                     {receipt.location && (
                       <div className="flex items-center gap-1.5 mt-2 text-gray-400 text-xs">
                         <MapPin className="w-3 h-3" />
@@ -675,11 +604,16 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   </div>
                     <div className="text-right">
                       <div className="text-3xl font-bold text-white">
-                      {formatMoney(displayOriginalCurrencySymbol, displayOriginalTotal)}
+                      {heroAmountDisplay}
                       </div>
-                    {receiptCurrencyCode !== 'GBP' && gbpAmount !== null && originalTotal !== null && (
+                    {shouldShowApproximateGbpAmount && (
                       <div className="text-sm pt-1 text-gray-400">
                         Approx. {formatMoney('£', gbpAmount)}
+                      </div>
+                    )}
+                    {isNonFinalReceipt && !hasMeaningfulOriginalTotal && (
+                      <div className="text-sm pt-1 text-gray-500">
+                        Still analyzing
                       </div>
                     )}
                   </div>
@@ -1062,170 +996,130 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                 </motion.div>
               )}
 
-              {/* --- EDIT DATES FORM (SHOWN WHEN EDITING) --- */}
-              {isEditingDates && (
+              {/* --- BREAKDOWN SECTION --- */}
+              {shouldShowReceiptBreakdown && (
                 <motion.div
-                  initial={{ scale: 0.95, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ duration: 0.2 }}
-                  className="backdrop-blur-xl bg-teal-400/10 border-2 border-teal-400/30 rounded-2xl p-6"
+                  initial={{ y: 20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.2 }}
+                  className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6"
                 >
                   <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                    <Edit2 className="w-5 h-5 text-teal-400" />
-                    Edit Receipt Dates
+                    <FileText className="w-5 h-5 text-teal-400" />
+                    Receipt Breakdown
                   </h4>
 
-                  <div className="space-y-4">
-                    {/* Warranty Date Input */}
-                    <div className="space-y-2">
-                      <label className="flex items-center gap-2 text-sm font-semibold text-gray-300">
-                        <Shield className="w-4 h-4 text-emerald-400" />
-                        Warranty Expiry Date
-                      </label>
-                      <input
-                        type="date"
-                        value={editWarrantyDate}
-                        onChange={(e) => setEditWarrantyDate(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white focus:outline-none focus:border-teal-400/50 focus:ring-2 focus:ring-teal-400/20 transition-all"
-                      />
+                  {showItemsLoadingState ? (
+                    <div className="mb-4 rounded-lg border border-white/10 bg-white/5 p-4">
+                      <div className="space-y-2 animate-pulse">
+                        <div className="h-3 rounded bg-white/10" />
+                        <div className="h-3 w-5/6 rounded bg-white/10" />
+                        <div className="h-3 w-2/3 rounded bg-white/10" />
+                      </div>
+                      <div className="mt-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Items loading...
+                      </div>
                     </div>
-
-                    {/* Return Date Input */}
-                    <div className="space-y-2">
-                      <label className="flex items-center gap-2 text-sm font-semibold text-gray-300">
-                        <Undo2 className="w-4 h-4 text-red-400" />
-                        Return Window End Date
-                      </label>
-                      <input
-                        type="date"
-                        value={editReturnDate}
-                        onChange={(e) => setEditReturnDate(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white focus:outline-none focus:border-teal-400/50 focus:ring-2 focus:ring-teal-400/20 transition-all"
-                      />
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* --- BREAKDOWN SECTION --- */}
-              <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.2 }}
-                className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6"
-              >
-                <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-teal-400" />
-                  Receipt Breakdown
-                </h4>
-
-                {showItemsLoadingState ? (
-                  <div className="mb-4 rounded-lg border border-white/10 bg-white/5 p-4">
-                    <div className="space-y-2 animate-pulse">
-                      <div className="h-3 rounded bg-white/10" />
-                      <div className="h-3 w-5/6 rounded bg-white/10" />
-                      <div className="h-3 w-2/3 rounded bg-white/10" />
-                    </div>
-                    <div className="mt-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Items loading...
-                    </div>
-                  </div>
-                ) : hasReceiptItems ? (
-                  <div className="mb-4 space-y-4">
-                    {receiptItemSections.map((section) => (
-                      <div key={section.key}>
-                        <h5 className="text-sm font-bold text-gray-400 mb-3 uppercase tracking-wide">{section.title}</h5>
-                        <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
-                          <div className="grid grid-cols-[minmax(0,1.6fr)_70px_110px_110px] gap-3 px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-gray-500 border-b border-white/10">
-                            <div>Description</div>
-                            <div className="text-right">Qty</div>
-                            <div className="text-right">Unit</div>
-                            <div className="text-right">Total</div>
-                          </div>
-                          <div className="divide-y divide-white/10">
-                            {section.items.map((item) => (
-                              <div
-                                key={`${section.key}-${item.lineIndex}-${item.description ?? 'item'}`}
-                                className="grid grid-cols-[minmax(0,1.6fr)_70px_110px_110px] gap-3 px-4 py-3 items-start"
-                              >
-                                <div className="min-w-0">
-                                  <div className="text-white font-semibold break-words">
-                                    {item.description?.trim() || 'Unnamed item'}
-                                  </div>
-                                  {(getValidMoneyValue(item.vatRate) !== null || getValidMoneyValue(item.vatAmount) !== null) && (
-                                    <div className="text-xs text-gray-400 mt-1">
-                                      {getValidMoneyValue(item.vatRate) !== null ? `VAT ${item.vatRate!.toFixed(2)}%` : 'VAT'}
-                                      {getValidMoneyValue(item.vatAmount) !== null ? ` • ${formatMoney(receiptCurrencySymbol, item.vatAmount!)}` : ''}
+                  ) : hasReceiptItems ? (
+                    <div className="mb-4 space-y-4">
+                      {receiptItemSections.map((section) => (
+                        <div key={section.key}>
+                          <h5 className="text-sm font-bold text-gray-400 mb-3 uppercase tracking-wide">{section.title}</h5>
+                          <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
+                            <div className="grid grid-cols-[minmax(0,1.6fr)_70px_110px_110px] gap-3 px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-gray-500 border-b border-white/10">
+                              <div>Description</div>
+                              <div className="text-right">Qty</div>
+                              <div className="text-right">Unit</div>
+                              <div className="text-right">Total</div>
+                            </div>
+                            <div className="divide-y divide-white/10">
+                              {section.items.map((item) => (
+                                <div
+                                  key={`${section.key}-${item.lineIndex}-${item.description ?? 'item'}`}
+                                  className="grid grid-cols-[minmax(0,1.6fr)_70px_110px_110px] gap-3 px-4 py-3 items-start"
+                                >
+                                  <div className="min-w-0">
+                                    <div className="text-white font-semibold break-words">
+                                      {item.description?.trim() || 'Unnamed item'}
                                     </div>
-                                  )}
+                                    {(getValidMoneyValue(item.vatRate) !== null || getValidMoneyValue(item.vatAmount) !== null) && (
+                                      <div className="text-xs text-gray-400 mt-1">
+                                        {getValidMoneyValue(item.vatRate) !== null ? `VAT ${item.vatRate!.toFixed(2)}%` : 'VAT'}
+                                        {getValidMoneyValue(item.vatAmount) !== null ? ` • ${formatMoney(receiptCurrencySymbol, item.vatAmount!)}` : ''}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="text-sm text-right text-gray-300">
+                                    {formatOptionalQuantity(item.quantity, item.quantityUnit)}
+                                  </div>
+                                  <div className="text-sm text-right text-gray-300">
+                                    {section.key === 'discount'
+                                      ? formatOptionalDeductionMoney(receiptCurrencySymbol, item.unitPrice)
+                                      : formatOptionalMoney(receiptCurrencySymbol, item.unitPrice)}
+                                  </div>
+                                  <div className={`text-sm text-right font-semibold ${section.key === 'discount' ? 'text-emerald-400' : 'text-white'}`}>
+                                    {section.key === 'discount'
+                                      ? formatOptionalDeductionMoney(receiptCurrencySymbol, item.lineTotal)
+                                      : formatOptionalMoney(receiptCurrencySymbol, item.lineTotal)}
+                                  </div>
                                 </div>
-                                <div className="text-sm text-right text-gray-300">
-                                  {formatOptionalQuantity(item.quantity, item.quantityUnit)}
-                                </div>
-                                <div className="text-sm text-right text-gray-300">
-                                  {section.key === 'discount'
-                                    ? formatOptionalDeductionMoney(receiptCurrencySymbol, item.unitPrice)
-                                    : formatOptionalMoney(receiptCurrencySymbol, item.unitPrice)}
-                                </div>
-                                <div className={`text-sm text-right font-semibold ${section.key === 'discount' ? 'text-emerald-400' : 'text-white'}`}>
-                                  {section.key === 'discount'
-                                    ? formatOptionalDeductionMoney(receiptCurrencySymbol, item.lineTotal)
-                                    : formatOptionalMoney(receiptCurrencySymbol, item.lineTotal)}
-                                </div>
-                              </div>
-                            ))}
+                              ))}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                    <div className="h-px bg-white/10" />
-                  </div>
-                ) : itemsLoaded ? (
-                  <div className="mb-4 rounded-lg bg-white/5 p-4 text-sm text-gray-400">
-                    Detailed items unavailable for this receipt
-                  </div>
-                ) : null}
-
-                <div className="space-y-2">
-                  {summaryRows.map((row) => (
-                    <div
-                      key={row.label}
-                      className="flex items-center justify-between text-gray-400 text-sm"
-                    >
-                      <span>{row.label}</span>
-                      <span className={row.isDiscount ? 'text-emerald-400' : undefined}>
-                        {row.isDiscount && row.value !== null
-                          ? `-${formatMoney(receiptCurrencySymbol, Math.abs(row.value))}`
-                          : formatOptionalMoney(receiptCurrencySymbol, row.value)}
-                      </span>
+                      ))}
+                      <div className="h-px bg-white/10" />
                     </div>
-                  ))}
-                  <div className="flex items-center justify-between text-white font-bold text-lg pt-2 border-t border-white/10">
-                    <span>Total</span>
-                    <span>{formatMoney(displayOriginalCurrencySymbol, displayOriginalTotal)}</span>
-                  </div>
-                </div>
+                  ) : itemsLoaded && !isNonFinalReceipt ? (
+                    <div className="mb-4 rounded-lg bg-white/5 p-4 text-sm text-gray-400">
+                      Detailed items unavailable for this receipt
+                    </div>
+                  ) : null}
 
-                {activeReceiptPayments.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-white/10">
-                    <h5 className="text-sm font-bold text-gray-400 mb-3 uppercase tracking-wide">Payments</h5>
+                  {(visibleSummaryRows.length > 0 || hasMeaningfulOriginalTotal) && (
                     <div className="space-y-2">
-                      {activeReceiptPayments.map((payment) => (
+                      {visibleSummaryRows.map((row) => (
                         <div
-                          key={payment.id}
-                          className="flex items-center justify-between text-sm text-gray-300"
+                          key={row.label}
+                          className="flex items-center justify-between text-gray-400 text-sm"
                         >
-                          <span>{payment.label}</span>
-                          <span className="font-semibold text-white">
-                            {formatMoney(getCurrencySymbol(payment.currencyCode || receipt.currency), payment.amount)}
+                          <span>{row.label}</span>
+                          <span className={row.isDiscount ? 'text-emerald-400' : undefined}>
+                            {row.isDiscount && row.value !== null
+                              ? `-${formatMoney(receiptCurrencySymbol, Math.abs(row.value))}`
+                              : formatOptionalMoney(receiptCurrencySymbol, row.value)}
                           </span>
                         </div>
                       ))}
+                      {hasMeaningfulOriginalTotal && (
+                        <div className="flex items-center justify-between text-white font-bold text-lg pt-2 border-t border-white/10">
+                          <span>Total</span>
+                          <span>{formatMoney(displayOriginalCurrencySymbol, displayOriginalTotal)}</span>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )}
+                  )}
 
-              </motion.div>
+                  {activeReceiptPayments.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-white/10">
+                      <h5 className="text-sm font-bold text-gray-400 mb-3 uppercase tracking-wide">Payments</h5>
+                      <div className="space-y-2">
+                        {activeReceiptPayments.map((payment) => (
+                          <div
+                            key={payment.id}
+                            className="flex items-center justify-between text-sm text-gray-300"
+                          >
+                            <span>{payment.label}</span>
+                            <span className="font-semibold text-white">
+                              {formatMoney(getCurrencySymbol(payment.currencyCode || receipt.currency), payment.amount)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </motion.div>
+              )}
 
               <motion.div
                 initial={{ y: 20, opacity: 0 }}
