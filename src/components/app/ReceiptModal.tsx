@@ -427,6 +427,8 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
       items: displayReceiptItems.filter((item) => getReceiptItemGroup(item) === 'discount'),
     },
   ].filter((section) => section.items.length > 0);
+  const receiptBreakdownGridColumns = 'grid-cols-[minmax(0,1fr)_4rem_4.75rem_5.25rem] sm:grid-cols-[minmax(0,1.6fr)_70px_110px_110px]';
+  const receiptBreakdownGridSpacing = 'gap-x-1.5 gap-y-2 px-3 sm:gap-x-3 sm:px-4';
   const heroMetadataChips = [
     receipt.orderNumber ? { label: `Order ${receipt.orderNumber}`, value: receipt.orderNumber, icon: FileText } : null,
     receipt.loyaltyMemberId ? { label: `Member ${receipt.loyaltyMemberId}`, value: receipt.loyaltyMemberId, icon: FileText } : null,
@@ -1026,7 +1028,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                         <div key={section.key}>
                           <h5 className="text-sm font-bold text-gray-400 mb-3 uppercase tracking-wide">{section.title}</h5>
                           <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
-                            <div className="grid grid-cols-[minmax(0,1.6fr)_70px_110px_110px] gap-3 px-4 py-2 text-[11px] font-bold uppercase tracking-wide text-gray-500 border-b border-white/10">
+                            <div className={`grid ${receiptBreakdownGridColumns} ${receiptBreakdownGridSpacing} py-2 text-[10px] sm:text-[11px] font-bold uppercase tracking-wide text-gray-500 border-b border-white/10`}>
                               <div>Description</div>
                               <div className="text-right">Qty</div>
                               <div className="text-right">Unit</div>
@@ -1036,10 +1038,10 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                               {section.items.map((item) => (
                                 <div
                                   key={`${section.key}-${item.lineIndex}-${item.description ?? 'item'}`}
-                                  className="grid grid-cols-[minmax(0,1.6fr)_70px_110px_110px] gap-3 px-4 py-3 items-start"
+                                  className={`grid ${receiptBreakdownGridColumns} ${receiptBreakdownGridSpacing} items-start py-3`}
                                 >
                                   <div className="min-w-0">
-                                    <div className="text-white font-semibold break-words">
+                                    <div className="text-sm font-semibold leading-snug text-white break-words [word-break:normal] [overflow-wrap:break-word]">
                                       {item.description?.trim() || 'Unnamed item'}
                                     </div>
                                     {(getValidMoneyValue(item.vatRate) !== null || getValidMoneyValue(item.vatAmount) !== null) && (
@@ -1049,15 +1051,15 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                                       </div>
                                     )}
                                   </div>
-                                  <div className="text-sm text-right text-gray-300">
+                                  <div className="min-w-0 self-start text-right text-xs sm:text-sm text-gray-300 whitespace-nowrap">
                                     {formatOptionalQuantity(item.quantity, item.quantityUnit)}
                                   </div>
-                                  <div className="text-sm text-right text-gray-300">
+                                  <div className="min-w-0 self-start text-right text-xs sm:text-sm text-gray-300 whitespace-nowrap">
                                     {section.key === 'discount'
                                       ? formatOptionalDeductionMoney(receiptCurrencySymbol, item.unitPrice)
                                       : formatOptionalMoney(receiptCurrencySymbol, item.unitPrice)}
                                   </div>
-                                  <div className={`text-sm text-right font-semibold ${section.key === 'discount' ? 'text-emerald-400' : 'text-white'}`}>
+                                  <div className={`min-w-0 self-start text-right text-xs sm:text-sm font-semibold whitespace-nowrap ${section.key === 'discount' ? 'text-emerald-400' : 'text-white'}`}>
                                     {section.key === 'discount'
                                       ? formatOptionalDeductionMoney(receiptCurrencySymbol, item.lineTotal)
                                       : formatOptionalMoney(receiptCurrencySymbol, item.lineTotal)}

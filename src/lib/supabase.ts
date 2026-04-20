@@ -260,14 +260,75 @@ export const createBugReport = async ({
   userId?: string | null,
   issueType: BugReportIssueType,
   note?: string | null,
-}) => supabase
-  .from('bug_reports')
-  .insert({
-    receipt_id: receiptId ?? null,
-    user_id: userId ?? null,
+}) => {
+  if (!receiptId) {
+    return { error: new Error('Missing receipt id for bug report') };
+  }
+
+  const {
+    data: { user: authUser },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError) {
+    if (import.meta.env.DEV) {
+      console.error('[createBugReport] Failed to resolve authenticated user:', {
+        message: authError.message,
+        name: authError.name,
+        receiptId,
+        issueType,
+      });
+    }
+
+    return { error: authError };
+  }
+
+  const resolvedUserId = authUser?.id ?? userId ?? null;
+
+  if (!resolvedUserId) {
+    const missingUserError = new Error('No authenticated user found for bug report');
+
+    if (import.meta.env.DEV) {
+      console.error('[createBugReport] Missing authenticated user for bug report insert:', {
+        receiptId,
+        issueType,
+      });
+    }
+
+    return { error: missingUserError };
+  }
+
+  if (import.meta.env.DEV && userId && userId !== resolvedUserId) {
+    console.warn('[createBugReport] Auth user differed from dialog user id, using auth user id instead:', {
+      dialogUserId: userId,
+      authUserId: resolvedUserId,
+      receiptId,
+    });
+  }
+
+  const payload = {
+    receipt_id: receiptId,
+    user_id: resolvedUserId,
     issue_type: issueType,
     note: note?.trim() || null,
-  });
+  };
+
+  const result = await supabase
+    .from('bug_reports')
+    .insert(payload);
+
+  if (result.error && import.meta.env.DEV) {
+    console.error('[createBugReport] bug_reports insert failed:', {
+      payload,
+      code: result.error.code,
+      message: result.error.message,
+      details: result.error.details,
+      hint: result.error.hint,
+    });
+  }
+
+  return result;
+};
 
 const getProcessingReferenceTimestampMs = (
   createdAt?: string | null,
