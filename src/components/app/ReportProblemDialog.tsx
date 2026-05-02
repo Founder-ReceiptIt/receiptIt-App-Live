@@ -44,22 +44,25 @@ export function ReportProblemDialog({
     setIsSubmitting(true);
 
     try {
+      const trimmedNote = note.trim() || null;
       const submissionPayload = {
         receiptId,
         userId: user?.id ?? null,
         issueType,
-        note,
+        note: trimmedNote,
       };
       const { error } = await createBugReport(submissionPayload);
 
       if (error) {
-        console.error('[ReportProblemDialog] Error creating bug report:', {
-          receiptId,
-          userId: user?.id ?? null,
-          issueType,
-          note: note.trim() || null,
-          error,
-        });
+        if (import.meta.env.DEV) {
+          console.error('[ReportProblemDialog] Error creating bug report:', {
+            receiptId,
+            userId: user?.id ?? null,
+            issueType,
+            note: trimmedNote,
+            error,
+          });
+        }
         showToast('Failed to send report', receiptMerchant || undefined);
         return;
       }
@@ -67,13 +70,15 @@ export function ReportProblemDialog({
       showToast('Problem reported', 'Thanks for helping us improve receiptIt beta');
       onClose();
     } catch (error) {
-      console.error('[ReportProblemDialog] Unexpected error creating bug report:', {
-        receiptId,
-        userId: user?.id ?? null,
-        issueType,
-        note: note.trim() || null,
-        error,
-      });
+      if (import.meta.env.DEV) {
+        console.error('[ReportProblemDialog] Unexpected error creating bug report:', {
+          receiptId,
+          userId: user?.id ?? null,
+          issueType,
+          note: note.trim() || null,
+          error,
+        });
+      }
       showToast('Failed to send report', receiptMerchant || undefined);
     } finally {
       setIsSubmitting(false);

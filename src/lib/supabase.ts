@@ -185,6 +185,36 @@ export const BUG_REPORT_ISSUE_TYPES = [
 
 export type BugReportIssueType = typeof BUG_REPORT_ISSUE_TYPES[number];
 
+interface BugReportInsertPayload {
+  receipt_id: string;
+  user_id: string;
+  issue_type: BugReportIssueType;
+  note: string | null;
+}
+
+const getTrimmedOptionalString = (value?: string | null): string | null => {
+  if (typeof value !== 'string') return null;
+
+  const trimmedValue = value.trim();
+  return trimmedValue.length > 0 ? trimmedValue : null;
+};
+
+const getErrorDiagnostics = (error: unknown) => {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    };
+  }
+
+  if (typeof error === 'object' && error !== null) {
+    return { ...error };
+  }
+
+  return { value: error };
+};
+
 export const isReceiptCurrencyConfirmationOption = (
   value: string
 ): value is ReceiptCurrencyConfirmationOption =>
@@ -262,28 +292,34 @@ export const createBugReport = async ({
   note?: string | null,
 }) => {
   if (!receiptId) {
-    return { error: new Error('Missing receipt id for bug report') };
-  }
+    const missingReceiptError = new Error('Missing receipt id for bug report');
 
-  const {
-    data: { user: authUser },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError) {
     if (import.meta.env.DEV) {
-      console.error('[createBugReport] Failed to resolve authenticated user:', {
-        message: authError.message,
-        name: authError.name,
-        receiptId,
+      console.error('[createBugReport] Missing receipt id for bug report insert:', {
         issueType,
+        ...getErrorDiagnostics(missingReceiptError),
       });
     }
 
-    return { error: authError };
+    return { error: missingReceiptError };
   }
 
-  const resolvedUserId = authUser?.id ?? userId ?? null;
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
+  const dialogUserId = getTrimmedOptionalString(userId);
+  const sessionUserId = getTrimmedOptionalString(session?.user?.id);
+  const resolvedUserId = sessionUserId ?? dialogUserId;
+
+  if (sessionError && import.meta.env.DEV) {
+    console.error('[createBugReport] Failed to resolve auth session before bug report insert:', {
+      receiptId,
+      issueType,
+      dialogUserId,
+      ...getErrorDiagnostics(sessionError),
+    });
+  }
 
   if (!resolvedUserId) {
     const missingUserError = new Error('No authenticated user found for bug report');
@@ -298,19 +334,19 @@ export const createBugReport = async ({
     return { error: missingUserError };
   }
 
-  if (import.meta.env.DEV && userId && userId !== resolvedUserId) {
-    console.warn('[createBugReport] Auth user differed from dialog user id, using auth user id instead:', {
-      dialogUserId: userId,
-      authUserId: resolvedUserId,
+  if (import.meta.env.DEV && dialogUserId && sessionUserId && dialogUserId !== sessionUserId) {
+    console.warn('[createBugReport] Session user differed from dialog user id, using session user id instead:', {
+      dialogUserId,
+      sessionUserId,
       receiptId,
     });
   }
 
-  const payload = {
+  const payload: BugReportInsertPayload = {
     receipt_id: receiptId,
     user_id: resolvedUserId,
     issue_type: issueType,
-    note: note?.trim() || null,
+    note: getTrimmedOptionalString(note),
   };
 
   const result = await supabase
@@ -320,10 +356,7 @@ export const createBugReport = async ({
   if (result.error && import.meta.env.DEV) {
     console.error('[createBugReport] bug_reports insert failed:', {
       payload,
-      code: result.error.code,
-      message: result.error.message,
-      details: result.error.details,
-      hint: result.error.hint,
+      ...getErrorDiagnostics(result.error),
     });
   }
 
