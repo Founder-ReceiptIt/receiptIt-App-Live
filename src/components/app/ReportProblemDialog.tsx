@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { X } from 'lucide-react';
+import { Check, ChevronDown, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -8,6 +8,13 @@ import {
   createBugReport,
 } from '../../lib/supabase';
 import type { BugReportIssueType } from '../../lib/supabase';
+
+const BUG_REPORT_ISSUE_TYPE_LABELS: Record<BugReportIssueType, string> = {
+  stuck_processing: 'Receipt is stuck processing',
+  currency_missing_loop: 'Currency could not be confirmed',
+  receipt_parse_problem: 'Receipt details were read incorrectly',
+  other: 'Something else went wrong',
+};
 
 interface ReportProblemDialogProps {
   isOpen: boolean;
@@ -29,12 +36,16 @@ export function ReportProblemDialog({
   const [issueType, setIssueType] = useState<BugReportIssueType>('stuck_processing');
   const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isIssueTypePickerOpen, setIsIssueTypePickerOpen] = useState(false);
+
+  const selectedIssueTypeLabel = BUG_REPORT_ISSUE_TYPE_LABELS[issueType];
 
   useEffect(() => {
     if (!isOpen) {
       setIssueType('stuck_processing');
       setNote('');
       setIsSubmitting(false);
+      setIsIssueTypePickerOpen(false);
     }
   }, [isOpen]);
 
@@ -121,22 +132,77 @@ export function ReportProblemDialog({
 
             <div className="p-5 space-y-4">
               <div className="space-y-2">
-                <label htmlFor="bug-report-issue-type" className="text-sm font-semibold text-white">
+                <label className="text-sm font-semibold text-white">
                   Issue type
                 </label>
-                <select
-                  id="bug-report-issue-type"
-                  value={issueType}
-                  onChange={(event) => setIssueType(event.target.value as BugReportIssueType)}
-                  disabled={isSubmitting}
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-medium text-white outline-none transition-colors hover:border-white/20 focus:border-teal-400/40 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {BUG_REPORT_ISSUE_TYPES.map((issueTypeOption) => (
-                    <option key={issueTypeOption} value={issueTypeOption} className="bg-neutral-950 text-white">
-                      {issueTypeOption}
-                    </option>
-                  ))}
-                </select>
+                <p className="text-xs text-gray-500">
+                  Choose the option that best matches the problem.
+                </p>
+
+                <div className="relative">
+                  <button
+                    type="button"
+                    aria-expanded={isIssueTypePickerOpen}
+                    aria-haspopup="listbox"
+                    onClick={() => !isSubmitting && setIsIssueTypePickerOpen((currentValue) => !currentValue)}
+                    disabled={isSubmitting}
+                    className="flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-left text-sm font-medium text-white outline-none transition-colors hover:border-white/20 focus:border-teal-400/40 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className="min-w-0 flex-1">{selectedIssueTypeLabel}</span>
+                    <ChevronDown
+                      className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${
+                        isIssueTypePickerOpen ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+
+                  <AnimatePresence>
+                    {isIssueTypePickerOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                        transition={{ duration: 0.16 }}
+                        className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-10 overflow-hidden rounded-2xl border border-white/10 bg-neutral-950/95 shadow-[0_18px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl"
+                      >
+                        <div
+                          role="listbox"
+                          aria-label="Issue type"
+                          className="max-h-72 overflow-y-auto p-2"
+                        >
+                          {BUG_REPORT_ISSUE_TYPES.map((issueTypeOption) => {
+                            const isSelected = issueTypeOption === issueType;
+
+                            return (
+                              <button
+                                key={issueTypeOption}
+                                type="button"
+                                role="option"
+                                aria-selected={isSelected}
+                                onClick={() => {
+                                  setIssueType(issueTypeOption);
+                                  setIsIssueTypePickerOpen(false);
+                                }}
+                                className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-left text-sm transition-colors ${
+                                  isSelected
+                                    ? 'bg-teal-500/15 text-teal-200'
+                                    : 'text-gray-200 hover:bg-white/5'
+                                }`}
+                              >
+                                <span>{BUG_REPORT_ISSUE_TYPE_LABELS[issueTypeOption]}</span>
+                                <Check
+                                  className={`h-4 w-4 shrink-0 ${
+                                    isSelected ? 'opacity-100' : 'opacity-0'
+                                  }`}
+                                />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
 
               <div className="space-y-2">
