@@ -32,13 +32,36 @@ const isExplicitImageQualityError = (normalizedErrorReason: string): boolean => 
     'image quality',
     'hard_to_read',
     'hard to read',
-    'unreadable',
+    'text too small',
+    'too small to read',
+    'unreadable image',
+    'unreadable photo',
     'blurry',
     'blur',
     'glare',
     'low_contrast',
     'low contrast',
-    'ocr',
+    'poor lighting',
+    'bad lighting',
+    'cropped',
+    'out of frame',
+  ])
+);
+
+const isScannerProcessingError = (normalizedErrorReason: string): boolean => (
+  hasAnyToken(normalizedErrorReason, [
+    'timeout',
+    'timed out',
+    'download_timeout',
+    'processing_timeout',
+    'scanner_timeout',
+    'parse_timeout',
+    'failed_to_process',
+    'processing_failed',
+    'scanner_failed',
+    'ocr_failed',
+    'parse_failed',
+    'json_parse_failed',
   ])
 );
 
@@ -86,6 +109,13 @@ export const getReceiptFailureDetails = ({
   }
 
   const normalizedErrorReason = normalizeErrorReason(errorReason);
+
+  if (isScannerProcessingError(normalizedErrorReason)) {
+    return {
+      reason: 'Couldn’t finish processing this receipt',
+      advice: 'Try retrying the scan. If it keeps failing, report the problem.',
+    };
+  }
 
   if (isExplicitImageQualityError(normalizedErrorReason)) {
     return {
