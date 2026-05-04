@@ -10,10 +10,11 @@ import {
 import type { BugReportIssueType } from '../../lib/supabase';
 
 const BUG_REPORT_ISSUE_TYPE_LABELS: Record<BugReportIssueType, string> = {
-  stuck_processing: 'Receipt is stuck processing',
-  currency_missing_loop: 'Currency could not be confirmed',
-  receipt_parse_problem: 'Receipt details were read incorrectly',
-  other: 'Something else went wrong',
+  processing_failed: 'The receipt wouldn’t process',
+  details_incorrect: 'The wrong details were extracted',
+  image_quality_issue: 'The image is hard to read',
+  non_standard_document: 'This isn’t a standard receipt',
+  other: 'Something else',
 };
 
 interface ReportProblemDialogProps {
@@ -33,7 +34,7 @@ export function ReportProblemDialog({
 }: ReportProblemDialogProps) {
   const { user } = useAuth();
   const { showToast } = useToast();
-  const [issueType, setIssueType] = useState<BugReportIssueType>('stuck_processing');
+  const [issueType, setIssueType] = useState<BugReportIssueType>('processing_failed');
   const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isIssueTypePickerOpen, setIsIssueTypePickerOpen] = useState(false);
@@ -42,7 +43,7 @@ export function ReportProblemDialog({
 
   useEffect(() => {
     if (!isOpen) {
-      setIssueType('stuck_processing');
+      setIssueType('processing_failed');
       setNote('');
       setIsSubmitting(false);
       setIsIssueTypePickerOpen(false);

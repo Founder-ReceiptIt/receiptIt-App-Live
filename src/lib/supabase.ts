@@ -177,9 +177,10 @@ export type ReceiptCurrencyConfirmationOption =
   typeof RECEIPT_CURRENCY_CONFIRMATION_OPTIONS[number];
 
 export const BUG_REPORT_ISSUE_TYPES = [
-  'stuck_processing',
-  'currency_missing_loop',
-  'receipt_parse_problem',
+  'processing_failed',
+  'details_incorrect',
+  'image_quality_issue',
+  'non_standard_document',
   'other',
 ] as const;
 

@@ -450,6 +450,8 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                   className="hidden"
                 />
 
+                {/* TODO native: guided receipt capture with edge detection, blur checks, lighting checks, and long receipt multi-shot mode. */}
+
                 <div className="space-y-3">
                   <button
                     type="button"
@@ -498,6 +500,15 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                       <span className="font-semibold text-white">Take Photo</span>
                     </div>
                   </button>
+                </div>
+
+                <div className="mt-5 space-y-1 text-center">
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    For best results, keep the receipt flat, well-lit, and close enough that the text is clear.
+                  </p>
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    Long receipts may scan better if photographed closer or in sections.
+                  </p>
                 </div>
 
                 <p className="text-xs text-gray-500 text-center mt-6">
