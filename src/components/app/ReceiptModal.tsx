@@ -18,7 +18,7 @@ import type { ReceiptCurrencyConfirmationOption } from '../../lib/supabase';
 import { formatReceiptDate } from '../../lib/receiptDateUtils';
 import { getReceiptOriginalUrl, openReceiptOriginal } from '../../lib/receiptOriginalUtils';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
-import { getReceiptIssueAdvice, getReceiptIssueReason, getReceiptPurchaseDateDisplay } from '../../lib/receiptUiUtils';
+import { getReceiptFailureDetails, getReceiptPurchaseDateDisplay } from '../../lib/receiptUiUtils';
 import { useToast } from '../../contexts/ToastContext';
 
 const getCurrencySymbol = (currencyCode: string): string => {
@@ -408,21 +408,14 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     date: receipt.date,
     format: 'long',
   });
-  const receiptIssueReason = getReceiptIssueReason({
+  const receiptFailureDetails = getReceiptFailureDetails({
     status: receipt.status,
     errorReason: receipt.errorReason,
     date: receipt.date,
     createdAt: receipt.createdAt,
     processingAttemptStartedAt,
   });
-  const receiptIssueAdvice = getReceiptIssueAdvice({
-    status: receipt.status,
-    errorReason: receipt.errorReason,
-    date: receipt.date,
-    createdAt: receipt.createdAt,
-    processingAttemptStartedAt,
-  });
-  const showHeroIssueReason = Boolean(receiptIssueReason) && !isStaleProcessing && !requiresCurrencyConfirmation;
+  const showHeroIssueReason = Boolean(receiptFailureDetails) && !isStaleProcessing && !requiresCurrencyConfirmation;
   const importedOnDisplay = !formattedPurchaseDate ? formatReceiptDate(receipt.createdAt, 'long') : null;
   const hasReceiptItems = displayReceiptItems.length > 0;
   const showItemsLoadingState = !isCurrentReceiptDetails || itemsLoading || !itemsLoaded;
@@ -616,7 +609,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                       <p className="text-gray-400 text-sm">{purchaseDateDisplay}</p>
                     )}
                     {!purchaseDateDisplay && showHeroIssueReason && (
-                      <p className="text-gray-500 text-sm">{receiptIssueReason}</p>
+                      <p className="text-gray-500 text-sm">{receiptFailureDetails?.reason}</p>
                     )}
                     {receipt.location && (
                       <div className="flex items-center gap-1.5 mt-2 text-gray-400 text-xs">
@@ -780,11 +773,11 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="text-sm font-semibold text-red-300">Upload failed</p>
-                      {receiptIssueReason && (
-                        <p className="text-xs text-red-100/80">{receiptIssueReason}</p>
+                      {receiptFailureDetails?.reason && (
+                        <p className="text-xs text-red-100/80">{receiptFailureDetails.reason}</p>
                       )}
-                      {receiptIssueAdvice && (
-                        <p className="mt-1 text-xs text-red-100/60">{receiptIssueAdvice}</p>
+                      {receiptFailureDetails?.advice && (
+                        <p className="mt-1 text-xs text-red-100/60">{receiptFailureDetails.advice}</p>
                       )}
                     </div>
                     <div className="flex items-center gap-2">

@@ -20,7 +20,7 @@ import type { ReceiptCurrencyConfirmationOption } from '../../lib/supabase';
 import { getReceiptOriginalUrl, openReceiptOriginal } from '../../lib/receiptOriginalUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
-import { getReceiptIssueAdvice, getReceiptIssueReason, getReceiptPurchaseDateDisplay } from '../../lib/receiptUiUtils';
+import { getReceiptFailureDetails, getReceiptPurchaseDateDisplay } from '../../lib/receiptUiUtils';
 import { useToast } from '../../contexts/ToastContext';
 
 interface WalletTabProps {
@@ -1241,14 +1241,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                 const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
                 const originalReceiptUrl = getReceiptOriginalUrl(receipt);
                 const showOpenOriginalReceiptAction = isNonFinalReceipt && Boolean(originalReceiptUrl);
-                const receiptIssueReason = getReceiptIssueReason({
-                  status: receipt.status,
-                  errorReason: receipt.errorReason,
-                  date: receipt.date,
-                  createdAt: receipt.createdAt,
-                  processingAttemptStartedAt: receipt.processingAttemptStartedAt,
-                });
-                const receiptIssueAdvice = getReceiptIssueAdvice({
+                const receiptFailureDetails = getReceiptFailureDetails({
                   status: receipt.status,
                   errorReason: receipt.errorReason,
                   date: receipt.date,
@@ -1260,7 +1253,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                   date: receipt.date,
                   format: 'short',
                 });
-                const showIssueHeading = Boolean(receiptIssueReason);
+                const showIssueHeading = Boolean(receiptFailureDetails);
 
                 return (
                   <motion.div
@@ -1352,9 +1345,9 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                           ) : showIssueHeading ? (
                             <>
                               <h3 className="text-lg font-bold mb-1 text-red-400">Upload failed</h3>
-                              <p className="text-sm text-gray-400">{receiptIssueReason}</p>
-                              {receiptIssueAdvice && (
-                                <p className="mt-1 text-xs text-gray-500">{receiptIssueAdvice}</p>
+                              <p className="text-sm text-gray-400">{receiptFailureDetails?.reason}</p>
+                              {receiptFailureDetails?.advice && (
+                                <p className="mt-1 text-xs text-gray-500">{receiptFailureDetails.advice}</p>
                               )}
                             </>
                           ) : (

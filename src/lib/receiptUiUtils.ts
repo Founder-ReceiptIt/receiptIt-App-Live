@@ -3,15 +3,9 @@ import {
   isReceiptStaleProcessing,
   needsCurrencyConfirmation,
 } from './supabase';
-import { formatReceiptDate, getPurchaseDateDisplay, PURCHASE_DATE_PENDING_LABEL } from './receiptDateUtils';
+import { getPurchaseDateDisplay } from './receiptDateUtils';
 
-export type ReceiptIssueKind =
-  | 'stale_processing'
-  | 'currency_missing'
-  | 'missing_purchase_date'
-  | 'non_standard_receipt';
-
-interface ReceiptIssueInput {
+interface ReceiptFailureInput {
   status?: unknown;
   errorReason?: unknown;
   date?: string | null;
@@ -19,51 +13,116 @@ interface ReceiptIssueInput {
   processingAttemptStartedAt?: string | null;
 }
 
-const RECEIPT_ISSUE_REASON_BY_KIND: Record<ReceiptIssueKind, string> = {
-  stale_processing: 'Image was hard to read',
-  currency_missing: 'Currency could not be read',
-  missing_purchase_date: 'Purchase date could not be read',
-  non_standard_receipt: 'This may not be a standard receipt',
-};
+interface ReceiptFailureDetails {
+  reason: string;
+  advice: string | null;
+}
 
-const RECEIPT_ISSUE_ADVICE_BY_KIND: Partial<Record<ReceiptIssueKind, string>> = {
-  stale_processing: 'Try retaking the photo closer, with the receipt filling the frame.',
-};
+const normalizeErrorReason = (errorReason: unknown): string => (
+  typeof errorReason === 'string' ? errorReason.trim().toLowerCase() : ''
+);
 
-export const getReceiptIssueKind = ({
+const hasAnyToken = (value: string, tokens: string[]): boolean => (
+  tokens.some((token) => value.includes(token))
+);
+
+const isExplicitImageQualityError = (normalizedErrorReason: string): boolean => (
+  hasAnyToken(normalizedErrorReason, [
+    'image_quality',
+    'image quality',
+    'hard_to_read',
+    'hard to read',
+    'unreadable',
+    'blurry',
+    'blur',
+    'glare',
+    'low_contrast',
+    'low contrast',
+    'ocr',
+  ])
+);
+
+const isLongReceiptError = (normalizedErrorReason: string): boolean => (
+  hasAnyToken(normalizedErrorReason, [
+    'long_receipt',
+    'long receipt',
+    'narrow_receipt',
+    'narrow receipt',
+  ])
+);
+
+const isNonStandardDocumentError = (normalizedErrorReason: string): boolean => (
+  hasAnyToken(normalizedErrorReason, [
+    'non_standard',
+    'non-standard',
+    'ticket',
+    'payment slip',
+    'invoice',
+    'confirmation',
+  ])
+);
+
+const FALLBACK_FAILURE_STATUSES = new Set(['needs_input', 'failed']);
+
+export const getReceiptFailureDetails = ({
   status,
   errorReason,
-  date,
+  date: _date,
   createdAt,
   processingAttemptStartedAt,
-}: ReceiptIssueInput): ReceiptIssueKind | null => {
-  if (isReceiptStaleProcessing(status, createdAt, processingAttemptStartedAt)) {
-    return 'stale_processing';
-  }
-
+}: ReceiptFailureInput): ReceiptFailureDetails | null => {
   if (needsCurrencyConfirmation(status, errorReason)) {
-    return 'currency_missing';
+    return {
+      reason: 'Currency could not be read',
+      advice: 'Confirm the currency or retry with a clearer image.',
+    };
   }
 
-  if (isFinalizedReceiptStatus(status) && !formatReceiptDate(date)) {
-    return 'missing_purchase_date';
+  if (isReceiptStaleProcessing(status, createdAt, processingAttemptStartedAt)) {
+    return {
+      reason: 'Couldn’t finish processing this receipt',
+      advice: 'Try retrying the scan. If it keeps failing, report the problem.',
+    };
   }
 
-  if (status === 'needs_input') {
-    return 'non_standard_receipt';
+  const normalizedErrorReason = normalizeErrorReason(errorReason);
+
+  if (isExplicitImageQualityError(normalizedErrorReason)) {
+    return {
+      reason: 'Image was hard to read',
+      advice: 'Try retaking the photo closer, with the receipt filling the frame.',
+    };
+  }
+
+  if (isLongReceiptError(normalizedErrorReason)) {
+    return {
+      reason: 'Long receipt may be hard to scan',
+      advice: 'Try capturing it closer, or in sections.',
+    };
+  }
+
+  if (isNonStandardDocumentError(normalizedErrorReason)) {
+    return {
+      reason: 'This may not be a standard receipt',
+      advice: 'It may be a ticket, payment slip, invoice, or confirmation.',
+    };
+  }
+
+  if (typeof status === 'string' && FALLBACK_FAILURE_STATUSES.has(status)) {
+    return {
+      reason: 'We couldn’t process this receipt',
+      advice: 'Retry the scan or report a problem.',
+    };
+  }
+
+  if (normalizedErrorReason.length > 0) {
+    return {
+      reason: 'We couldn’t process this receipt',
+      advice: 'Retry the scan or report a problem.',
+    };
   }
 
   return null;
-};
-
-export const getReceiptIssueReason = (input: ReceiptIssueInput): string | null => {
-  const issueKind = getReceiptIssueKind(input);
-  return issueKind ? RECEIPT_ISSUE_REASON_BY_KIND[issueKind] : null;
-};
-
-export const getReceiptIssueAdvice = (input: ReceiptIssueInput): string | null => {
-  const issueKind = getReceiptIssueKind(input);
-  return issueKind ? RECEIPT_ISSUE_ADVICE_BY_KIND[issueKind] ?? null : null;
 };
 
 export const getReceiptPurchaseDateDisplay = ({
@@ -75,13 +134,9 @@ export const getReceiptPurchaseDateDisplay = ({
   date?: string | null;
   format?: 'short' | 'long';
 }): string | null => {
-  if (isFinalizedReceiptStatus(status)) {
-    return getPurchaseDateDisplay(date, format);
+  if (!isFinalizedReceiptStatus(status)) {
+    return null;
   }
 
-  if (status === 'processing') {
-    return PURCHASE_DATE_PENDING_LABEL;
-  }
-
-  return null;
+  return getPurchaseDateDisplay(date, format);
 };
