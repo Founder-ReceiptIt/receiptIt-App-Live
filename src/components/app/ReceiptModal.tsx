@@ -415,7 +415,8 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     createdAt: receipt.createdAt,
     processingAttemptStartedAt,
   });
-  const showHeroIssueReason = Boolean(receiptFailureDetails) && !isStaleProcessing && !requiresCurrencyConfirmation;
+  const showFailedReceiptBanner = Boolean(receiptFailureDetails) && !requiresCurrencyConfirmation && !isFreshProcessing;
+  const showHeroIssueReason = Boolean(receiptFailureDetails) && !showFailedReceiptBanner && !requiresCurrencyConfirmation;
   const importedOnDisplay = !formattedPurchaseDate ? formatReceiptDate(receipt.createdAt, 'long') : null;
   const hasReceiptItems = displayReceiptItems.length > 0;
   const showItemsLoadingState = !isCurrentReceiptDetails || itemsLoading || !itemsLoaded;
@@ -768,7 +769,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                 </AnimatePresence>
               </div>
 
-              {isStaleProcessing && (
+              {showFailedReceiptBanner && (
                 <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
@@ -803,7 +804,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                         disabled={isDeleting || isConfirmingCurrency}
                         className="px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Report a problem
+                        Report
                       </button>
                     </div>
                   </div>

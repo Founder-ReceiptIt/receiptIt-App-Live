@@ -97,14 +97,14 @@ export const getReceiptFailureDetails = ({
   if (needsCurrencyConfirmation(status, errorReason)) {
     return {
       reason: 'Currency could not be read',
-      advice: 'Confirm the currency or retry with a clearer image.',
+      advice: 'Confirm the currency to continue.',
     };
   }
 
   if (isReceiptStaleProcessing(status, createdAt, processingAttemptStartedAt)) {
     return {
-      reason: 'Couldn’t finish processing this receipt',
-      advice: 'Try retrying the scan. If it keeps failing, report the problem.',
+      reason: 'Processing could not complete.',
+      advice: null,
     };
   }
 
@@ -112,43 +112,43 @@ export const getReceiptFailureDetails = ({
 
   if (isScannerProcessingError(normalizedErrorReason)) {
     return {
-      reason: 'Couldn’t finish processing this receipt',
-      advice: 'Try retrying the scan. If it keeps failing, report the problem.',
+      reason: 'Processing could not complete.',
+      advice: null,
     };
   }
 
   if (isExplicitImageQualityError(normalizedErrorReason)) {
     return {
       reason: 'Image was hard to read',
-      advice: 'Try retaking the photo closer, with the receipt filling the frame.',
+      advice: 'Retake the photo closer.',
     };
   }
 
   if (isLongReceiptError(normalizedErrorReason)) {
     return {
       reason: 'Long receipt may be hard to scan',
-      advice: 'Try capturing it closer, or in sections.',
+      advice: 'Try capturing it closer.',
     };
   }
 
   if (isNonStandardDocumentError(normalizedErrorReason)) {
     return {
       reason: 'This may not be a standard receipt',
-      advice: 'It may be a ticket, payment slip, invoice, or confirmation.',
+      advice: 'You can still keep the original.',
     };
   }
 
   if (typeof status === 'string' && FALLBACK_FAILURE_STATUSES.has(status)) {
     return {
-      reason: 'We couldn’t process this receipt',
-      advice: 'Retry the scan or report a problem.',
+      reason: 'Processing could not complete.',
+      advice: null,
     };
   }
 
   if (normalizedErrorReason.length > 0) {
     return {
-      reason: 'We couldn’t process this receipt',
-      advice: 'Retry the scan or report a problem.',
+      reason: 'Processing could not complete.',
+      advice: null,
     };
   }
 

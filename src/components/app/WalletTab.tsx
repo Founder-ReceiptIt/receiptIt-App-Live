@@ -1254,6 +1254,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                   format: 'short',
                 });
                 const showIssueHeading = Boolean(receiptFailureDetails);
+                const showFailedReceiptActions = showIssueHeading && !requiresCurrencyConfirmation;
 
                 return (
                   <motion.div
@@ -1448,7 +1449,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                       </div>
                     )}
 
-                    {isStaleProcessing && (
+                    {showFailedReceiptActions && (
                       <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3">
                         <div className="flex flex-wrap items-center gap-2">
                           <button
@@ -1476,7 +1477,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                             disabled={isDeleting || isConfirmingCurrency}
                             className="px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            Report a problem
+                            Report
                           </button>
                         </div>
                       </div>
