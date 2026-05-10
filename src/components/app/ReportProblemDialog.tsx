@@ -4,18 +4,39 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import {
-  BUG_REPORT_ISSUE_TYPES,
   createBugReport,
 } from '../../lib/supabase';
 import type { BugReportIssueType } from '../../lib/supabase';
 
-const BUG_REPORT_ISSUE_TYPE_LABELS: Record<BugReportIssueType, string> = {
-  processing_failed: 'The receipt wouldn’t process',
-  details_incorrect: 'The wrong details were extracted',
-  image_quality_issue: 'The image is hard to read',
-  non_standard_document: 'This isn’t a standard receipt',
-  other: 'Something else',
-};
+const REPORT_PROBLEM_ISSUE_OPTIONS = [
+  {
+    value: 'processing_failed',
+    submitValue: 'processing_failed',
+    label: 'The receipt wouldn’t process',
+  },
+  {
+    value: 'details_incorrect',
+    submitValue: 'details_incorrect',
+    label: 'The details are wrong',
+  },
+  {
+    value: 'original_problem',
+    submitValue: 'other',
+    label: 'I can’t open the original',
+  },
+  {
+    value: 'other',
+    submitValue: 'other',
+    label: 'Something else',
+  },
+] as const;
+
+type ReportProblemIssueOption = typeof REPORT_PROBLEM_ISSUE_OPTIONS[number];
+type ReportProblemIssueValue = ReportProblemIssueOption['value'];
+
+const getReportProblemIssueOption = (value: ReportProblemIssueValue): ReportProblemIssueOption => (
+  REPORT_PROBLEM_ISSUE_OPTIONS.find((option) => option.value === value) || REPORT_PROBLEM_ISSUE_OPTIONS[0]
+);
 
 interface ReportProblemDialogProps {
   isOpen: boolean;
@@ -34,12 +55,12 @@ export function ReportProblemDialog({
 }: ReportProblemDialogProps) {
   const { user } = useAuth();
   const { showToast } = useToast();
-  const [issueType, setIssueType] = useState<BugReportIssueType>('processing_failed');
+  const [issueType, setIssueType] = useState<ReportProblemIssueValue>('processing_failed');
   const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isIssueTypePickerOpen, setIsIssueTypePickerOpen] = useState(false);
 
-  const selectedIssueTypeLabel = BUG_REPORT_ISSUE_TYPE_LABELS[issueType];
+  const selectedIssueTypeOption = getReportProblemIssueOption(issueType);
 
   useEffect(() => {
     if (!isOpen) {
@@ -60,7 +81,7 @@ export function ReportProblemDialog({
       const submissionPayload = {
         receiptId,
         userId: user?.id ?? null,
-        issueType,
+        issueType: selectedIssueTypeOption.submitValue as BugReportIssueType,
         note: trimmedNote,
       };
       const { error } = await createBugReport(submissionPayload);
@@ -149,7 +170,7 @@ export function ReportProblemDialog({
                     disabled={isSubmitting}
                     className="flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-left text-sm font-medium text-white outline-none transition-colors hover:border-white/20 focus:border-teal-400/40 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <span className="min-w-0 flex-1">{selectedIssueTypeLabel}</span>
+                    <span className="min-w-0 flex-1">{selectedIssueTypeOption.label}</span>
                     <ChevronDown
                       className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${
                         isIssueTypePickerOpen ? 'rotate-180' : ''
@@ -171,26 +192,26 @@ export function ReportProblemDialog({
                           aria-label="Issue type"
                           className="max-h-72 overflow-y-auto p-2"
                         >
-                          {BUG_REPORT_ISSUE_TYPES.map((issueTypeOption) => {
-                            const isSelected = issueTypeOption === issueType;
+                          {REPORT_PROBLEM_ISSUE_OPTIONS.map((issueTypeOption) => {
+                            const isSelected = issueTypeOption.value === issueType;
 
                             return (
                               <button
-                                key={issueTypeOption}
+                                key={issueTypeOption.value}
                                 type="button"
                                 role="option"
                                 aria-selected={isSelected}
                                 onClick={() => {
-                                  setIssueType(issueTypeOption);
+                                  setIssueType(issueTypeOption.value);
                                   setIsIssueTypePickerOpen(false);
                                 }}
                                 className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-left text-sm transition-colors ${
                                   isSelected
                                     ? 'bg-teal-500/15 text-teal-200'
                                     : 'text-gray-200 hover:bg-white/5'
-                                }`}
+                                  }`}
                               >
-                                <span>{BUG_REPORT_ISSUE_TYPE_LABELS[issueTypeOption]}</span>
+                                <span>{issueTypeOption.label}</span>
                                 <Check
                                   className={`h-4 w-4 shrink-0 ${
                                     isSelected ? 'opacity-100' : 'opacity-0'

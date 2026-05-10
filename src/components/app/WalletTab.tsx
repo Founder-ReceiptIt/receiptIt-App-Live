@@ -1239,8 +1239,6 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                 const hasActiveWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) > new Date();
                 const hasExpiredWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) <= new Date();
                 const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
-                const originalReceiptUrl = getReceiptOriginalUrl(receipt);
-                const showOpenOriginalReceiptAction = isNonFinalReceipt && Boolean(originalReceiptUrl);
                 const receiptFailureDetails = getReceiptFailureDetails({
                   status: receipt.status,
                   errorReason: receipt.errorReason,
@@ -1254,6 +1252,8 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                   format: 'short',
                 });
                 const showIssueHeading = Boolean(receiptFailureDetails);
+                const originalReceiptUrl = getReceiptOriginalUrl(receipt);
+                const showOpenOriginalReceiptAction = (isNonFinalReceipt || showIssueHeading) && Boolean(originalReceiptUrl);
                 const showFailedReceiptActions = showIssueHeading && !requiresCurrencyConfirmation;
 
                 return (
