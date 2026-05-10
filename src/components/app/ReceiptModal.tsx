@@ -348,6 +348,146 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const isNonFinalReceipt = isProcessingReceipt || isNeedsInputReceipt;
   const requiresCurrencyConfirmation = needsCurrencyConfirmation(receipt.status, receipt.errorReason);
   const isConfirmingCurrency = currencyConfirmationState?.receiptId === receipt.id;
+  const receiptFailureDetails = getReceiptFailureDetails({
+    status: receipt.status,
+    errorReason: receipt.errorReason,
+    date: receipt.date,
+    createdAt: receipt.createdAt,
+    processingAttemptStartedAt,
+  });
+  const isCompactFailedReceipt = Boolean(receiptFailureDetails) && !requiresCurrencyConfirmation && !isFreshProcessing;
+  const downloadUrl = getReceiptOriginalUrl(receipt);
+
+  const handleDownloadClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const openedUrl = openReceiptOriginal(receipt);
+    if (openedUrl) {
+      console.log('Opening receipt image:', openedUrl);
+      console.log('Receipt image_url field:', receipt.imageUrl);
+      console.log('Is external URL:', receipt.imageUrl?.startsWith('http'));
+    } else {
+      console.warn('No download URL available for this receipt');
+    }
+  };
+
+  if (isCompactFailedReceipt) {
+    return (
+      <AnimatePresence>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-end md:items-center justify-center"
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+          />
+
+          <motion.div
+            initial={{ y: "100%", opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: "100%", opacity: 0 }}
+            transition={{ type: "spring", damping: 30, stiffness: 300 }}
+            className="relative w-full max-w-2xl mx-4 mb-4 md:mb-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="backdrop-blur-xl bg-black/90 border border-white/10 rounded-3xl overflow-hidden shadow-[0_0_60px_rgba(45,212,191,0.3)]">
+              <div className="p-6 border-b border-white/10 flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-white">Receipt Details</h2>
+                <div className="flex items-center gap-2">
+                  {downloadUrl && (
+                    <motion.button
+                      type="button"
+                      onClick={handleDownloadClick}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="inline-flex h-10 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 text-sm font-semibold text-gray-300 transition-colors hover:border-teal-400/30 hover:text-teal-300"
+                      title="View Original Receipt"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span>View original</span>
+                    </motion.button>
+                  )}
+                  <motion.button
+                    type="button"
+                    whileHover={{ scale: 1.1, rotate: 90 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={onClose}
+                    className="w-10 h-10 rounded-full backdrop-blur-md bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:border-white/20 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </motion.button>
+                </div>
+              </div>
+
+              <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+                <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6">
+                  <div className="flex items-start gap-4">
+                    <div className="w-16 h-16 flex-shrink-0 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-center">
+                      {receipt.merchantIcon ? (
+                        <receipt.merchantIcon className="w-8 h-8 text-red-300" strokeWidth={1.5} />
+                      ) : (
+                        <span className="text-2xl font-bold text-red-300">!</span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-2xl font-bold text-white">Upload failed</h3>
+                      <p className="mt-2 text-sm text-red-100/85">{receiptFailureDetails.reason}</p>
+                      {receiptFailureDetails.advice && (
+                        <p className="mt-1 text-sm text-red-100/60">{receiptFailureDetails.advice}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleRetryReceipt()}
+                      disabled={isDeleting || isConfirmingCurrency}
+                      className="px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isConfirmingCurrency ? 'Retrying...' : 'Retry'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDelete('now')}
+                      disabled={isDeleting || isConfirmingCurrency}
+                      className="px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isDeleting ? 'Deleting...' : 'Delete'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowReportProblemDialog(true)}
+                      disabled={isDeleting || isConfirmingCurrency}
+                      className="px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Report
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <ReportProblemDialog
+              isOpen={showReportProblemDialog}
+              onClose={() => setShowReportProblemDialog(false)}
+              receiptId={receipt.id}
+              receiptMerchant={receipt.merchant}
+              zIndexClassName="z-[80]"
+            />
+          </motion.div>
+        </motion.div>
+      </AnimatePresence>
+    );
+  }
+
   const receiptCurrencySymbol = getCurrencySymbol(receipt.currency);
   const subtotal = getValidMoneyValue(receipt.subtotal);
   const vatAmount = getValidMoneyValue(receipt.vatAmount);
@@ -408,14 +548,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     date: receipt.date,
     format: 'long',
   });
-  const receiptFailureDetails = getReceiptFailureDetails({
-    status: receipt.status,
-    errorReason: receipt.errorReason,
-    date: receipt.date,
-    createdAt: receipt.createdAt,
-    processingAttemptStartedAt,
-  });
-  const isCompactFailedReceipt = Boolean(receiptFailureDetails) && !requiresCurrencyConfirmation && !isFreshProcessing;
   const importedOnDisplay = !formattedPurchaseDate ? formatReceiptDate(receipt.createdAt, 'long') : null;
   const hasReceiptItems = displayReceiptItems.length > 0;
   const showItemsLoadingState = !isCurrentReceiptDetails || itemsLoading || !itemsLoaded;
@@ -507,7 +639,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   // Return window status
   const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
 
-  const downloadUrl = getReceiptOriginalUrl(receipt);
   const shouldHideBreakdownSection = isCompactFailedReceipt || (
     isNonFinalReceipt
     && !showItemsLoadingState
@@ -522,18 +653,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const heroAmountDisplay = shouldShowHeroAmount
     ? formatMoney(displayOriginalCurrencySymbol, displayOriginalTotal)
     : '—';
-
-  const handleDownloadClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    const openedUrl = openReceiptOriginal(receipt);
-    if (openedUrl) {
-      console.log('Opening receipt image:', openedUrl);
-      console.log('Receipt image_url field:', receipt.imageUrl);
-      console.log('Is external URL:', receipt.imageUrl?.startsWith('http'));
-    } else {
-      console.warn('No download URL available for this receipt');
-    }
-  };
 
   return (
     <AnimatePresence>
@@ -591,60 +710,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
             </div>
 
             <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
-              {isCompactFailedReceipt ? (
-                <>
-                  <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6">
-                    <div className="flex items-start gap-4">
-                      <div className="w-16 h-16 flex-shrink-0 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-center">
-                        {receipt.merchantIcon ? (
-                          <receipt.merchantIcon className="w-8 h-8 text-red-300" strokeWidth={1.5} />
-                        ) : (
-                          <span className="text-2xl font-bold text-red-300">!</span>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <h3 className="text-2xl font-bold text-white">Upload failed</h3>
-                        {receiptFailureDetails?.reason && (
-                          <p className="mt-2 text-sm text-red-100/85">{receiptFailureDetails.reason}</p>
-                        )}
-                        {receiptFailureDetails?.advice && (
-                          <p className="mt-1 text-sm text-red-100/60">{receiptFailureDetails.advice}</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void handleRetryReceipt()}
-                        disabled={isDeleting || isConfirmingCurrency}
-                        className="px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {isConfirmingCurrency ? 'Retrying...' : 'Retry'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleDelete('now')}
-                        disabled={isDeleting || isConfirmingCurrency}
-                        className="px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {isDeleting ? 'Deleting...' : 'Delete'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowReportProblemDialog(true)}
-                        disabled={isDeleting || isConfirmingCurrency}
-                        className="px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Report
-                      </button>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
+              <>
               
               {/* --- MAIN CARD --- */}
               <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6">
@@ -1215,8 +1281,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   </motion.div>
                 )}
               </motion.div>
-                </>
-              )}
+              </>
 
             </div>
           </div>
