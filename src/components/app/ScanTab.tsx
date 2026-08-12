@@ -46,10 +46,45 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
   const isScanningRef = useRef(false);
   const activeScanTokenRef = useRef(0);
   const pendingReceiptIdRef = useRef<string | null>(null);
+  const statusChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const statusFallbackTimeoutRef = useRef<number | null>(null);
 
   const clearScanningStorage = () => {
     localStorage.removeItem('isScanning');
     localStorage.removeItem('scanningSource');
+  };
+
+  const cleanupReceiptStatusWatcher = () => {
+    if (statusFallbackTimeoutRef.current !== null) {
+      window.clearTimeout(statusFallbackTimeoutRef.current);
+      statusFallbackTimeoutRef.current = null;
+    }
+
+    if (statusChannelRef.current) {
+      supabase.removeChannel(statusChannelRef.current);
+      statusChannelRef.current = null;
+    }
+  };
+
+  const resolveScanSuccess = (scanToken: number) => {
+    if (!isScanActive(scanToken)) {
+      return;
+    }
+
+    cleanupReceiptStatusWatcher();
+    setErrorMessage('');
+    setScanState('success');
+    clearScanningStorage();
+    isScanningRef.current = false;
+
+    window.setTimeout(() => {
+      if (!isScanActive(scanToken)) {
+        return;
+      }
+
+      resetScan();
+      onNavigateToWallet();
+    }, 1500);
   };
 
   const isScanActive = (scanToken: number) => activeScanTokenRef.current === scanToken;
@@ -120,6 +155,12 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       // Clean up timeout if component unmounts
       return () => clearTimeout(timeout);
     }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      cleanupReceiptStatusWatcher();
+    };
   }, []);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -328,6 +369,56 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
         }
 
         showToast('New receipt received', merchant !== 'Analyzing...' ? merchant : undefined);
+
+        const receiptStatusChannel = supabase
+          .channel(`receipt-status-${receiptId}`)
+          .on(
+            'postgres_changes',
+            {
+              event: 'UPDATE',
+              schema: 'public',
+              table: 'receipts',
+              filter: `id=eq.${receiptId}`,
+            },
+            (payload) => {
+              const updatedStatus = payload.new?.status as string | undefined;
+
+              if (!updatedStatus || !isScanActive(scanToken)) {
+                return;
+              }
+
+              if (updatedStatus === 'completed' || updatedStatus === 'parsed') {
+                console.log('[ScanTab] Receipt status resolved to success:', updatedStatus);
+                resolveScanSuccess(scanToken);
+                return;
+              }
+
+              if (updatedStatus === 'failed' || updatedStatus === 'needs_input') {
+                console.log('[ScanTab] Receipt status resolved to error:', updatedStatus);
+                cleanupReceiptStatusWatcher();
+                setErrorMessage(
+                  updatedStatus === 'failed'
+                    ? 'The receipt could not be processed automatically. Please try again with a clearer image.'
+                    : 'This receipt needs a quick review before it can be processed. Check your wallet for the next step.'
+                );
+                setScanState('error');
+                isScanningRef.current = false;
+                clearScanningStorage();
+              }
+            }
+          )
+          .subscribe();
+
+        statusChannelRef.current = receiptStatusChannel;
+
+        statusFallbackTimeoutRef.current = window.setTimeout(() => {
+          if (!isScanActive(scanToken)) {
+            return;
+          }
+
+          console.log('[ScanTab] Receipt status fallback reached after 12 seconds. Resolving to success.');
+          resolveScanSuccess(scanToken);
+        }, 12000);
       } catch (err) {
         console.error('Scan error:', err);
         throw err;
@@ -336,30 +427,6 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       if (!isScanActive(scanToken)) {
         return;
       }
-
-      console.log('[ScanTab] Showing processing state for 3.5 seconds');
-      // Stay in processing state to show the scanning animation
-      await new Promise(resolve => setTimeout(resolve, 3500));
-
-      if (!isScanActive(scanToken)) {
-        return;
-      }
-
-      console.log('[ScanTab] Showing success message for 2.5 seconds');
-      setScanState('success');
-      // ANDROID FIX: Clear localStorage on success
-      clearScanningStorage();
-
-      await new Promise(resolve => setTimeout(resolve, 2500));
-
-      if (!isScanActive(scanToken)) {
-        return;
-      }
-
-      console.log('[ScanTab] Navigating to wallet...');
-      isScanningRef.current = false;
-      resetScan();
-      onNavigateToWallet();
     } catch (error) {
       console.error('[ScanTab] Error during scan:', error);
       if (isScanActive(scanToken)) {
@@ -374,6 +441,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
   const resetScan = () => {
     console.log('[ScanTab] Resetting scan state');
+    cleanupReceiptStatusWatcher();
     activeScanTokenRef.current += 1;
     isScanningRef.current = false;
     setScanState('idle');
@@ -396,6 +464,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     const pendingReceiptId = pendingReceiptIdRef.current;
     const currentUserId = user?.id;
 
+    cleanupReceiptStatusWatcher();
     resetScan();
 
     if (!pendingReceiptId || !currentUserId) {

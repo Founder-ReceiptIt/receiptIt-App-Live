@@ -20,7 +20,17 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 
 export function SettingsTab() {
-  const { user, username, emailAlias, fullName, signOut, profileLoading, deleteAccount } = useAuth();
+  const {
+    user,
+    username,
+    emailAlias,
+    fullName,
+    signOut,
+    profileLoading,
+    deleteAccount,
+    profileSettings,
+    updateProfileSettings,
+  } = useAuth();
   const { showToast } = useToast();
 
   const getDisplayName = () => {
@@ -37,17 +47,13 @@ export function SettingsTab() {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   console.log('SettingsTab - emailAlias:', emailAlias, 'username:', username, 'profileLoading:', profileLoading);
-  const [notifications, setNotifications] = useState({
-    receiptCaptured: true,
-    warrantyExpiring: true,
-    budgetAlerts: true,
-    securityAlerts: true,
-  });
+  const [notifications, setNotifications] = useState(profileSettings.notifications);
+  const [privacy, setPrivacy] = useState(profileSettings.privacy);
 
-  const [privacy, setPrivacy] = useState({
-    autoDelete: true,
-    analyticsSharing: false,
-  });
+  useEffect(() => {
+    setNotifications(profileSettings.notifications);
+    setPrivacy(profileSettings.privacy);
+  }, [profileSettings]);
 
   useEffect(() => {
     if (!user) return;
@@ -66,6 +72,28 @@ export function SettingsTab() {
 
     fetchUserData();
   }, [user]);
+
+  const handleNotificationToggle = async (key: keyof typeof notifications, value: boolean) => {
+    const nextNotifications = { ...notifications, [key]: value };
+    setNotifications(nextNotifications);
+
+    const result = await updateProfileSettings({ notifications: nextNotifications });
+    if (result.error) {
+      setNotifications(notifications);
+      showToast(result.error.message || 'Failed to update notification preferences');
+    }
+  };
+
+  const handlePrivacyToggle = async (key: keyof typeof privacy, value: boolean) => {
+    const nextPrivacy = { ...privacy, [key]: value };
+    setPrivacy(nextPrivacy);
+
+    const result = await updateProfileSettings({ privacy: nextPrivacy });
+    if (result.error) {
+      setPrivacy(privacy);
+      showToast(result.error.message || 'Failed to update privacy preferences');
+    }
+  };
 
   const handleExport = async (format: 'csv' | 'xero') => {
     if (!user) return;
@@ -151,7 +179,9 @@ export function SettingsTab() {
           description: 'Notify when new receipts are processed',
           toggle: true,
           value: notifications.receiptCaptured,
-          onChange: (val: boolean) => setNotifications({...notifications, receiptCaptured: val})
+          onChange: (val: boolean) => {
+            void handleNotificationToggle('receiptCaptured', val);
+          }
         },
         {
           icon: Shield,
@@ -159,7 +189,9 @@ export function SettingsTab() {
           description: 'Alerts 30 days before warranty ends',
           toggle: true,
           value: notifications.warrantyExpiring,
-          onChange: (val: boolean) => setNotifications({...notifications, warrantyExpiring: val})
+          onChange: (val: boolean) => {
+            void handleNotificationToggle('warrantyExpiring', val);
+          }
         },
         {
           icon: Bell,
@@ -167,7 +199,9 @@ export function SettingsTab() {
           description: 'Warning when approaching spending limit',
           toggle: true,
           value: notifications.budgetAlerts,
-          onChange: (val: boolean) => setNotifications({...notifications, budgetAlerts: val})
+          onChange: (val: boolean) => {
+            void handleNotificationToggle('budgetAlerts', val);
+          }
         },
         {
           icon: Lock,
@@ -175,7 +209,9 @@ export function SettingsTab() {
           description: 'Suspicious activity notifications',
           toggle: true,
           value: notifications.securityAlerts,
-          onChange: (val: boolean) => setNotifications({...notifications, securityAlerts: val})
+          onChange: (val: boolean) => {
+            void handleNotificationToggle('securityAlerts', val);
+          }
         },
       ]
     },
@@ -189,7 +225,9 @@ export function SettingsTab() {
           description: 'Remove emails after retention period',
           toggle: true,
           value: privacy.autoDelete,
-          onChange: (val: boolean) => setPrivacy({...privacy, autoDelete: val})
+          onChange: (val: boolean) => {
+            void handlePrivacyToggle('autoDelete', val);
+          }
         },
         {
           icon: Eye,
@@ -197,7 +235,9 @@ export function SettingsTab() {
           description: 'Help improve receiptIt with usage data',
           toggle: true,
           value: privacy.analyticsSharing,
-          onChange: (val: boolean) => setPrivacy({...privacy, analyticsSharing: val})
+          onChange: (val: boolean) => {
+            void handlePrivacyToggle('analyticsSharing', val);
+          }
         },
       ]
     },

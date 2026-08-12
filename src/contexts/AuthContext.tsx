@@ -2,6 +2,23 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { supabase } from '../lib/supabase';
 import { User, Session } from '@supabase/supabase-js';
 
+interface NotificationPreferences {
+  receiptCaptured: boolean;
+  warrantyExpiring: boolean;
+  budgetAlerts: boolean;
+  securityAlerts: boolean;
+}
+
+interface PrivacyPreferences {
+  autoDelete: boolean;
+  analyticsSharing: boolean;
+}
+
+interface ProfileSettings {
+  notifications: NotificationPreferences;
+  privacy: PrivacyPreferences;
+}
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
@@ -12,6 +29,9 @@ interface AuthContextType {
   fullName: string;
   needsAliasSetup: boolean;
   needsProfileRecovery: boolean;
+  profileSettings: ProfileSettings;
+  refreshProfileSettings: () => Promise<void>;
+  updateProfileSettings: (nextSettings: Partial<ProfileSettings>) => Promise<{ error: any }>;
   signUp: (email: string, password: string, alias: string, fullName: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
@@ -20,6 +40,77 @@ interface AuthContextType {
   forceRefresh: () => Promise<void>;
   deleteAccount: () => Promise<{ error: any }>;
 }
+
+const defaultNotificationPreferences: NotificationPreferences = {
+  receiptCaptured: true,
+  warrantyExpiring: true,
+  budgetAlerts: true,
+  securityAlerts: true,
+};
+
+const defaultPrivacyPreferences: PrivacyPreferences = {
+  autoDelete: true,
+  analyticsSharing: false,
+};
+
+const defaultProfileSettings: ProfileSettings = {
+  notifications: defaultNotificationPreferences,
+  privacy: defaultPrivacyPreferences,
+};
+
+const toBoolean = (value: unknown, fallback: boolean): boolean => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
+  }
+
+  return fallback;
+};
+
+const normalizeProfileSettings = (profileData: any): ProfileSettings => {
+  const rawSettings = profileData?.settings ?? profileData?.preferences ?? profileData?.notification_settings ?? profileData?.privacy_settings ?? {};
+  const nestedSettings = typeof rawSettings === 'object' && rawSettings !== null ? rawSettings : {};
+
+  const notificationSource = nestedSettings.notifications ?? nestedSettings.notification_preferences ?? {};
+  const privacySource = nestedSettings.privacy ?? nestedSettings.privacy_preferences ?? {};
+
+  const notifications: NotificationPreferences = {
+    receiptCaptured: toBoolean(
+      notificationSource.receiptCaptured ?? notificationSource.receipt_captured ?? profileData?.receipt_captured ?? nestedSettings.receiptCaptured ?? nestedSettings.receipt_captured,
+      defaultNotificationPreferences.receiptCaptured
+    ),
+    warrantyExpiring: toBoolean(
+      notificationSource.warrantyExpiring ?? notificationSource.warranty_expiring ?? profileData?.warranty_expiring ?? nestedSettings.warrantyExpiring ?? nestedSettings.warranty_expiring,
+      defaultNotificationPreferences.warrantyExpiring
+    ),
+    budgetAlerts: toBoolean(
+      notificationSource.budgetAlerts ?? notificationSource.budget_alerts ?? profileData?.budget_alerts ?? nestedSettings.budgetAlerts ?? nestedSettings.budget_alerts,
+      defaultNotificationPreferences.budgetAlerts
+    ),
+    securityAlerts: toBoolean(
+      notificationSource.securityAlerts ?? notificationSource.security_alerts ?? profileData?.security_alerts ?? nestedSettings.securityAlerts ?? nestedSettings.security_alerts,
+      defaultNotificationPreferences.securityAlerts
+    ),
+  };
+
+  const privacy: PrivacyPreferences = {
+    autoDelete: toBoolean(
+      privacySource.autoDelete ?? privacySource.auto_delete ?? profileData?.auto_delete ?? nestedSettings.autoDelete ?? nestedSettings.auto_delete,
+      defaultPrivacyPreferences.autoDelete
+    ),
+    analyticsSharing: toBoolean(
+      privacySource.analyticsSharing ?? privacySource.analytics_sharing ?? profileData?.analytics_sharing ?? nestedSettings.analyticsSharing ?? nestedSettings.analytics_sharing,
+      defaultPrivacyPreferences.analyticsSharing
+    ),
+  };
+
+  return { notifications, privacy };
+};
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -33,8 +124,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [fullName, setFullName] = useState('');
   const [needsAliasSetup, setNeedsAliasSetup] = useState(false);
   const [needsProfileRecovery, setNeedsProfileRecovery] = useState(false);
+  const [profileSettings, setProfileSettings] = useState<ProfileSettings>(defaultProfileSettings);
   const [isSigningUp, setIsSigningUp] = useState(false);
-  const profileSelect = 'id, email, full_name, email_alias, username, plan, created_at';
+  const profileSelect = 'id, email, full_name, email_alias, username, plan, created_at, settings';
 
   const profileQueryForUser = (authUserId: string) =>
     supabase
@@ -71,6 +163,92 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setFullName(profileData?.full_name || fallbackFullName || profileData?.username || '');
     setNeedsProfileRecovery(false);
     setNeedsAliasSetup(!profileData?.email_alias);
+    setProfileSettings(normalizeProfileSettings(profileData));
+  };
+
+  const refreshProfileSettings = async () => {
+    if (!user) {
+      setProfileSettings(defaultProfileSettings);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.warn('[AuthContext] Failed to load profile settings:', error.message);
+        return;
+      }
+
+      setProfileSettings(normalizeProfileSettings(data ?? {}));
+    } catch (err) {
+      console.warn('[AuthContext] Exception while loading profile settings:', err);
+      setProfileSettings(defaultProfileSettings);
+    }
+  };
+
+  const updateProfileSettings = async (nextSettings: Partial<ProfileSettings>) => {
+    if (!user) {
+      return { error: new Error('No authenticated user') };
+    }
+
+    const mergedSettings: ProfileSettings = {
+      notifications: {
+        ...profileSettings.notifications,
+        ...(nextSettings.notifications ?? {}),
+      },
+      privacy: {
+        ...profileSettings.privacy,
+        ...(nextSettings.privacy ?? {}),
+      },
+    };
+
+    setProfileSettings(mergedSettings);
+
+    try {
+      const directPayload: Record<string, boolean> = {
+        receipt_captured: mergedSettings.notifications.receiptCaptured,
+        warranty_expiring: mergedSettings.notifications.warrantyExpiring,
+        budget_alerts: mergedSettings.notifications.budgetAlerts,
+        security_alerts: mergedSettings.notifications.securityAlerts,
+        auto_delete: mergedSettings.privacy.autoDelete,
+        analytics_sharing: mergedSettings.privacy.analyticsSharing,
+      };
+
+      const settingsPayload = {
+        settings: {
+          notifications: mergedSettings.notifications,
+          privacy: mergedSettings.privacy,
+        },
+      };
+
+      const { error: settingsError } = await supabase
+        .from('profiles')
+        .update(settingsPayload)
+        .eq('id', user.id);
+
+      if (!settingsError) {
+        return { error: null };
+      }
+
+      const { error: directError } = await supabase
+        .from('profiles')
+        .update(directPayload)
+        .eq('id', user.id);
+
+      if (directError) {
+        console.warn('[AuthContext] Unable to persist profile settings to Supabase:', directError.message);
+      }
+
+      return { error: directError ?? null };
+    } catch (err: any) {
+      console.warn('[AuthContext] Failed to update profile settings:', err?.message || err);
+      return { error: err };
+    }
   };
 
   const validateUserExists = async (): Promise<boolean> => {
@@ -130,6 +308,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setEmailAlias(data.email_alias || '');
         setFullName(data.full_name || data.username || '');
         setNeedsProfileRecovery(false);
+        setProfileSettings(normalizeProfileSettings(data));
 
         if (!data.email_alias) {
           console.log('[fetchProfile] User profile exists but has no alias - needs setup');
@@ -216,6 +395,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setFullName('');
           setNeedsAliasSetup(false);
           setNeedsProfileRecovery(false);
+          setProfileSettings(defaultProfileSettings);
         }
 
         setLoading(false);
@@ -333,6 +513,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setEmailAlias(profileData.email_alias || '');
       setFullName(profileData.full_name || profileData.username || '');
       setNeedsProfileRecovery(false);
+      setProfileSettings(normalizeProfileSettings(profileData));
 
       if (!profileData.email_alias) {
         console.log('[signIn] Profile exists but missing alias - needs setup');
@@ -406,6 +587,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setEmailAlias(profileData.email_alias || '');
       setFullName(profileData.full_name || fullName || profileData.username || '');
       setNeedsProfileRecovery(false);
+      setProfileSettings(normalizeProfileSettings(profileData));
 
       if (!profileData.email_alias) {
         setNeedsAliasSetup(true);
@@ -463,6 +645,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setFullName('');
     setNeedsAliasSetup(false);
     setNeedsProfileRecovery(false);
+    setProfileSettings(defaultProfileSettings);
     localStorage.removeItem('isScanning');
     localStorage.removeItem('scanningSource');
     await supabase.auth.signOut();
@@ -535,6 +718,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fullName,
     needsAliasSetup,
     needsProfileRecovery,
+    profileSettings,
+    refreshProfileSettings,
+    updateProfileSettings,
     signUp,
     signIn,
     signOut,

@@ -3,11 +3,14 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 import { AuthProvider } from './contexts/AuthContext';
+import AlphaGatekeeper from './components/auth/AlphaGatekeeper';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>
-      <App />
+      <AlphaGatekeeper>
+        <App />
+      </AlphaGatekeeper>
     </AuthProvider>
   </StrictMode>
 );
