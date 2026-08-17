@@ -112,6 +112,19 @@ const normalizeProfileSettings = (profileData: any): ProfileSettings => {
   return { notifications, privacy };
 };
 
+const getReceiptItAlias = (profileData: any, authEmail?: string | null): string => {
+  const storedAlias = typeof profileData?.email_alias === 'string' ? profileData.email_alias.trim() : '';
+  if (storedAlias) return storedAlias;
+
+  // Some early accounts stored the alias as the profile/auth email before the
+  // dedicated email_alias column was introduced. Only use that fallback for a
+  // ReceiptIt address so a customer's private sign-in email is never shown.
+  const emailCandidates = [profileData?.email, authEmail];
+  return emailCandidates.find((email): email is string => (
+    typeof email === 'string' && /@receiptit\.app$/i.test(email.trim())
+  ))?.trim() || '';
+};
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -126,7 +139,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [needsProfileRecovery, setNeedsProfileRecovery] = useState(false);
   const [profileSettings, setProfileSettings] = useState<ProfileSettings>(defaultProfileSettings);
   const [isSigningUp, setIsSigningUp] = useState(false);
-  const profileSelect = 'id, email, full_name, email_alias, username, plan, created_at, settings';
+  // `settings` is deliberately not requested here: older live profiles do not
+  // have that optional column, and selecting a missing column makes Supabase
+  // reject the entire profile read (which previously looked like a login loop).
+  const profileSelect = 'id, email, full_name, email_alias, username, plan, created_at';
 
   const profileQueryForUser = (authUserId: string) =>
     supabase
@@ -157,12 +173,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { data: null, error: null };
   };
 
-  const applyProfileState = (profileData: any, fallbackFullName = '') => {
+  const applyProfileState = (profileData: any, fallbackFullName = '', authEmail?: string | null) => {
+    const alias = getReceiptItAlias(profileData, authEmail);
     setUsername(profileData?.username || '');
-    setEmailAlias(profileData?.email_alias || '');
+    setEmailAlias(alias);
     setFullName(profileData?.full_name || fallbackFullName || profileData?.username || '');
     setNeedsProfileRecovery(false);
-    setNeedsAliasSetup(!profileData?.email_alias);
+    setNeedsAliasSetup(!alias);
     setProfileSettings(normalizeProfileSettings(profileData));
   };
 
@@ -265,7 +282,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const fetchProfile = async (userId: string) => {
+  const clearProfileState = () => {
+    setUsername('');
+    setEmailAlias('');
+    setFullName('');
+    setNeedsAliasSetup(false);
+    setProfileSettings(defaultProfileSettings);
+  };
+
+  const fetchProfile = async (userId: string, authEmail?: string | null) => {
     console.log('[fetchProfile] Fetching profile for id:', userId);
 
     if (isSigningUp) {
@@ -295,7 +320,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         console.error('[fetchProfile] Profile fetch error:', error);
-        setProfileLoading(false);
+        // Keep a valid Auth session intact. A missing or inaccessible profile
+        // must lead to recovery, never to an unexplained bounce back to login.
+        clearProfileState();
+        setNeedsProfileRecovery(true);
         return;
       }
 
@@ -304,30 +332,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('[fetchProfile] email_alias value:', data.email_alias, 'type:', typeof data.email_alias);
         console.log('[fetchProfile] username value:', data.username, 'type:', typeof data.username);
 
-        setUsername(data.username || '');
-        setEmailAlias(data.email_alias || '');
-        setFullName(data.full_name || data.username || '');
-        setNeedsProfileRecovery(false);
-        setProfileSettings(normalizeProfileSettings(data));
+        const alias = getReceiptItAlias(data, authEmail);
+        applyProfileState(data, '', authEmail);
 
-        if (!data.email_alias) {
+        if (!alias) {
           console.log('[fetchProfile] User profile exists but has no alias - needs setup');
-          setNeedsAliasSetup(true);
-        } else {
-          setNeedsAliasSetup(false);
         }
 
-        console.log('[fetchProfile] State set - username:', data.username || '', 'emailAlias:', data.email_alias || '');
+        console.log('[fetchProfile] State set - username:', data.username || '', 'emailAlias:', alias);
       } else {
         console.error('[fetchProfile] No profile found for authenticated user:', userId);
-        setUsername('');
-        setEmailAlias('');
-        setFullName('');
-        setNeedsAliasSetup(false);
-        setNeedsProfileRecovery(false);
-        setUser(null);
-        setSession(null);
-        await supabase.auth.signOut();
+        clearProfileState();
+        setNeedsProfileRecovery(true);
       }
     } finally {
       setProfileLoading(false);
@@ -358,7 +374,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setSession(session);
           setUser(authUser);
           console.log('[Auth] Session validated, calling fetchProfile for user:', authUser.id);
-          await fetchProfile(authUser.id);
+          await fetchProfile(authUser.id, authUser.email);
         } catch (err) {
           console.error('[Auth] Error validating session:', err);
           setSession(null);
@@ -387,7 +403,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (session?.user) {
           console.log('[onAuthStateChange] Auth state change - calling fetchProfile for user:', session.user.id);
-          await fetchProfile(session.user.id);
+          await fetchProfile(session.user.id, session.user.email);
         } else {
           console.log('[onAuthStateChange] Auth state change - no user, clearing profile data');
           setUsername('');
@@ -460,7 +476,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: new Error('Failed to verify new account') };
       }
 
-      applyProfileState(profileData, displayName);
+      applyProfileState(profileData, displayName, signInData.user.email);
 
       console.log('[signUp] Account created successfully');
       return { error: null };
@@ -497,29 +513,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (profileError) {
         console.error('[signIn] Profile fetch error:', profileError);
-        await supabase.auth.signOut();
-        return { error: new Error('Failed to load profile') };
+        setSession(data.session);
+        setUser(data.user);
+        clearProfileState();
+        setNeedsProfileRecovery(true);
+        return { error: null };
       }
 
       if (!profileData) {
         console.error('[signIn] No profile found for authenticated user');
-        setNeedsProfileRecovery(false);
-        setNeedsAliasSetup(false);
-        await supabase.auth.signOut();
-        return { error: new Error('No profile found for this account. Please contact support or sign up again.') };
+        setSession(data.session);
+        setUser(data.user);
+        clearProfileState();
+        setNeedsProfileRecovery(true);
+        return { error: null };
       }
 
-      setUsername(profileData.username || '');
-      setEmailAlias(profileData.email_alias || '');
-      setFullName(profileData.full_name || profileData.username || '');
-      setNeedsProfileRecovery(false);
-      setProfileSettings(normalizeProfileSettings(profileData));
+      const alias = getReceiptItAlias(profileData, data.user.email);
+      applyProfileState(profileData, '', data.user.email);
 
-      if (!profileData.email_alias) {
+      if (!alias) {
         console.log('[signIn] Profile exists but missing alias - needs setup');
-        setNeedsAliasSetup(true);
-      } else {
-        setNeedsAliasSetup(false);
       }
 
       return { error: null };
@@ -547,7 +561,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     console.log('[forceRefresh] Force refresh - fetching profile for user:', authUser.id);
-    await fetchProfile(authUser.id);
+    await fetchProfile(authUser.id, authUser.email);
   };
 
   const recoverProfile = async (username: string, fullName: string, alias: string) => {
@@ -583,17 +597,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: new Error('Failed to verify recovered profile') };
       }
 
-      setUsername(profileData.username || '');
-      setEmailAlias(profileData.email_alias || '');
-      setFullName(profileData.full_name || fullName || profileData.username || '');
-      setNeedsProfileRecovery(false);
-      setProfileSettings(normalizeProfileSettings(profileData));
-
-      if (!profileData.email_alias) {
-        setNeedsAliasSetup(true);
-      } else {
-        setNeedsAliasSetup(false);
-      }
+      applyProfileState(profileData, fullName, user.email);
 
       console.log('[recoverProfile] Profile recovered successfully');
       return { error: null };
@@ -629,7 +633,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: fetchError || new Error('Failed to verify alias') };
     }
 
-    setEmailAlias(profileData.email_alias || '');
+    setEmailAlias(getReceiptItAlias(profileData, user.email));
     setFullName(profileData.full_name || profileData.username || '');
     setNeedsAliasSetup(false);
 
