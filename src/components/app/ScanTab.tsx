@@ -79,7 +79,14 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     isScanningRef.current = false;
 
     window.setTimeout(() => {
-      if (!isScanActive(scanToken)) return;
+      if (!isScanActive(scanToken)) {
+        try {
+          await removeUploadedReceiptFile(uploadData.path);
+        } catch (cleanupError) {
+          console.error('[ScanTab] Failed to remove canceled upload:', cleanupError);
+        }
+        return;
+      }
 
       resetScan();
       onNavigateToWallet();

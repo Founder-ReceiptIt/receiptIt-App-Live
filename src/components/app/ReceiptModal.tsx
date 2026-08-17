@@ -1152,7 +1152,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                       </div>
                     </div>
                   )}
-                </motion.div>
+                </div>
               )}
 
                 </>
