@@ -11,12 +11,13 @@ import { InsightsTab } from './components/app/InsightsTab';
 import { SettingsTab } from './components/app/SettingsTab';
 import { AuthForm } from './components/auth/AuthForm';
 import { AliasSetupModal } from './components/auth/AliasSetupModal';
+import { ProfileRecoveryModal } from './components/auth/ProfileRecoveryModal';
 import { Toast } from './components/app/Toast';
 import { ToastProvider } from './contexts/ToastContext';
 import { useAuth } from './contexts/AuthContext';
 
 function App() {
-  const { user, session, loading: authLoading, needsAliasSetup } = useAuth();
+  const { user, session, loading: authLoading, needsAliasSetup, needsProfileRecovery } = useAuth();
   const [showApp, setShowApp] = useState(false);
   const [activeTab, setActiveTab] = useState('wallet');
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
@@ -73,6 +74,10 @@ function App() {
 
   if (!user || !session) {
     return <AuthForm />;
+  }
+
+  if (needsProfileRecovery) {
+    return <ProfileRecoveryModal />;
   }
 
   if (needsAliasSetup) {
