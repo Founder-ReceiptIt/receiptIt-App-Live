@@ -21,7 +21,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     const id = Math.random().toString(36).substring(2, 9);
     const newToast = { id, message, merchant };
 
-    setToasts(prev => [newToast]);
+    setToasts([newToast]);
 
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));

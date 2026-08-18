@@ -36,7 +36,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   createAlias: (alias: string) => Promise<{ error: any }>;
-  recoverProfile: (username: string, fullName: string, alias: string) => Promise<{ error: any }>;
+  recoverProfile: (username: string, fullName: string, alias: string | null) => Promise<{ error: any }>;
   forceRefresh: () => Promise<void>;
   deleteAccount: () => Promise<{ error: any }>;
 }
@@ -564,7 +564,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await fetchProfile(authUser.id, authUser.email);
   };
 
-  const recoverProfile = async (username: string, fullName: string, alias: string) => {
+  const recoverProfile = async (username: string, fullName: string, alias: string | null) => {
     if (!user) {
       return { error: new Error('No authenticated user') };
     }
