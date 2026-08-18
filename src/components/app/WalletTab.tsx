@@ -17,7 +17,7 @@ import {
   Receipt as SupabaseReceiptRow,
 } from '../../lib/supabase';
 import type { ReceiptCurrencyConfirmationOption } from '../../lib/supabase';
-import { getReceiptOriginalUrl, openReceiptOriginal } from '../../lib/receiptOriginalUtils';
+import { hasReceiptOriginal, openReceiptOriginal } from '../../lib/receiptOriginalUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { getReceiptFailureDetails, getReceiptPurchaseDateDisplay } from '../../lib/receiptUiUtils';
@@ -1244,8 +1244,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                   format: 'short',
                 });
                 const showIssueHeading = Boolean(receiptFailureDetails);
-                const originalReceiptUrl = getReceiptOriginalUrl(receipt);
-                const showOpenOriginalReceiptAction = (isNonFinalReceipt || showIssueHeading) && Boolean(originalReceiptUrl);
+                const showOpenOriginalReceiptAction = (isNonFinalReceipt || showIssueHeading) && hasReceiptOriginal(receipt);
                 const showFailedReceiptActions = showIssueHeading && !requiresCurrencyConfirmation;
 
                 return (
@@ -1428,10 +1427,9 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
-                            const openedUrl = openReceiptOriginal(receipt);
-                            if (!openedUrl) {
-                              console.warn('No download URL available for this receipt');
-                            }
+                            void openReceiptOriginal(receipt).then((openedUrl) => {
+                              if (!openedUrl) console.warn('No download URL available for this receipt');
+                            });
                           }}
                           className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 transition-colors hover:text-teal-300"
                         >
