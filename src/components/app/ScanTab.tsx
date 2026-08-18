@@ -364,12 +364,6 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
       const storagePath = uploadData.path;
 
-      const { data: publicUrlData } = supabase.storage
-        .from('receipts')
-        .getPublicUrl(storagePath);
-
-      const publicUrl = publicUrlData.publicUrl;
-
       if (isScanActive(scanToken)) {
         setScanState('processing');
       }
@@ -385,7 +379,9 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
             // analytics, and any later re-processing of the file.
             source: file.type === 'application/pdf' || fileExt === 'pdf' ? 'pdf' : 'image',
             storage_path: storagePath,
-            image_url: publicUrl,
+            // Keep a storage path rather than a public object URL. The viewer
+            // resolves a short-lived signed URL only when the owner requests it.
+            image_url: storagePath,
             // Persist the file hash for exact duplicate detection when available
             ...(fileHash ? { file_hash: fileHash } : {}),
             status: 'processing',
