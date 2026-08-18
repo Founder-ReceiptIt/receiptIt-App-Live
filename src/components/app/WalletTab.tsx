@@ -703,15 +703,19 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
     setIsDeleting(true);
     try {
       const receiptIds = Array.from(selectedReceipts);
-      const { error } = await supabase
-        .from('receipts')
-        .delete()
-        .in('id', receiptIds);
+      const receiptsToDelete = receipts.filter((receipt) => selectedReceipts.has(receipt.id));
+      const results = await Promise.all(receiptsToDelete.map((receipt) => (
+        deleteReceiptRecord({
+          receiptId: receipt.id,
+          storagePath: receipt.storagePath,
+          imageUrl: receipt.imageUrl,
+        })
+      )));
+      const firstError = results.find((result) => result.error)?.error;
 
-      if (error) {
-        console.error('[WalletTab] Delete error:', error);
+      if (firstError) {
+        console.error('[WalletTab] Delete error:', firstError);
         showToast('Failed to delete receipts', 'error');
-        setIsDeleting(false);
         return;
       }
 

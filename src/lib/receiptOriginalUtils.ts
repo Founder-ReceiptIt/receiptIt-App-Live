@@ -1,65 +1,17 @@
 import { supabase } from './supabase';
+import {
+  getExternalLegacyReceiptUrl,
+  getReceiptOriginalStoragePath,
+  hasReceiptOriginalPath,
+  type ReceiptOriginalPathSource,
+} from './receiptOriginalPathUtils';
 
-export interface ReceiptOriginalSource {
-  imageUrl?: string | null;
-  storagePath?: string | null;
-}
+export type ReceiptOriginalSource = ReceiptOriginalPathSource;
 
-const getNonEmptyString = (value?: string | null): string | null => {
-  const normalizedValue = value?.trim();
-  return normalizedValue || null;
-};
-
-/**
- * Gets the object path without exposing a permanent public URL. This accepts
- * legacy rows where image_url was stored as either the path or a Supabase
- * public URL, so the privacy migration does not strand existing receipts.
- */
-export const getReceiptOriginalStoragePath = ({ imageUrl, storagePath }: ReceiptOriginalSource): string | null => {
-  const normalizedStoragePath = getNonEmptyString(storagePath);
-  if (normalizedStoragePath) return normalizedStoragePath;
-
-  const normalizedImageUrl = getNonEmptyString(imageUrl);
-  if (!normalizedImageUrl) return null;
-  if (!normalizedImageUrl.startsWith('http')) return normalizedImageUrl;
-
-  try {
-    const url = new URL(normalizedImageUrl);
-    const storagePrefix = '/storage/v1/object/public/receipts/';
-    const storagePathIndex = url.pathname.indexOf(storagePrefix);
-
-    if (storagePathIndex !== -1) {
-      return decodeURIComponent(url.pathname.slice(storagePathIndex + storagePrefix.length));
-    }
-  } catch {
-    // A malformed legacy URL is not a path we should send to Storage.
-  }
-
-  return null;
-};
+export { getReceiptOriginalStoragePath } from './receiptOriginalPathUtils';
 
 export const hasReceiptOriginal = (source: ReceiptOriginalSource): boolean =>
-  Boolean(getReceiptOriginalStoragePath(source) || getNonEmptyString(source.imageUrl));
-
-const getLegacyExternalUrl = (source: ReceiptOriginalSource): string | null => {
-  const normalizedImageUrl = getNonEmptyString(source.imageUrl);
-  if (!normalizedImageUrl?.startsWith('http')) return null;
-
-  try {
-    const url = new URL(normalizedImageUrl);
-    const storagePrefix = '/storage/v1/object/public/receipts/';
-    const storagePathIndex = url.pathname.indexOf(storagePrefix);
-
-    // Convert our former public URLs back into a path so they receive a
-    // short-lived signed URL too. Only genuinely external legacy links remain
-    // external.
-    if (storagePathIndex !== -1) return null;
-  } catch {
-    return null;
-  }
-
-  return normalizedImageUrl;
-};
+  hasReceiptOriginalPath(source) || Boolean(getExternalLegacyReceiptUrl(source));
 
 export const resolveReceiptOriginalUrl = async (source: ReceiptOriginalSource): Promise<string | null> => {
   const storagePath = getReceiptOriginalStoragePath(source);
@@ -74,7 +26,7 @@ export const resolveReceiptOriginalUrl = async (source: ReceiptOriginalSource): 
     return null;
   }
 
-  return getLegacyExternalUrl(source);
+  return getExternalLegacyReceiptUrl(source);
 };
 
 export const openReceiptOriginal = async (source: ReceiptOriginalSource): Promise<string | null> => {

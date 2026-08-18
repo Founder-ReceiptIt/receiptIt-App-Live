@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { getReceiptOriginalStoragePath } from './receiptOriginalPathUtils';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -262,9 +263,9 @@ export const deleteReceiptRecord = async ({
   storagePath?: string | null,
   imageUrl?: string | null,
 }) => {
-  const removableStoragePath = storagePath || imageUrl;
+  const removableStoragePath = getReceiptOriginalStoragePath({ storagePath, imageUrl });
 
-  if (removableStoragePath && !removableStoragePath.startsWith('http')) {
+  if (removableStoragePath) {
     const { error: storageError } = await supabase
       .storage
       .from('receipts')
