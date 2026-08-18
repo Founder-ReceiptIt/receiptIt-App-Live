@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { AlertCircle, Shield } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 export function ProfileRecoveryModal() {
