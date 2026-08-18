@@ -16,7 +16,7 @@ import {
 } from '../../lib/supabase';
 import type { ReceiptCurrencyConfirmationOption } from '../../lib/supabase';
 import { formatReceiptDate } from '../../lib/receiptDateUtils';
-import { getReceiptOriginalUrl, openReceiptOriginal } from '../../lib/receiptOriginalUtils';
+import { hasReceiptOriginal, openReceiptOriginal } from '../../lib/receiptOriginalUtils';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { getReceiptFailureDetails, getReceiptPurchaseDateDisplay } from '../../lib/receiptUiUtils';
 import { useToast } from '../../contexts/ToastContext';
@@ -496,7 +496,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   // Return window status
   const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
 
-  const downloadUrl = getReceiptOriginalUrl(receipt);
+  const hasOriginalReceipt = hasReceiptOriginal(receipt);
   const shouldHideBreakdownSection = isCompactFailedReceipt || (
     isNonFinalReceipt
     && !showItemsLoadingState
@@ -512,15 +512,14 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     ? formatMoney(displayOriginalCurrencySymbol, displayOriginalTotal)
     : '—';
 
-  const handleDownloadClick = (e: React.MouseEvent) => {
+  const handleDownloadClick = async (e: React.MouseEvent) => {
     e.preventDefault();
-    const openedUrl = openReceiptOriginal(receipt);
+    const openedUrl = await openReceiptOriginal(receipt);
     if (openedUrl) {
-      console.log('Opening receipt image:', openedUrl);
-      console.log('Receipt image_url field:', receipt.imageUrl);
-      console.log('Is external URL:', receipt.imageUrl?.startsWith('http'));
+      console.log('Opening original receipt in a signed viewer.');
     } else {
       console.warn('No download URL available for this receipt');
+      showToast('We could not open the original receipt. Please try again.');
     }
   };
 
@@ -554,10 +553,10 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
             <div className="p-6 border-b border-white/10 flex items-center justify-between">
               <h2 className="text-2xl font-bold text-white">Receipt Details</h2>
               <div className="flex items-center gap-2">
-                {downloadUrl && (
+                {hasOriginalReceipt && (
                   <motion.button
                     type="button"
-                    onClick={handleDownloadClick}
+                    onClick={(event) => void handleDownloadClick(event)}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     className="inline-flex h-10 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 text-sm font-semibold text-gray-300 transition-colors hover:border-teal-400/30 hover:text-teal-300"
