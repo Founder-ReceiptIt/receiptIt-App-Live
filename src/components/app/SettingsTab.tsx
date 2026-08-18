@@ -9,15 +9,40 @@ import {
   Shield,
   Globe,
   Eye,
-  ChevronRight,
   Check,
   AlertTriangle,
   X
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { FINALIZED_RECEIPT_STATUSES, supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+
+type SettingsActionItem = {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  action: () => void | Promise<void>;
+  actionText: string;
+  color?: string;
+};
+
+type SettingsToggleItem = {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  toggle: true;
+  value: boolean;
+  onChange: (value: boolean) => void;
+  color?: string;
+};
+
+type SettingsSection = {
+  title: string;
+  icon: LucideIcon;
+  items: Array<SettingsActionItem | SettingsToggleItem>;
+};
 
 export function SettingsTab() {
   const {
@@ -146,7 +171,7 @@ export function SettingsTab() {
     }
   };
 
-  const settingsSections = [
+  const settingsSections: SettingsSection[] = [
     {
       title: 'Export & Integrations',
       icon: Download,
@@ -317,7 +342,7 @@ export function SettingsTab() {
                         <p className="text-sm text-gray-400">{item.description}</p>
                       </div>
 
-                      {item.toggle ? (
+                      {'toggle' in item ? (
                         <button
                           onClick={() => item.onChange?.(!item.value)}
                           className={`relative w-12 h-7 rounded-full transition-colors ${
@@ -332,7 +357,7 @@ export function SettingsTab() {
                             }`}
                           />
                         </button>
-                      ) : item.action ? (
+                      ) : (
                         <motion.button
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
@@ -341,8 +366,6 @@ export function SettingsTab() {
                         >
                           {item.actionText}
                         </motion.button>
-                      ) : (
-                        <ChevronRight className="w-5 h-5 text-gray-500" />
                       )}
                     </div>
                   </div>

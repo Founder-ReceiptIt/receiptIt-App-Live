@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Download, MoreVertical, Undo2, ChevronDown } from 'lucide-react';
+import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Download, Undo2, ChevronDown } from 'lucide-react';
 import { Receipt } from './WalletTab';
 import { ReportProblemDialog } from './ReportProblemDialog';
 import { useState, useEffect } from 'react';
@@ -91,7 +91,7 @@ const mapReceiptPaymentRow = (row: Record<string, unknown>): ReceiptPaymentDispl
     .map(getNullableNumber)
     .find((value): value is number => value !== null);
 
-  if (amount === null) return null;
+  if (amount === undefined) return null;
 
   const label = [
     row.payment_method,
@@ -123,7 +123,6 @@ interface ReceiptModalProps {
 export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) {
   const { showToast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
-  const [showDeleteMenu, setShowDeleteMenu] = useState(false);
   const [showMoreDetails, setShowMoreDetails] = useState(false);
   const [showCompanyDetails, setShowCompanyDetails] = useState(false);
   const [detailReceiptId, setDetailReceiptId] = useState<string | null>(receipt?.id ?? null);
@@ -140,7 +139,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const [showReportProblemDialog, setShowReportProblemDialog] = useState(false);
 
   useEffect(() => {
-    setShowDeleteMenu(false);
     setShowMoreDetails(false);
     setShowCompanyDetails(false);
     setShowOtherCurrencyOptions(false);
@@ -215,43 +213,33 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     };
   }, [receipt?.id]);
 
-  const hasWarrantyInfo = Boolean(receipt?.warrantyDate?.trim() || receipt?.hasWarranty);
-
-  // --- LOGIC FIX: ROBUST DELETE HANDLING ---
-  const handleDelete = async (deleteOption: 'now' | '30days' | 'warranty') => {
+  const handleDelete = async () => {
     if (!receipt) return;
-    if (deleteOption === 'warranty' && !hasWarrantyInfo) return;
 
-    if (deleteOption === 'now') {
-      if (!confirm(`Delete receipt from ${receipt.merchant || 'Receipt (Seller Unknown)'}?`)) return;
+    if (!confirm(`Delete receipt from ${receipt.merchant || 'Receipt (Seller Unknown)'}?`)) return;
 
-      setIsDeleting(true);
-      try {
-        console.log('[Delete] Deleting receipt:', receipt.id);
-        const { error: dbError } = await deleteReceiptRecord({
-          receiptId: receipt.id,
-          storagePath: receipt.storagePath,
-          imageUrl: receipt.imageUrl,
-        });
+    setIsDeleting(true);
+    try {
+      console.log('[Delete] Deleting receipt:', receipt.id);
+      const { error: dbError } = await deleteReceiptRecord({
+        receiptId: receipt.id,
+        storagePath: receipt.storagePath,
+        imageUrl: receipt.imageUrl,
+      });
 
-        if (dbError) {
-          console.error('[Delete] Database deletion failed:', dbError);
-          throw dbError;
-        }
-
-        console.log('[Delete] Receipt deleted successfully');
-        onDelete?.();
-        onClose();
-      } catch (error) {
-        console.error('[Delete] Error deleting receipt:', error);
-        alert('Failed to delete receipt. Please try again.');
-      } finally {
-        setIsDeleting(false);
+      if (dbError) {
+        console.error('[Delete] Database deletion failed:', dbError);
+        throw dbError;
       }
-    } else {
-      // Placeholder for future logic
-      alert(`This receipt will be deleted: ${deleteOption === '30days' ? 'In 30 Days' : 'When Warranty Expires'}`);
-      setShowDeleteMenu(false);
+
+      console.log('[Delete] Receipt deleted successfully');
+      onDelete?.();
+      onClose();
+    } catch (error) {
+      console.error('[Delete] Error deleting receipt:', error);
+      alert('Failed to delete receipt. Please try again.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -581,6 +569,18 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                 )}
                 <motion.button
                   type="button"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => void handleDelete()}
+                  disabled={isDeleting}
+                  className="inline-flex h-10 items-center justify-center rounded-full border border-red-400/20 bg-red-400/10 px-3 text-red-300 transition-colors hover:border-red-400/40 hover:bg-red-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                  title="Delete receipt"
+                  aria-label="Delete receipt"
+                >
+                  {isDeleting ? <Clock className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                </motion.button>
+                <motion.button
+                  type="button"
                   whileHover={{ scale: 1.1, rotate: 90 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={onClose}
@@ -627,7 +627,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                       </button>
                       <button
                         type="button"
-                        onClick={() => void handleDelete('now')}
+                        onClick={() => void handleDelete()}
                         disabled={isDeleting || isConfirmingCurrency}
                         className="px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
@@ -1156,65 +1156,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                 </motion.div>
               )}
 
-              <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.4 }}
-                className="relative"
-              >
-                <motion.button
-                  type="button"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => setShowDeleteMenu(!showDeleteMenu)}
-                  disabled={isDeleting}
-                  className="w-full flex items-center justify-center gap-3 py-4 rounded-xl font-bold transition-all backdrop-blur-md border bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-white hover:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isDeleting ? (
-                    <>
-                      <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                      >
-                        <Clock className="w-5 h-5" />
-                      </motion.div>
-                      <span>Deleting...</span>
-                    </>
-                  ) : (
-                    <>
-                      <MoreVertical className="w-5 h-5" />
-                      <span>Manage Receipt</span>
-                    </>
-                  )}
-                </motion.button>
-
-                {showDeleteMenu && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="absolute bottom-full left-0 right-0 mb-2 backdrop-blur-xl bg-black/95 border border-white/10 rounded-xl overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.5)] z-20"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => handleDelete('now')}
-                      className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-red-500/10 transition-colors text-left text-red-400 hover:text-red-300 border-b border-white/10 group"
-                    >
-                      <Trash2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                      <span className="font-semibold">Delete Now</span>
-                    </button>
-                    {hasWarrantyInfo && (
-                      <button
-                        type="button"
-                        onClick={() => handleDelete('warranty')}
-                        className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-white/5 transition-colors text-gray-400 hover:text-white group"
-                      >
-                        <Shield className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                        <span className="font-semibold">Delete when Warranty Expires</span>
-                      </button>
-                    )}
-                  </motion.div>
-                )}
-              </motion.div>
                 </>
               )}
 

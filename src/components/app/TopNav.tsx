@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Wallet, AtSign, ScanLine, TrendingUp, Settings, Menu, X, User } from 'lucide-react';
+import { Wallet, AtSign, ScanLine, TrendingUp, Settings, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 
 interface TopNavProps {

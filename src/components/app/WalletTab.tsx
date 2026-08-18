@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Shield, Loader2, Car, Home, Plane, Zap, Utensils, Undo2, Trash2, CheckSquare, Square, ChevronDown, Download } from 'lucide-react';
-import { Video as LucideIcon } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { ReportProblemDialog } from './ReportProblemDialog';
 import {
@@ -695,14 +695,6 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
       newSelected.add(receiptId);
     }
     setSelectedReceipts(newSelected);
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedReceipts.size === filteredReceipts.length) {
-      setSelectedReceipts(new Set());
-    } else {
-      setSelectedReceipts(new Set(filteredReceipts.map(r => r.id)));
-    }
   };
 
   const handleBulkDelete = async () => {

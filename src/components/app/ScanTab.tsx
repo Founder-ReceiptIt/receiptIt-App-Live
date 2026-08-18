@@ -1,12 +1,12 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, X, Camera, CheckCircle, Loader2, FileImage, File } from 'lucide-react';
+import { Upload, X, Camera, CheckCircle, Loader2, FileImage, File, Clock } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { flushSync } from 'react-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 
-type ScanState = 'idle' | 'uploading' | 'processing' | 'success' | 'error';
+type ScanState = 'idle' | 'uploading' | 'processing' | 'pending' | 'success' | 'error';
 
 interface ScanTabProps {
   onNavigateToWallet: () => void;
@@ -36,7 +36,7 @@ async function computeFileHash(file: File): Promise<string> {
 }
 
 export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
-  const { user, emailAlias } = useAuth();
+  const { user } = useAuth();
   const { showToast } = useToast();
   const [scanState, setScanState] = useState<ScanState>('idle');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -44,6 +44,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
   const [errorMessage, setErrorMessage] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isScanningRef = useRef(false);
+  const restoredPickerRef = useRef(false);
   const activeScanTokenRef = useRef(0);
   const pendingReceiptIdRef = useRef<string | null>(null);
   const statusChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -78,21 +79,38 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     isScanningRef.current = false;
 
     window.setTimeout(() => {
-      if (!isScanActive(scanToken)) {
-        return;
-      }
+      if (!isScanActive(scanToken)) return;
 
       resetScan();
       onNavigateToWallet();
     }, 1500);
   };
 
+  const resolveScanPending = (scanToken: number) => {
+    if (!isScanActive(scanToken)) {
+      return;
+    }
+
+    cleanupReceiptStatusWatcher();
+    clearScanningStorage();
+    isScanningRef.current = false;
+    setScanState('pending');
+  };
+
   const isScanActive = (scanToken: number) => activeScanTokenRef.current === scanToken;
+
+  const removeUploadedReceiptFile = async (storagePath: string) => {
+    const { error } = await supabase.storage.from('receipts').remove([storagePath]);
+
+    if (error) {
+      throw error;
+    }
+  };
 
   const cleanupPendingReceipt = async (receiptId: string, userId: string) => {
     const { data: scopedReceipt, error: scopedReceiptError } = await supabase
       .from('receipts')
-      .select('id')
+      .select('id, storage_path')
       .eq('id', receiptId)
       .eq('user_id', userId)
       .maybeSingle();
@@ -132,6 +150,10 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     if (receiptDeleteError) {
       throw receiptDeleteError;
     }
+
+    if (scopedReceipt.storage_path) {
+      await removeUploadedReceiptFile(scopedReceipt.storage_path);
+    }
   };
 
   // ANDROID FIX: Restore scanning state after page reload (Android kills tab when camera opens)
@@ -141,13 +163,18 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       console.log('[ScanTab] Restored scanning state from localStorage after reload');
       // Show waiting state - the file picker should still deliver the file
       setScanState('uploading');
-      isScanningRef.current = true;
+      // Do not mark the scanner as actively uploading: some Android browsers
+      // deliver the selected file after restoring the tab. Blocking it here
+      // turns a valid file into a false "camera closed" error.
+      restoredPickerRef.current = true;
+      isScanningRef.current = false;
 
       // ANDROID SAFETY: If no file arrives within 10 seconds, assume Android lost it
       const timeout = setTimeout(() => {
         console.log('[ScanTab] No file received after reload - Android likely lost the file');
         setErrorMessage('Android closed the camera. Please try uploading again.');
         setScanState('error');
+        restoredPickerRef.current = false;
         isScanningRef.current = false;
         clearScanningStorage();
       }, 10000);
@@ -169,7 +196,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     e.stopPropagation();
 
     const file = e.target.files?.[0];
-    if (!file || isScanningRef.current) {
+    if (!file || (isScanningRef.current && !restoredPickerRef.current)) {
       console.log('[ScanTab] File selection blocked - already scanning or no file');
       // Clear localStorage if no file selected (user cancelled)
       clearScanningStorage();
@@ -177,6 +204,8 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     }
 
     console.log('[ScanTab] File selected:', file.name, file.type, file.size);
+    restoredPickerRef.current = false;
+    clearScanningStorage();
 
     // Reset the input immediately to prevent re-triggering
     e.target.value = '';
@@ -245,10 +274,59 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     console.log('[ScanTab] Starting upload to storage...');
 
     try {
-      // Kick off hashing in parallel with the upload. Computing the hash can take
-      // some time for larger files, so starting it now means that the hash
-      // should be ready by the time we insert the row.
+      // Start hashing immediately. The hash gives us an exact, privacy-safe
+      // fingerprint of this file, so we can stop an accidental re-upload
+      // before it creates another storage object or another processing job.
       const fileHashPromise = computeFileHash(file);
+
+      let fileHash: string | undefined;
+      try {
+        fileHash = await fileHashPromise;
+      } catch (hashErr) {
+        // Hashing is an integrity improvement, not a reason to lose a valid
+        // receipt. The database trigger remains the final guard when a hash
+        // is available on a later retry.
+        console.error('[ScanTab] Failed to compute file hash:', hashErr);
+      }
+
+      if (!isScanActive(scanToken)) {
+        return;
+      }
+
+      if (fileHash) {
+        const { data: existingReceipts, error: existingReceiptError } = await supabase
+          .from('receipts')
+          .select('id, status, merchant')
+          .eq('user_id', user.id)
+          .eq('file_hash', fileHash)
+          .in('status', ['processing', 'parsed', 'completed', 'needs_review', 'needs_input', 'duplicate'])
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (existingReceiptError) {
+          // Do not stop a valid upload merely because the optional early
+          // duplicate check was unavailable. The server-side trigger protects
+          // the insert against a simultaneous upload.
+          console.warn('[ScanTab] Could not check for an existing file:', existingReceiptError);
+        } else if (existingReceipts?.[0]) {
+          const existingReceipt = existingReceipts[0];
+          const isStillProcessing = existingReceipt.status === 'processing';
+
+          console.info('[ScanTab] Exact duplicate selected; opening existing receipt:', existingReceipt.id);
+          showToast(
+            isStillProcessing ? 'Receipt is already processing' : 'Receipt already saved',
+            isStillProcessing
+              ? 'We are already reading this exact file. You can follow its progress in your Wallet.'
+              : 'This exact file is already in your Wallet.'
+          );
+
+          isScanningRef.current = false;
+          clearScanningStorage();
+          resetScan();
+          onNavigateToWallet();
+          return;
+        }
+      }
 
       const timestamp = Date.now();
 
@@ -299,21 +377,13 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       try {
         const referenceNumber = `REF-${timestamp}`;
 
-        // Await the hash result. If computing the hash fails for any reason,
-        // we'll just leave the file_hash undefined and allow the backend to
-        // handle duplicate detection based on other keys. Wrap in try/catch to
-        // avoid unhandled promise rejections.
-        let fileHash: string | undefined;
-        try {
-          fileHash = await fileHashPromise;
-        } catch (hashErr) {
-          console.error('[ScanTab] Failed to compute file hash:', hashErr);
-        }
-
         const { data: insertData, error: insertError } = await supabase
           .from('receipts')
           .insert({
             user_id: user.id,
+            // Keep the original submission type accurate for processing,
+            // analytics, and any later re-processing of the file.
+            source: file.type === 'application/pdf' || fileExt === 'pdf' ? 'pdf' : 'image',
             storage_path: storagePath,
             image_url: publicUrl,
             // Persist the file hash for exact duplicate detection when available
@@ -332,6 +402,11 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
         if (insertError) {
           console.error('Insert error:', insertError);
+          try {
+            await removeUploadedReceiptFile(storagePath);
+          } catch (cleanupError) {
+            console.error('[ScanTab] Failed to remove uploaded file after record creation failed:', cleanupError);
+          }
           if (isScanActive(scanToken)) {
             setErrorMessage(`Failed to create database record: ${insertError.message}`);
             setScanState('error');
@@ -341,6 +416,11 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
         }
 
         if (!insertData || insertData.length === 0) {
+          try {
+            await removeUploadedReceiptFile(storagePath);
+          } catch (cleanupError) {
+            console.error('[ScanTab] Failed to remove uploaded file after record verification failed:', cleanupError);
+          }
           if (isScanActive(scanToken)) {
             setErrorMessage('Failed to verify receipt record creation');
             setScanState('error');
@@ -416,9 +496,9 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
             return;
           }
 
-          console.log('[ScanTab] Receipt status fallback reached after 12 seconds. Resolving to success.');
-          resolveScanSuccess(scanToken);
-        }, 12000);
+          console.log('[ScanTab] Receipt status has not resolved after 30 seconds. Keeping it visible as pending.');
+          resolveScanPending(scanToken);
+        }, 30000);
       } catch (err) {
         console.error('Scan error:', err);
         throw err;
@@ -526,10 +606,9 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                     type="button"
                     onClick={(e) => {
                       e.preventDefault();
-                      // ANDROID FIX: Save to localStorage BEFORE opening file picker
-                      // This survives tab kill when Android opens camera
-                      localStorage.setItem('isScanning', 'true');
-                      localStorage.setItem('scanningSource', 'gallery');
+                      // Gallery selection is not a camera capture and should
+                      // never trigger Android's camera-recovery path.
+                      clearScanningStorage();
                       fileInputRef.current?.click();
                     }}
                     className="w-full backdrop-blur-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/30 rounded-xl p-4 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
@@ -711,6 +790,35 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                   <p className="text-sm text-green-400 font-semibold">
                     Taking you to your wallet...
                   </p>
+                </div>
+              </motion.div>
+            )}
+
+            {scanState === 'pending' && (
+              <motion.div
+                key="pending"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.3 }}
+                className="backdrop-blur-xl bg-white/5 border border-amber-400/20 rounded-2xl p-8"
+              >
+                <div className="text-center">
+                  <Clock className="w-20 h-20 text-amber-300 mx-auto mb-4" strokeWidth={1.5} />
+                  <h2 className="text-2xl font-bold text-white mb-2">Receipt is still processing</h2>
+                  <p className="text-gray-400 mb-6">
+                    Your receipt was safely uploaded. It is taking longer than usual, so you can check its live status in your Wallet.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetScan();
+                      onNavigateToWallet();
+                    }}
+                    className="w-full backdrop-blur-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/30 rounded-xl py-3 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    <span className="font-semibold text-teal-400">View Wallet</span>
+                  </button>
                 </div>
               </motion.div>
             )}
