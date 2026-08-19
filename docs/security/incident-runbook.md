@@ -47,6 +47,11 @@ production deletion, and record the time, scope, and action owner.
 
 ## Backup and restore
 
-1. Do not restore over production for a beta incident.
-2. Restore into an isolated project first and verify RLS, private bucket settings, and owner-folder policies before any cutover.
-3. Reconcile Storage separately; database backup alone does not prove private originals are recoverable.
+1. The current Free-plan project has no provider automatic backup/PITR. Keep
+   encrypted off-site logical database exports and a separately encrypted
+   private-Storage inventory/copy before relying on recovery.
+2. Do not restore over production for a beta incident.
+3. Restore into an isolated project first and verify RLS, private bucket
+   settings, and owner-folder policies before any cutover.
+4. Reconcile Storage separately; a database export contains object metadata,
+   not the private originals themselves.

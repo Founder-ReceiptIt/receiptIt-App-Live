@@ -59,8 +59,11 @@ facts or child records.
 - Make execution history necessarily contains processor inputs and OpenAI
   outputs for troubleshooting. Access must remain limited to founders who need
   it; retention should be minimized before public launch.
-- The project is on the Supabase Free plan. Automatic backup/PITR and a
-  separately verified Storage restore process are not confirmed for beta.
+- The project is on the Supabase Free plan. Supabase documents that Free does
+  not include automatic downloadable backups or PITR. Before public launch,
+  schedule encrypted off-site logical database exports and a separately
+  encrypted private-Storage inventory/copy, then restore both into an isolated
+  project to prove the recovery runbook.
 - Future alias/email ingestion needs its own signed webhook, replay protection,
   sender-abuse controls, and redaction rules before activation.
 - Make execution history and OpenAI retain the processor input needed to
