@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.receiptit.backup</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/absolute/path/to/receiptIt-App-Live/scripts/backup-receiptit.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>RECEIPTIT_BACKUP_DESTINATION</key>
+    <string>/Volumes/ReceiptIt-Encrypted-Backups</string>
+    <key>RECEIPTIT_BACKUP_KEEP</key>
+    <string>14</string>
+  </dict>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>3</integer>
+    <key>Minute</key>
+    <integer>15</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/tmp/receiptit-backup.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/receiptit-backup.error.log</string>
+</dict>
+</plist>

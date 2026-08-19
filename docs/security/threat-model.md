@@ -47,7 +47,7 @@ facts or child records.
 | Profile/admin privilege escalation | P0 | browser column grants exclude `plan`; owner-only policies |
 | Public processing/payment logs | P0 | RLS enabled and browser grants removed |
 | Malicious file / cost abuse | P1 | MIME/signature/size/page/image-dimension checks, private bucket MIME/size controls, active-job and hourly upload caps |
-| Prompt injection / malformed AI output | P1 | no model tools or database authority; JSON-only extraction, canonical parser/router, fail-closed unknown classifications; PDF prompt explicitly treats document text as hostile evidence |
+| Prompt injection / malformed AI output | P1 | no model tools or database authority; JSON-only extraction, canonical parser/router, fail-closed unknown classifications; Image and PDF prompts treat document contents as hostile evidence, with finite/bounded numeric and enum/schema constraints |
 | Account deletion leaving evidence | P1 | server deletion removes private objects before auth cascade and verifies controlled cleanup path |
 | Alias/access-code enumeration / unauthorised beta signup | P1 | access codes are server-verified only with hashed rate limits; a short-lived, one-time opaque signup authorization is consumed server-side before account creation |
 | Signed-link leakage | P1 | on-demand, owner-authorized, 60-second signed URLs; no permanent frontend public URL |
@@ -60,10 +60,11 @@ facts or child records.
   outputs for troubleshooting. Access must remain limited to founders who need
   it; retention should be minimized before public launch.
 - The project is on the Supabase Free plan. Supabase documents that Free does
-  not include automatic downloadable backups or PITR. Before public launch,
-  schedule encrypted off-site logical database exports and a separately
-  encrypted private-Storage inventory/copy, then restore both into an isolated
-  project to prove the recovery runbook.
+  not include automatic downloadable backups or PITR. The beta backup tooling
+  and isolated-restore procedure are documented in
+  [backup-and-restore.md](backup-and-restore.md), but the control is not
+  complete until a restricted off-site destination and isolated Supabase
+  project have been provisioned for the first real restore drill.
 - Future alias/email ingestion needs its own signed webhook, replay protection,
   sender-abuse controls, and redaction rules before activation.
 - Make execution history and OpenAI retain the processor input needed to

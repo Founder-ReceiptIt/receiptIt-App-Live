@@ -47,11 +47,12 @@ production deletion, and record the time, scope, and action owner.
 
 ## Backup and restore
 
-1. The current Free-plan project has no provider automatic backup/PITR. Keep
-   encrypted off-site logical database exports and a separately encrypted
-   private-Storage inventory/copy before relying on recovery.
+1. Follow [the backup and isolated-restore procedure](backup-and-restore.md).
+   The current Free-plan project has no provider automatic backup/PITR.
 2. Do not restore over production for a beta incident.
 3. Restore into an isolated project first and verify RLS, private bucket
-   settings, and owner-folder policies before any cutover.
-4. Reconcile Storage separately; a database export contains object metadata,
-   not the private originals themselves.
+   settings, owner-folder policies, and one matching `user_id`/Storage path
+   before any cutover.
+4. The encrypted bundle includes a database export and a separately copied
+   private-Storage hierarchy because database metadata alone does not recover
+   original files.
