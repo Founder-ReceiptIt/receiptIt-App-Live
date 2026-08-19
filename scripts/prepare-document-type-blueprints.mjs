@@ -11,6 +11,7 @@ fs.mkdirSync(outDir, { recursive: true });
 
 const types = ['invoice', 'order_confirmation', 'payment_confirmation', 'hotel_folio', 'eftpos_slip', 'other_purchase_proof'];
 const instruction = ' Add document_type as a required top-level field. Set it exactly once: a completed conventional retail receipt is receipt; invoice is invoice; order confirmation is order_confirmation; payment confirmation is payment_confirmation; hotel folio is hotel_folio; EFTPOS/payment-terminal slip is eftpos_slip; other legitimate purchase evidence is other_purchase_proof; bank statements, screenshots, and unrelated documents are non_purchase_document. A merchant name, amount, card/account data, or transaction table alone never makes a document purchase evidence. Set is_receipt=true for receipt and valid purchase evidence, and false only for non_purchase_document.';
+const pdfClassification = ' document_type describes the document form, independently of whether it is valid purchase evidence. receipt is only a conventional completed retail/POS receipt; never use it as a generic label for merchant plus items plus total. Prefer explicit form and the most specific non-receipt type: Invoice/Tax Invoice, invoice number, Bill To, due date, terms, amount due or balance due means invoice even if paid; order confirmation/order number/delivery information means order_confirmation; transfer or charge confirmation means payment_confirmation; terminal IDs, authorization code, card masking or approved status means eftpos_slip even if it says receipt; accommodation stay charges mean hotel_folio. Bank/account statements, arbitrary screenshots and unrelated documents are non_purchase_document even if they contain merchant names, dates and amounts.';
 
 function walk(value, found = []) {
   if (Array.isArray(value)) value.forEach((item) => walk(item, found));
@@ -84,6 +85,8 @@ imageRouter.routes.splice(2, 0, { flow: [reviewModuleFrom(imageReject, imageRevi
 
 const pdf = JSON.parse(fs.readFileSync(sources.pdf, 'utf8'));
 addPromptField(moduleById(pdf, 32));
+const pdfSystem = moduleById(pdf, 32).mapper.messages.find((message) => message.role === 'system');
+if (!pdfSystem.content.includes('document_type describes the document form')) pdfSystem.content += pdfClassification;
 addInterfaceField(moduleById(pdf, 26));
 const pdfRouter = moduleById(pdf, 8);
 const pdfReject = pdfRouter.routes[0].flow[0];
