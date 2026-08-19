@@ -3,6 +3,7 @@ import { Upload, X, Camera, CheckCircle, Loader2, FileImage, File, Clock } from 
 import { useState, useRef, useEffect } from 'react';
 import { flushSync } from 'react-dom';
 import { supabase } from '../../lib/supabase';
+import { validateReceiptUpload, type ReceiptUploadKind } from '../../lib/uploadValidation';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -190,7 +191,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     };
   }, []);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     // CRITICAL: Prevent any default browser behavior
     e.preventDefault();
     e.stopPropagation();
@@ -210,30 +211,19 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     // Reset the input immediately to prevent re-triggering
     e.target.value = '';
 
-    // VALIDATION 1: Check file type
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
-    if (!allowedTypes.includes(file.type.toLowerCase())) {
-      console.error('[ScanTab] Invalid file type:', file.type);
-      setErrorMessage('Unsupported file type. Please use JPG, PNG, or PDF.');
-      setScanState('error');
-      clearScanningStorage();
-      showToast('Unsupported file type. Please use JPG, PNG, or PDF.', undefined);
-      return;
-    }
-
-    // VALIDATION 2: Check file size (10MB limit)
-    const maxSizeBytes = 10 * 1024 * 1024; // 10MB in bytes
-    if (file.size > maxSizeBytes) {
-      console.error('[ScanTab] File too large:', file.size, 'bytes');
-      setErrorMessage('File too large. Max size is 10MB.');
-      setScanState('error');
-      clearScanningStorage();
-      showToast('File too large. Max size is 10MB.', undefined);
-      return;
-    }
-
-    // CRITICAL: Block all further interactions immediately
+    // Block a second selection while deterministic file validation is running.
     isScanningRef.current = true;
+
+    const validation = await validateReceiptUpload(file);
+    if (!validation.valid) {
+      console.warn('[ScanTab] Upload rejected before processing:', validation.errorReason);
+      setErrorMessage(validation.message);
+      setScanState('error');
+      isScanningRef.current = false;
+      clearScanningStorage();
+      showToast(validation.message, undefined);
+      return;
+    }
 
     // FORCE synchronous render - this ensures the modal appears IMMEDIATELY on mobile
     flushSync(() => {
@@ -252,18 +242,18 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     // Start the async upload process separately (not awaited in this handler)
     // Use setTimeout to ensure this happens AFTER the render
     setTimeout(() => {
-      void startScan(file, scanToken);
+      void startScan(file, validation.kind, scanToken);
     }, 0);
   };
 
-  const startScan = async (file: File, scanToken: number) => {
+  const startScan = async (file: File, uploadKind: ReceiptUploadKind, scanToken: number) => {
     if (!isScanActive(scanToken)) {
       return;
     }
 
     if (!user) {
       if (isScanActive(scanToken)) {
-        setErrorMessage('User not authenticated');
+        setErrorMessage('Your session has expired. Please sign in and try again.');
         setScanState('error');
         clearScanningStorage();
       }
@@ -351,7 +341,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
       if (uploadError) {
         if (isScanActive(scanToken)) {
-          setErrorMessage(`Failed to upload file: ${uploadError.message}`);
+          setErrorMessage('We couldn’t upload this file. Please try again.');
           setScanState('error');
           clearScanningStorage();
         }
@@ -377,7 +367,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
             user_id: user.id,
             // Keep the original submission type accurate for processing,
             // analytics, and any later re-processing of the file.
-            source: file.type === 'application/pdf' || fileExt === 'pdf' ? 'pdf' : 'image',
+            source: uploadKind,
             storage_path: storagePath,
             // Keep a storage path rather than a public object URL. The viewer
             // resolves a short-lived signed URL only when the owner requests it.
@@ -385,6 +375,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
             // Persist the file hash for exact duplicate detection when available
             ...(fileHash ? { file_hash: fileHash } : {}),
             status: 'processing',
+            processing_attempt_started_at: new Date().toISOString(),
             merchant: 'Analyzing...',
             amount: 0,
             subtotal: 0,
@@ -404,7 +395,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
             console.error('[ScanTab] Failed to remove uploaded file after record creation failed:', cleanupError);
           }
           if (isScanActive(scanToken)) {
-            setErrorMessage(`Failed to create database record: ${insertError.message}`);
+            setErrorMessage('We couldn’t start processing this file. Please try again.');
             setScanState('error');
             clearScanningStorage();
           }
@@ -418,7 +409,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
             console.error('[ScanTab] Failed to remove uploaded file after record verification failed:', cleanupError);
           }
           if (isScanActive(scanToken)) {
-            setErrorMessage('Failed to verify receipt record creation');
+            setErrorMessage('We couldn’t start processing this file. Please try again.');
             setScanState('error');
             clearScanningStorage();
           }
@@ -469,13 +460,17 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                 return;
               }
 
-              if (updatedStatus === 'failed' || updatedStatus === 'needs_input') {
+              if (updatedStatus === 'failed' || updatedStatus === 'needs_input' || updatedStatus === 'needs_review' || updatedStatus === 'rejected') {
                 console.log('[ScanTab] Receipt status resolved to error:', updatedStatus);
                 cleanupReceiptStatusWatcher();
                 setErrorMessage(
-                  updatedStatus === 'failed'
-                    ? 'The receipt could not be processed automatically. Please try again with a clearer image.'
-                    : 'This receipt needs a quick review before it can be processed. Check your wallet for the next step.'
+                  updatedStatus === 'needs_input'
+                    ? 'This receipt needs one quick confirmation. Check your Wallet for the next step.'
+                    : updatedStatus === 'needs_review'
+                      ? 'This may be useful purchase evidence, but it needs a quick review in your Wallet.'
+                      : updatedStatus === 'rejected'
+                        ? 'This file does not appear to be purchase evidence. You can review it in your Wallet.'
+                        : 'We couldn’t process this file. Retry it or upload a clearer copy from your Wallet.'
                 );
                 setScanState('error');
                 isScanningRef.current = false;
@@ -506,7 +501,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     } catch (error) {
       console.error('[ScanTab] Error during scan:', error);
       if (isScanActive(scanToken)) {
-        setErrorMessage(`An unexpected error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        setErrorMessage('We couldn’t process this file. Please try again.');
         setScanState('error');
         isScanningRef.current = false;
         // ANDROID FIX: Clear localStorage on error

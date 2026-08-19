@@ -14,6 +14,7 @@ interface ReceiptFailureInput {
 }
 
 interface ReceiptFailureDetails {
+  title: string;
   reason: string;
   advice: string | null;
 }
@@ -90,21 +91,22 @@ const FALLBACK_FAILURE_STATUSES = new Set(['needs_input', 'failed']);
 export const getReceiptFailureDetails = ({
   status,
   errorReason,
-  date: _date,
   createdAt,
   processingAttemptStartedAt,
 }: ReceiptFailureInput): ReceiptFailureDetails | null => {
   if (needsCurrencyConfirmation(status, errorReason)) {
     return {
+      title: 'Needs review',
       reason: 'Currency could not be read',
-      advice: 'Confirm the currency to continue.',
+      advice: 'Confirm the currency, then we’ll retry it.',
     };
   }
 
   if (isReceiptStaleProcessing(status, createdAt, processingAttemptStartedAt)) {
     return {
-      reason: 'Processing could not complete.',
-      advice: null,
+      title: 'Couldn’t finish processing',
+      reason: 'This receipt took too long to process.',
+      advice: 'Retry it, or report the problem if it keeps happening.',
     };
   }
 
@@ -112,43 +114,65 @@ export const getReceiptFailureDetails = ({
 
   if (isScannerProcessingError(normalizedErrorReason)) {
     return {
-      reason: 'Processing could not complete.',
-      advice: null,
+      title: 'Couldn’t process this receipt',
+      reason: 'We couldn’t finish reading this file.',
+      advice: 'Retry it, or report the problem if it keeps happening.',
     };
   }
 
   if (isExplicitImageQualityError(normalizedErrorReason)) {
     return {
+      title: 'Needs a clearer image',
       reason: 'Image was hard to read',
-      advice: 'Retake the photo closer.',
+      advice: 'Retake it closer, flatter and in better light.',
     };
   }
 
   if (isLongReceiptError(normalizedErrorReason)) {
     return {
+      title: 'Needs a clearer scan',
       reason: 'Long receipt may be hard to scan',
-      advice: 'Try capturing it closer.',
+      advice: 'Capture it closer or upload it in sections.',
     };
   }
 
   if (isNonStandardDocumentError(normalizedErrorReason)) {
     return {
+      title: 'Document review',
       reason: 'This may not be a standard receipt',
-      advice: 'You can still keep the original.',
+      advice: 'Keep the original if it is useful purchase evidence.',
+    };
+  }
+
+  if (status === 'rejected') {
+    return {
+      title: 'Not a purchase document',
+      reason: 'This file does not appear to be purchase evidence.',
+      advice: 'Upload a receipt, invoice, order confirmation or payment proof instead.',
+    };
+  }
+
+  if (status === 'needs_review') {
+    return {
+      title: 'Document review',
+      reason: 'This may be useful purchase evidence, but it is not a standard receipt.',
+      advice: 'Review the original and keep it if it is useful to you.',
     };
   }
 
   if (typeof status === 'string' && FALLBACK_FAILURE_STATUSES.has(status)) {
     return {
-      reason: 'Processing could not complete.',
-      advice: null,
+      title: 'Couldn’t process this receipt',
+      reason: 'We couldn’t process this file.',
+      advice: 'Retry it or upload a clearer copy.',
     };
   }
 
   if (normalizedErrorReason.length > 0) {
     return {
-      reason: 'Processing could not complete.',
-      advice: null,
+      title: 'Couldn’t process this receipt',
+      reason: 'We couldn’t process this file.',
+      advice: 'Retry it or upload a clearer copy.',
     };
   }
 

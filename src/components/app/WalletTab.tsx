@@ -8,6 +8,7 @@ import {
   deleteReceiptRecord,
   isReceiptCurrencyConfirmationOption,
   isReceiptStaleProcessing,
+  markReceiptProcessingTimedOut,
   needsCurrencyConfirmation,
   isFinalizedReceiptStatus,
   RECEIPT_CURRENCY_CONFIRMATION_OPTIONS,
@@ -77,17 +78,19 @@ const formatCurrencyAmount = (currencyCode: string, amount: number): string => (
   `${getCurrencySymbol(currencyCode)}${amount.toFixed(2)}`
 );
 
-const WALLET_RECEIPT_STATUSES = ['needs_input', 'processing', 'parsed', 'completed', 'duplicate', 'failed', 'skipped'] as const;
-const HIDDEN_WALLET_RECEIPT_STATUSES = ['duplicate', 'failed', 'skipped'] as const;
+const WALLET_RECEIPT_STATUSES = ['needs_input', 'processing', 'parsed', 'completed', 'duplicate', 'failed', 'skipped', 'needs_review', 'rejected'] as const;
+const HIDDEN_WALLET_RECEIPT_STATUSES = ['duplicate', 'skipped'] as const;
 
 const isHiddenWalletReceiptStatus = (status: unknown): status is typeof HIDDEN_WALLET_RECEIPT_STATUSES[number] =>
   typeof status === 'string' && HIDDEN_WALLET_RECEIPT_STATUSES.includes(status as typeof HIDDEN_WALLET_RECEIPT_STATUSES[number]);
 
 const getReceiptStatusPriority = (status: unknown): number => {
-  if (status === 'needs_input') return 4;
-  if (status === 'parsed') return 3;
-  if (status === 'completed') return 2;
-  if (status === 'processing') return 1;
+  if (status === 'needs_input') return 6;
+  if (status === 'needs_review') return 5;
+  if (status === 'parsed') return 4;
+  if (status === 'completed') return 3;
+  if (status === 'processing') return 2;
+  if (status === 'failed' || status === 'rejected') return 1;
   return 0;
 };
 
@@ -178,7 +181,7 @@ const filterVisibleReceiptRows = (rows: SupabaseReceiptRow[]): SupabaseReceiptRo
   rows.filter((row) => {
     if (isFinalizedReceiptStatus(row.status)) return true;
     if (needsCurrencyConfirmation(row.status, row.error_reason)) return true;
-    if (row.status === 'processing') return true;
+    if (['processing', 'failed', 'needs_review', 'rejected'].includes(row.status || '')) return true;
     if (isHiddenWalletReceiptStatus(row.status)) return false;
     return false;
   });
@@ -187,7 +190,7 @@ const filterVisibleWalletReceipts = (receipts: Receipt[]): Receipt[] =>
   receipts.filter((receipt) => {
     if (isFinalizedReceiptStatus(receipt.status)) return true;
     if (needsCurrencyConfirmation(receipt.status, receipt.errorReason)) return true;
-    if (receipt.status === 'processing') return true;
+    if (['processing', 'failed', 'needs_review', 'rejected'].includes(receipt.status || '')) return true;
     if (isHiddenWalletReceiptStatus(receipt.status)) return false;
     return false;
   });
@@ -354,6 +357,7 @@ const mapReceiptRowToWalletReceipt = (
     status: row.status || '',
     errorReason: row.error_reason,
     userConfirmedCurrency: row.user_confirmed_currency,
+    processingAttemptStartedAt: row.processing_attempt_started_at || undefined,
     imageUrl: row.image_url || '',
     storagePath: row.storage_path || '',
     createdAt: row.created_at || undefined,
@@ -528,6 +532,22 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
 
         setReceipts(safeReceipts);
         setLoading(false);
+
+        const staleReceiptIds = safeReceipts
+          .filter((receipt) => isReceiptStaleProcessing(
+            receipt.status,
+            receipt.createdAt,
+            receipt.processingAttemptStartedAt
+          ))
+          .map((receipt) => receipt.id);
+
+        if (staleReceiptIds.length > 0) {
+          void Promise.all(staleReceiptIds.map(markReceiptProcessingTimedOut))
+            .then(() => fetchReceipts())
+            .catch((staleUpdateError) => {
+              console.error('[WalletTab] Could not mark stale processing receipts as failed:', staleUpdateError);
+            });
+        }
       } catch (error) {
         console.error('[WalletTab] Unexpected error fetching receipts:', error);
         setReceipts([]);
@@ -1229,7 +1249,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                 );
                 const isFreshProcessing = isProcessing && !isStaleProcessing;
                 const isNeedsInput = receipt.status === 'needs_input';
-                const isNonFinalReceipt = isProcessing || isNeedsInput;
+                const isNonFinalReceipt = isProcessing || isNeedsInput || receipt.status === 'needs_review' || receipt.status === 'rejected' || receipt.status === 'failed';
                 const requiresCurrencyConfirmation = needsCurrencyConfirmation(receipt.status, receipt.errorReason);
                 const isConfirmingCurrency = currencyConfirmationState?.receiptId === receipt.id;
                 const hasActiveWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) > new Date();
@@ -1340,7 +1360,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                             </motion.h3>
                           ) : showIssueHeading ? (
                             <>
-                              <h3 className="text-lg font-bold mb-1 text-red-400">Upload failed</h3>
+                              <h3 className="text-lg font-bold mb-1 text-red-400">{receiptFailureDetails?.title}</h3>
                               <p className="text-sm text-gray-400">{receiptFailureDetails?.reason}</p>
                               {receiptFailureDetails?.advice && (
                                 <p className="mt-1 text-xs text-gray-500">{receiptFailureDetails.advice}</p>

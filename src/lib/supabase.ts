@@ -241,6 +241,7 @@ export const confirmReceiptCurrency = async (
     user_confirmed_currency: currency,
     status: 'processing',
     error_reason: null,
+    processing_attempt_started_at: new Date().toISOString(),
   })
   .eq('id', receiptId);
 
@@ -251,8 +252,18 @@ export const retryReceiptProcessing = async (
   .update({
     status: 'processing',
     error_reason: null,
+    processing_attempt_started_at: new Date().toISOString(),
   })
   .eq('id', receiptId);
+
+export const markReceiptProcessingTimedOut = async (receiptId: string) => supabase
+  .from('receipts')
+  .update({
+    status: 'failed',
+    error_reason: 'processing_timeout',
+  })
+  .eq('id', receiptId)
+  .eq('status', 'processing');
 
 export const deleteReceiptRecord = async ({
   receiptId,
@@ -450,6 +461,7 @@ export interface Receipt {
   error_reason: string | null;
   user_confirmed_currency: string | null;
   processing_attempts: number | null;
+  processing_attempt_started_at?: string | null;
   /**
    * Legacy field kept for backwards compatibility. New code should use
    * `file_hash` instead. May be null if not set.

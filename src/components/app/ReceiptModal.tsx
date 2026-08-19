@@ -334,7 +334,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const isProcessingReceipt = receipt.status === 'processing';
   const isFreshProcessing = isProcessingReceipt && !isStaleProcessing;
   const isNeedsInputReceipt = receipt.status === 'needs_input';
-  const isNonFinalReceipt = isProcessingReceipt || isNeedsInputReceipt;
+  const isNonFinalReceipt = isProcessingReceipt || isNeedsInputReceipt || receipt.status === 'needs_review' || receipt.status === 'rejected' || receipt.status === 'failed';
   const requiresCurrencyConfirmation = needsCurrencyConfirmation(receipt.status, receipt.errorReason);
   const isConfirmingCurrency = currencyConfirmationState?.receiptId === receipt.id;
   const receiptCurrencySymbol = getCurrencySymbol(receipt.currency);
@@ -603,7 +603,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h3 className="text-2xl font-bold text-white">Upload failed</h3>
+                        <h3 className="text-2xl font-bold text-white">{receiptFailureDetails?.title}</h3>
                         {receiptFailureDetails?.reason && (
                           <p className="mt-2 text-sm text-red-100/85">{receiptFailureDetails.reason}</p>
                         )}
