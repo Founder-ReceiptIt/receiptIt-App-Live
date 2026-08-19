@@ -46,10 +46,10 @@ facts or child records.
 | Cross-user original access | P0 | private bucket, authenticated owner-folder policies, 60-second signed links |
 | Profile/admin privilege escalation | P0 | browser column grants exclude `plan`; owner-only policies |
 | Public processing/payment logs | P0 | RLS enabled and browser grants removed |
-| Malicious file / cost abuse | P1 | MIME/signature/size/page checks, private bucket MIME/size controls, active-job and hourly upload caps |
-| Prompt injection / malformed AI output | P1 | untrusted-content system rules, JSON-only extraction, canonical parser/router, fail-closed unknown classifications |
+| Malicious file / cost abuse | P1 | MIME/signature/size/page/image-dimension checks, private bucket MIME/size controls, active-job and hourly upload caps |
+| Prompt injection / malformed AI output | P1 | no model tools or database authority; JSON-only extraction, canonical parser/router, fail-closed unknown classifications; PDF prompt explicitly treats document text as hostile evidence |
 | Account deletion leaving evidence | P1 | server deletion removes private objects before auth cascade and verifies controlled cleanup path |
-| Alias/access-code enumeration | P1 | access codes are server-verified only with hashed rate limits |
+| Alias/access-code enumeration / unauthorised beta signup | P1 | access codes are server-verified only with hashed rate limits; a short-lived, one-time opaque signup authorization is consumed server-side before account creation |
 | Signed-link leakage | P1 | on-demand, owner-authorized, 60-second signed URLs; no permanent frontend public URL |
 | Lost device / session theft | P1 | Supabase Auth sessions; users should sign out on shared devices and use a unique password |
 | Insider/support browsing | P2 for beta | no support UI or casual browser access; service access remains privileged and must be deliberate |
@@ -63,3 +63,6 @@ facts or child records.
   separately verified Storage restore process are not confirmed for beta.
 - Future alias/email ingestion needs its own signed webhook, replay protection,
   sender-abuse controls, and redaction rules before activation.
+- Make execution history and OpenAI retain the processor input needed to
+  extract a document. This is deliberately limited to the processing path, but
+  retention and operator access must be tightened before public launch.

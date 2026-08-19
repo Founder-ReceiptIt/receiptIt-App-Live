@@ -58,6 +58,8 @@ const defaultProfileSettings: ProfileSettings = {
   privacy: defaultPrivacyPreferences,
 };
 
+const signupAuthorizationKey = 'receiptit_signup_authorization';
+
 const toBoolean = (value: unknown, fallback: boolean): boolean => {
   if (typeof value === 'boolean') {
     return value;
@@ -432,6 +434,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           password,
           alias,
           fullName,
+          signupAuthorization: sessionStorage.getItem(signupAuthorizationKey),
         },
       });
 
@@ -457,6 +460,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!createdAccount?.success) {
         return { error: new Error(createdAccount?.details || createdAccount?.error || 'Failed to create account') };
       }
+
+      sessionStorage.removeItem(signupAuthorizationKey);
 
       const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
         email,

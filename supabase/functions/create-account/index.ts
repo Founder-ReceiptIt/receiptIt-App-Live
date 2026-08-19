@@ -13,6 +13,7 @@ interface CreateAccountRequest {
   password?: unknown;
   alias?: unknown;
   fullName?: unknown;
+  signupAuthorization?: unknown;
 }
 
 const jsonResponse = (request: Request, body: Record<string, unknown>, status: number) =>
@@ -55,9 +56,14 @@ Deno.serve(async (request: Request) => {
   const password = typeof body.password === "string" ? body.password : "";
   const alias = optionalText(body.alias, 128).toLowerCase();
   const fullName = optionalText(body.fullName, 120);
+  const signupAuthorization = optionalText(body.signupAuthorization, 256);
 
   if (!email || !password || !alias || password.length < 8) {
     return jsonResponse(request, { error: "Enter a valid email, alias, and password of at least 8 characters." }, 400);
+  }
+
+  if (!signupAuthorization) {
+    return jsonResponse(request, { error: "A current access-key verification is required to create an account." }, 403);
   }
 
   const requestHash = await requestSubjectHash(request, "unknown-client");
@@ -75,6 +81,16 @@ Deno.serve(async (request: Request) => {
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+
+  const authorizationHash = await valueHash(signupAuthorization);
+  const { data: authorizationConsumed, error: authorizationError } = await supabaseAdmin.rpc(
+    "consume_signup_authorization",
+    { p_token_hash: authorizationHash },
+  );
+
+  if (authorizationError || authorizationConsumed !== true) {
+    return jsonResponse(request, { error: "A current access-key verification is required to create an account." }, 403);
+  }
 
   const { data: createdAccount, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
     email,

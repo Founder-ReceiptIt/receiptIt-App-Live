@@ -32,8 +32,10 @@ export const corsHeadersFor = (request: Request): HeadersInit => {
 };
 
 export const requestSubjectHash = async (request: Request, fallback: string): Promise<string> => {
+  // Cloudflare's connecting IP is set by the edge network and cannot be
+  // client-selected. Keep forwarded-for only as a platform fallback.
   const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const subject = forwardedFor || request.headers.get("cf-connecting-ip") || fallback;
+  const subject = request.headers.get("cf-connecting-ip") || forwardedFor || fallback;
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(subject));
   return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
 };

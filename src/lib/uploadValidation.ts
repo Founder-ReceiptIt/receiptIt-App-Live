@@ -1,5 +1,7 @@
 export const MAX_RECEIPT_UPLOAD_BYTES = 10 * 1024 * 1024;
 export const MAX_RECEIPT_PDF_PAGES = 20;
+export const MAX_RECEIPT_IMAGE_PIXELS = 40_000_000;
+export const MAX_RECEIPT_IMAGE_DIMENSION = 16_000;
 
 export type ReceiptUploadKind = 'image' | 'pdf';
 
@@ -50,6 +52,58 @@ const getPdfPageCount = (pdfText: string): number => {
   return declaredCounts.length > 0 ? Math.max(...declaredCounts) : 0;
 };
 
+const getPngDimensions = (bytes: Uint8Array): { width: number; height: number } | null => {
+  if (bytes.length < 24 || !hasMagic(bytes, PNG_MAGIC)) return null;
+
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return { width: view.getUint32(16), height: view.getUint32(20) };
+};
+
+const jpegSofMarkers = new Set([
+  0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf,
+]);
+
+const getJpegDimensions = (bytes: Uint8Array): { width: number; height: number } | null => {
+  if (bytes.length < 4 || !hasMagic(bytes, JPEG_MAGIC)) return null;
+
+  let offset = 2;
+  while (offset + 8 < bytes.length) {
+    if (bytes[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+
+    while (offset < bytes.length && bytes[offset] === 0xff) offset += 1;
+    const marker = bytes[offset];
+    offset += 1;
+
+    // Standalone markers contain no segment length.
+    if (marker === 0x00 || marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7)) continue;
+    if (offset + 1 >= bytes.length) return null;
+
+    const segmentLength = (bytes[offset] << 8) | bytes[offset + 1];
+    if (segmentLength < 2 || offset + segmentLength > bytes.length) return null;
+
+    if (jpegSofMarkers.has(marker)) {
+      if (segmentLength < 7) return null;
+      return {
+        height: (bytes[offset + 3] << 8) | bytes[offset + 4],
+        width: (bytes[offset + 5] << 8) | bytes[offset + 6],
+      };
+    }
+
+    offset += segmentLength;
+  }
+
+  return null;
+};
+
+const isSafeImageDimensions = (dimensions: { width: number; height: number } | null): boolean => {
+  if (!dimensions || dimensions.width < 1 || dimensions.height < 1) return false;
+  if (dimensions.width > MAX_RECEIPT_IMAGE_DIMENSION || dimensions.height > MAX_RECEIPT_IMAGE_DIMENSION) return false;
+  return dimensions.width * dimensions.height <= MAX_RECEIPT_IMAGE_PIXELS;
+};
+
 /**
  * Rejects files that cannot safely enter receipt processing before any Storage
  * write or paid AI work occurs. It intentionally performs only deterministic
@@ -88,6 +142,13 @@ export const validateReceiptUpload = async (file: File): Promise<ReceiptUploadVa
 
   if (extensionKind === 'image' && !isJpeg && !isPng) {
     return invalid('invalid_file', 'This file doesn’t look like a valid image. Choose a JPG or PNG receipt and try again.');
+  }
+
+  if (extensionKind === 'image') {
+    const dimensions = isPng ? getPngDimensions(bytes) : getJpegDimensions(bytes);
+    if (!isSafeImageDimensions(dimensions)) {
+      return invalid('image_dimension_limit', 'This image is too large to process safely. Use a smaller receipt image and try again.');
+    }
   }
 
   if (extensionKind === 'pdf' && !isPdf) {

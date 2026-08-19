@@ -72,5 +72,23 @@ Deno.serve(async (request: Request) => {
     return jsonResponse(request, { error: "Verification is temporarily unavailable" }, 503);
   }
 
-  return jsonResponse(request, { valid: Boolean(data) }, 200);
+  if (!data) {
+    return jsonResponse(request, { valid: false }, 200);
+  }
+
+  const rawAuthorization = crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "");
+  const authorizationHash = await valueHash(rawAuthorization);
+  const { error: authorizationError } = await admin
+    .from("signup_authorizations")
+    .insert({
+      token_hash: authorizationHash,
+      expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+    });
+
+  if (authorizationError) {
+    console.error("[verify-access-code] Authorization issuance failed", { code: authorizationError.code });
+    return jsonResponse(request, { error: "Verification is temporarily unavailable" }, 503);
+  }
+
+  return jsonResponse(request, { valid: true, signupAuthorization: rawAuthorization }, 200);
 });

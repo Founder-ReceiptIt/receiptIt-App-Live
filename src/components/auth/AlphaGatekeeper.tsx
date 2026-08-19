@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Lock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
+const signupAuthorizationKey = 'receiptit_signup_authorization';
+
 export default function AlphaGatekeeper({ children }: { children: React.ReactNode }) {
   const [isVerified, setIsVerified] = useState(false);
   const [accessCode, setAccessCode] = useState('');
@@ -35,7 +37,7 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
         body: { accessCode: trimmedCode },
       });
 
-      if (verificationError || !data?.valid) {
+      if (verificationError || !data?.valid || typeof data.signupAuthorization !== 'string') {
         console.error('Access-code verification failed');
         setError('Invalid Key. Please request access at founder@receiptit.co.uk');
         setIsLoading(false);
@@ -43,6 +45,7 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
       }
 
       localStorage.setItem('is_alpha_verified', 'true');
+      sessionStorage.setItem(signupAuthorizationKey, data.signupAuthorization);
       setIsVerified(true);
     } catch (err) {
       console.error('Access code verification error:', err);
