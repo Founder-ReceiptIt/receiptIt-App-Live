@@ -1,120 +1,112 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+import {
+  corsHeadersFor,
+  isRateLimitAllowed,
+  isTrustedOrigin,
+  requestSubjectHash,
+  valueHash,
+} from "../_shared/security.ts";
 
 interface CreateAccountRequest {
-  email?: string;
-  password?: string;
-  alias?: string;
-  fullName?: string;
+  email?: unknown;
+  password?: unknown;
+  alias?: unknown;
+  fullName?: unknown;
 }
 
-const jsonResponse = (body: Record<string, unknown>, status: number) =>
+const jsonResponse = (request: Request, body: Record<string, unknown>, status: number) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json",
-    },
+    headers: { ...corsHeadersFor(request), "Content-Type": "application/json" },
   });
 
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
+const optionalText = (value: unknown, maximumLength: number): string =>
+  typeof value === "string" ? value.trim().slice(0, maximumLength) : "";
+
+Deno.serve(async (request: Request) => {
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeadersFor(request) });
   }
 
-  if (req.method !== "POST") {
-    return jsonResponse({ error: "Method not allowed" }, 405);
+  if (!isTrustedOrigin(request)) {
+    return jsonResponse(request, { error: "Request origin is not allowed" }, 403);
   }
 
+  if (request.method !== "POST") {
+    return jsonResponse(request, { error: "Method not allowed" }, 405);
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.error("[create-account] Server configuration unavailable");
+    return jsonResponse(request, { error: "Account creation is temporarily unavailable" }, 503);
+  }
+
+  let body: CreateAccountRequest;
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-
-    if (!supabaseUrl || !serviceRoleKey) {
-      return jsonResponse({ error: "Server configuration error" }, 500);
-    }
-
-    const body = await req.json() as CreateAccountRequest;
-    const email = body.email?.trim().toLowerCase();
-    const password = body.password?.trim();
-    const alias = body.alias?.trim().toLowerCase();
-    const fullName = body.fullName?.trim() || "";
-
-    if (!email || !password || !alias) {
-      return jsonResponse({ error: "Missing required signup fields" }, 400);
-    }
-
-    const username = fullName || email.split("@")[0] || "user";
-
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
-
-    const { data: createdUser, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: fullName,
-        username,
-        email_alias: alias,
-      },
-    });
-
-    if (createUserError || !createdUser.user) {
-      const message = createUserError?.message || "Failed to create auth user";
-      const lowered = message.toLowerCase();
-
-      if (lowered.includes("already") || lowered.includes("registered") || lowered.includes("exists")) {
-        return jsonResponse({ error: "This email is already registered. Please sign in instead." }, 409);
-      }
-
-      return jsonResponse({ error: message }, 400);
-    }
-
-    const userId = createdUser.user.id;
-
-    const { error: profileError } = await supabaseAdmin
-      .from("profiles")
-      .insert({
-        id: userId,
-        email,
-        full_name: fullName,
-        username,
-        email_alias: alias,
-        plan: "free",
-      });
-
-    if (profileError) {
-      await supabaseAdmin.auth.admin.deleteUser(userId, false);
-
-      const message = `${profileError.message || ""} ${profileError.details || ""}`.toLowerCase();
-      if (
-        profileError.code === "23505" &&
-        (message.includes("email_alias") || message.includes("profiles_email_alias_unique"))
-      ) {
-        return jsonResponse({ error: "This alias is already taken. Please choose another one." }, 409);
-      }
-
-      return jsonResponse({ error: "Failed to create account profile", details: profileError.message }, 500);
-    }
-
-    return jsonResponse({
-      success: true,
-      userId,
-      email,
-    }, 200);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return jsonResponse({ error: "Internal server error", details: message }, 500);
+    body = await request.json();
+  } catch {
+    return jsonResponse(request, { error: "Invalid signup request" }, 400);
   }
+
+  const email = optionalText(body.email, 254).toLowerCase();
+  const password = typeof body.password === "string" ? body.password : "";
+  const alias = optionalText(body.alias, 128).toLowerCase();
+  const fullName = optionalText(body.fullName, 120);
+
+  if (!email || !password || !alias || password.length < 8) {
+    return jsonResponse(request, { error: "Enter a valid email, alias, and password of at least 8 characters." }, 400);
+  }
+
+  const requestHash = await requestSubjectHash(request, "unknown-client");
+  const emailHash = await valueHash(email);
+  const [ipAllowed, emailAllowed] = await Promise.all([
+    isRateLimitAllowed(supabaseUrl, serviceRoleKey, "signup-ip", requestHash, 5, 3600),
+    isRateLimitAllowed(supabaseUrl, serviceRoleKey, "signup-email", emailHash, 3, 3600),
+  ]);
+
+  if (!ipAllowed || !emailAllowed) {
+    return jsonResponse(request, { error: "Too many signup attempts. Please try again later." }, 429);
+  }
+
+  const username = fullName || email.split("@")[0] || "user";
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  const { data: createdAccount, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { full_name: fullName, username, email_alias: alias },
+  });
+
+  if (createUserError || !createdAccount.user) {
+    const knownExistingAccount = /already|registered|exists/i.test(createUserError?.message ?? "");
+    return jsonResponse(
+      request,
+      { error: knownExistingAccount ? "This email is already registered. Please sign in instead." : "Could not create this account." },
+      knownExistingAccount ? 409 : 400,
+    );
+  }
+
+  const userId = createdAccount.user.id;
+  const { error: profileError } = await supabaseAdmin.from("profiles").insert({
+    id: userId,
+    email,
+    full_name: fullName,
+    username,
+    email_alias: alias,
+    plan: "free",
+  });
+
+  if (profileError) {
+    console.error("[create-account] Profile creation failed", { code: profileError.code });
+    await supabaseAdmin.auth.admin.deleteUser(userId, false);
+    return jsonResponse(request, { error: "Could not finish account setup." }, 500);
+  }
+
+  return jsonResponse(request, { success: true, userId, email }, 200);
 });

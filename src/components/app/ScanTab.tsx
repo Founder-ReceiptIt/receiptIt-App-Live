@@ -124,24 +124,9 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       return;
     }
 
-    const { error: receiptItemsError } = await supabase
-      .from('receipt_items')
-      .delete()
-      .eq('receipt_id', receiptId);
-
-    if (receiptItemsError) {
-      throw receiptItemsError;
-    }
-
-    const { error: receiptPaymentsError } = await supabase
-      .from('receipt_payments')
-      .delete()
-      .eq('receipt_id', receiptId);
-
-    if (receiptPaymentsError) {
-      throw receiptPaymentsError;
-    }
-
+    // Receipt child records are processor-managed. Deleting the owned parent
+    // uses the database's foreign-key cascade, so a browser never needs write
+    // access to item or payment rows.
     const { error: receiptDeleteError } = await supabase
       .from('receipts')
       .delete()

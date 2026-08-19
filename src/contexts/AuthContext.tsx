@@ -580,7 +580,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           full_name: fullName || '',
           username: username || 'user',
           email_alias: alias || null,
-          plan: 'free',
         });
 
       if (insertError) {
@@ -671,7 +670,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           },
           body: {
             userId: user.id,
-            accessToken: session.access_token,
           },
         }
       );

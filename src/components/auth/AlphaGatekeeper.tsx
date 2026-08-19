@@ -31,32 +31,16 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
         return;
       }
 
-      const { data, error: queryError } = await supabase
-        .from('access_codes')
-        .select('*')
-        .eq('code', trimmedCode)
-        .maybeSingle();
+      const { data, error: verificationError } = await supabase.functions.invoke('verify-access-code', {
+        body: { accessCode: trimmedCode },
+      });
 
-      if (queryError) {
-        console.error('Query error:', queryError);
+      if (verificationError || !data?.valid) {
+        console.error('Access-code verification failed');
         setError('Invalid Key. Please request access at founder@receiptit.co.uk');
         setIsLoading(false);
         return;
       }
-
-      if (!data) {
-        setError('Invalid Key. Please request access at founder@receiptit.co.uk');
-        setIsLoading(false);
-        return;
-      }
-
-      await supabase
-        .from('access_codes')
-        .update({
-          is_used: true,
-          used_at: new Date().toISOString()
-        })
-        .eq('code', trimmedCode);
 
       localStorage.setItem('is_alpha_verified', 'true');
       setIsVerified(true);

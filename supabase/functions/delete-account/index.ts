@@ -1,201 +1,120 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { corsHeadersFor, isTrustedOrigin } from "../_shared/security.ts";
 
 interface DeleteAccountRequest {
-  userId: string;
-  accessToken?: string;
+  userId?: unknown;
 }
 
-const jsonResponse = (body: Record<string, unknown>, status: number) =>
+const jsonResponse = (request: Request, body: Record<string, unknown>, status: number) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json",
-    },
+    headers: { ...corsHeadersFor(request), "Content-Type": "application/json" },
   });
 
-Deno.serve(async (req: Request) => {
-  const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] [delete-account] START - Incoming request: ${req.method} ${req.url}`);
+const listUserObjects = async (
+  storage: SupabaseClient["storage"],
+  userId: string,
+): Promise<string[]> => {
+  const objects: string[] = [];
+  let offset = 0;
 
-  if (req.method === "OPTIONS") {
-    console.log("[delete-account] OPTIONS preflight - returning 200 with CORS headers");
-    return new Response(null, {
-      status: 200,
-      headers: corsHeaders,
+  while (true) {
+    const { data, error } = await storage.from("receipts").list(userId, {
+      limit: 1000,
+      offset,
+      sortBy: { column: "name", order: "asc" },
     });
+
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+
+    for (const entry of data) {
+      // ReceiptIt's enforced bucket convention is <auth.uid()>/<random-file>.
+      // Storage list returns direct file names for that prefix.
+      if (entry.name) objects.push(`${userId}/${entry.name}`);
+    }
+
+    if (data.length < 1000) break;
+    offset += data.length;
+  }
+
+  return objects;
+};
+
+Deno.serve(async (request: Request) => {
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeadersFor(request) });
+  }
+
+  if (!isTrustedOrigin(request)) {
+    return jsonResponse(request, { error: "Request origin is not allowed" }, 403);
+  }
+
+  if (request.method !== "POST") {
+    return jsonResponse(request, { error: "Method not allowed" }, 405);
+  }
+
+  let body: DeleteAccountRequest;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse(request, { error: "Invalid request" }, 400);
+  }
+
+  const userId = typeof body.userId === "string" ? body.userId.trim() : "";
+  const bearerToken = request.headers.get("Authorization")?.replace(/^Bearer\s+/i, "").trim();
+  if (!userId || !bearerToken) {
+    return jsonResponse(request, { error: "Authentication is required" }, 401);
+  }
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.error("[delete-account] Server configuration unavailable");
+    return jsonResponse(request, { error: "Account deletion is temporarily unavailable" }, 503);
+  }
+
+  const admin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data: verifiedUser, error: authError } = await admin.auth.getUser(bearerToken);
+  if (authError || !verifiedUser.user || verifiedUser.user.id !== userId) {
+    return jsonResponse(request, { error: "Authentication could not be verified" }, 403);
   }
 
   try {
-    if (req.method !== "POST") {
-      const errorMsg = `Invalid method: ${req.method}`;
-      console.error(`[delete-account] ${errorMsg}`);
-      return new Response(
-        JSON.stringify({ error: errorMsg, code: "INVALID_METHOD" }),
-        {
-          status: 405,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-    }
-
-    const authHeader = req.headers.get("Authorization");
-    console.log("[delete-account] Authorization header present:", !!authHeader);
-
-    let body: DeleteAccountRequest;
-    try {
-      body = await req.json();
-    } catch (e) {
-      console.error("[delete-account] Failed to parse request body:", e);
-      return jsonResponse({ error: "Invalid request body" }, 400);
-    }
-
-    const userId = body.userId;
-    const bodyAccessToken = body.accessToken?.trim();
-    console.log("[delete-account] Request userId:", userId);
-
-    if (!userId) {
-      return jsonResponse({ error: "Missing userId in request body" }, 400);
-    }
-
-    const headerToken = authHeader?.startsWith("Bearer ")
-      ? authHeader.slice("Bearer ".length).trim()
-      : authHeader?.trim();
-    const token = bodyAccessToken || headerToken;
-
-    if (!token) {
-      return jsonResponse({ error: "Missing access token" }, 401);
-    }
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-
-    console.log("[delete-account] VERIFICATION: Supabase URL exists:", !!supabaseUrl);
-    console.log("[delete-account] VERIFICATION: Service key exists:", !!supabaseServiceKey);
-
-    if (supabaseServiceKey) {
-      const keyPreview = supabaseServiceKey.substring(0, 20) + "...";
-      console.log("[delete-account] VERIFICATION: Service key format valid:", keyPreview);
-    }
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      const configError = `Missing config - URL: ${!!supabaseUrl}, KEY: ${!!supabaseServiceKey}`;
-      console.error(`[delete-account] CRITICAL: ${configError}`);
-      return jsonResponse({ error: "Server configuration error", details: configError, code: "CONFIG_ERROR" }, 500);
-    }
-
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
-
-    console.log("[delete-account] Verifying token...");
-    const { data: userLookup, error: userLookupError } = await supabaseAdmin.auth.getUser(token);
-
-    if (userLookupError || !userLookup.user) {
-      console.error("[delete-account] Token verification failed:", userLookupError);
-      return jsonResponse({ error: "Invalid or expired token" }, 401);
-    }
-
-    const userData = userLookup.user;
-    console.log("[delete-account] Token user ID:", userData.id);
-
-    if (userData.id !== userId) {
-      console.error("[delete-account] User ID mismatch:", userData.id, "!==", userId);
-      return jsonResponse({ error: "User ID mismatch" }, 403);
-    }
-
-    console.log(`[delete-account] CRITICAL ACTION: Deleting user with ID: ${userId}`);
-    console.log("[delete-account] Using SUPABASE_SERVICE_ROLE_KEY for admin deletion");
-    const { error: deleteUserError } = await supabaseAdmin.auth.admin.deleteUser(userId, false);
-
-    if (deleteUserError) {
-      console.error("[delete-account] FAILURE: deleteUser failed", deleteUserError);
-      return jsonResponse({
-        error: "Failed to delete account",
-        details: deleteUserError.message || "Auth user deletion failed",
-        code: "ADMIN_DELETE_FAILED",
-      }, 500);
-    }
-
-    const { data: deletedUserLookup, error: deletedUserLookupError } = await supabaseAdmin.auth.admin.getUserById(userId);
-
-    if (!deletedUserLookupError && deletedUserLookup?.user) {
-      console.error("[delete-account] Auth user still exists after deleteUser call:", deletedUserLookup.user.id);
-      return jsonResponse({
-        error: "Failed to delete account",
-        details: "Auth user still exists after deletion attempt",
-        code: "AUTH_USER_STILL_EXISTS",
-      }, 500);
-    }
-
-    console.log("[delete-account] SUCCESS: User auth record deleted successfully");
-    const cleanupAttempts = [
-      { label: "profiles.id", query: ["id", `eq.${userId}`] as const },
-      { label: "profiles.user_id", query: ["user_id", `eq.${userId}`] as const },
-    ];
-
-    const cleanupResults: Array<{ label: string; status: number; body: string }> = [];
-
-    for (const attempt of cleanupAttempts) {
-      const cleanupUrl = new URL(`${supabaseUrl}/rest/v1/profiles`);
-      cleanupUrl.searchParams.set(attempt.query[0], attempt.query[1]);
-      cleanupUrl.searchParams.set("select", "id");
-
-      const cleanupResponse = await fetch(cleanupUrl, {
-        method: "DELETE",
-        headers: {
-          "apikey": supabaseServiceKey,
-          "Authorization": `Bearer ${supabaseServiceKey}`,
-          "Content-Type": "application/json",
-          "Prefer": "return=representation",
-        },
-      });
-
-      const cleanupBody = await cleanupResponse.text();
-      cleanupResults.push({
-        label: attempt.label,
-        status: cleanupResponse.status,
-        body: cleanupBody.substring(0, 200),
-      });
-
-      if (!cleanupResponse.ok) {
-        console.warn(
-          `[delete-account] Profile cleanup attempt failed for ${attempt.label}:`,
-          cleanupResponse.status,
-          cleanupBody,
-        );
+    const storagePaths = await listUserObjects(admin.storage, userId);
+    if (storagePaths.length > 0) {
+      const { error: storageDeleteError } = await admin.storage.from("receipts").remove(storagePaths);
+      if (storageDeleteError) {
+        console.error("[delete-account] Storage cleanup failed", { code: storageDeleteError.name });
+        return jsonResponse(request, { error: "We could not safely complete account deletion. Please try again." }, 503);
       }
     }
 
-    return jsonResponse({
-      success: true,
-      message: "Account deleted successfully",
-      code: "DELETE_SUCCESS",
-      userId: userId,
-      profileCleanup: cleanupResults,
-    }, 200);
+    // These tables are not all guaranteed to have an auth-user foreign key in
+    // historic deployments. Clean them explicitly before the auth cascade.
+    const cleanupResults = await Promise.all([
+      admin.from("bug_reports").delete().eq("user_id", userId),
+      admin.from("processing_logs").delete().eq("user_id", userId),
+    ]);
+    if (cleanupResults.some(({ error }) => error)) {
+      console.error("[delete-account] Supporting-record cleanup failed");
+      return jsonResponse(request, { error: "We could not safely complete account deletion. Please try again." }, 503);
+    }
+
+    const { error: deleteUserError } = await admin.auth.admin.deleteUser(userId, false);
+    if (deleteUserError) {
+      console.error("[delete-account] Auth deletion failed", { code: deleteUserError.status });
+      return jsonResponse(request, { error: "We could not safely complete account deletion. Please try again." }, 503);
+    }
+
+    return jsonResponse(request, { success: true }, 200);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const errorStack = error instanceof Error ? error.stack : "";
-    console.error(`[delete-account] EXCEPTION: ${errorMessage}`);
-    console.error(`[delete-account] STACK: ${errorStack}`);
-    return jsonResponse({
-      error: "Internal server error",
-      details: errorMessage,
-      code: "INTERNAL_ERROR",
-      stack: errorStack.substring(0, 200),
-    }, 500);
+    console.error("[delete-account] Unexpected cleanup failure", {
+      message: error instanceof Error ? error.message : "unknown",
+    });
+    return jsonResponse(request, { error: "We could not safely complete account deletion. Please try again." }, 503);
   }
 });

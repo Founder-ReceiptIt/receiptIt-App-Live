@@ -1,17 +1,15 @@
 import { motion } from 'framer-motion';
 import {
-  Download,
   FileText,
-  Bell,
   Lock,
-  Mail,
   Trash2,
   Shield,
   Globe,
-  Eye,
   Check,
   AlertTriangle,
-  X
+  X,
+  ShieldCheck,
+  Link,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState, useEffect } from 'react';
@@ -53,8 +51,6 @@ export function SettingsTab() {
     signOut,
     profileLoading,
     deleteAccount,
-    profileSettings,
-    updateProfileSettings,
   } = useAuth();
   const { showToast } = useToast();
 
@@ -72,14 +68,6 @@ export function SettingsTab() {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   console.log('SettingsTab - emailAlias:', emailAlias, 'username:', username, 'profileLoading:', profileLoading);
-  const [notifications, setNotifications] = useState(profileSettings.notifications);
-  const [privacy, setPrivacy] = useState(profileSettings.privacy);
-
-  useEffect(() => {
-    setNotifications(profileSettings.notifications);
-    setPrivacy(profileSettings.privacy);
-  }, [profileSettings]);
-
   useEffect(() => {
     if (!user) return;
 
@@ -98,60 +86,54 @@ export function SettingsTab() {
     fetchUserData();
   }, [user]);
 
-  const handleNotificationToggle = async (key: keyof typeof notifications, value: boolean) => {
-    const nextNotifications = { ...notifications, [key]: value };
-    setNotifications(nextNotifications);
-
-    const result = await updateProfileSettings({ notifications: nextNotifications });
-    if (result.error) {
-      setNotifications(notifications);
-      showToast(result.error.message || 'Failed to update notification preferences');
-    }
-  };
-
-  const handlePrivacyToggle = async (key: keyof typeof privacy, value: boolean) => {
-    const nextPrivacy = { ...privacy, [key]: value };
-    setPrivacy(nextPrivacy);
-
-    const result = await updateProfileSettings({ privacy: nextPrivacy });
-    if (result.error) {
-      setPrivacy(privacy);
-      showToast(result.error.message || 'Failed to update privacy preferences');
-    }
-  };
-
-  const handleExport = async (format: 'csv' | 'xero') => {
+  const handleExport = async () => {
     if (!user) return;
 
     const { data: receipts, error } = await supabase
       .from('receipts')
       .select('*')
       .eq('user_id', user.id)
-      .in('status', [...FINALIZED_RECEIPT_STATUSES])
-      .order('transaction_date', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (error || !receipts) return;
 
-    if (format === 'csv') {
-      const headers = ['Date', 'Merchant', 'Amount', 'Currency', 'Category', 'Reference'];
-      const rows = receipts.map(r => [
-        r.transaction_date,
-        r.merchant,
-        r.amount,
-        r.currency,
-        r.category || '',
-        r.reference_number || ''
-      ]);
+    const headers = [
+      'Status',
+      'Document type',
+      'Date',
+      'Merchant',
+      'Amount',
+      'Currency',
+      'Category',
+      'Reference',
+      'Original available',
+    ];
+    const rows = receipts.map(r => [
+      r.status || '',
+      r.document_type || '',
+      r.transaction_date,
+      r.merchant,
+      r.amount,
+      r.currency,
+      r.category || '',
+      r.reference_number || '',
+      r.storage_path ? 'Yes' : 'No',
+    ]);
 
-      const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `receipts-${new Date().toISOString().split('T')[0]}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
+    const csvCell = (value: unknown) => {
+      const rawValue = String(value ?? '');
+      // Avoid formula execution when an export is opened in spreadsheet apps.
+      const safeValue = /^[=+\-@]/.test(rawValue) ? `'${rawValue}` : rawValue;
+      return `"${safeValue.replace(/"/g, '""')}"`;
+    };
+    const csv = [headers, ...rows].map(row => row.map(csvCell).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `receipts-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleSignOut = async () => {
@@ -173,96 +155,40 @@ export function SettingsTab() {
 
   const settingsSections: SettingsSection[] = [
     {
-      title: 'Export & Integrations',
-      icon: Download,
+      title: 'Security Centre',
+      icon: ShieldCheck,
       items: [
         {
+          icon: Lock,
+          title: 'Private originals',
+          description: 'Receipt originals are kept in private storage and are only available to your signed-in account.',
+          action: () => showToast('Your originals are private to your signed-in account.'),
+          actionText: 'Protected',
+          color: 'text-teal-400'
+        },
+        {
+          icon: Link,
+          title: 'Signed viewing links',
+          description: 'Opening an original creates a short-lived viewing link instead of a permanent public URL.',
+          action: () => showToast('Original viewing links expire after 60 seconds.'),
+          actionText: '60 seconds',
+          color: 'text-cyan-400'
+        },
+        {
           icon: FileText,
-          title: 'Download CSV',
-          description: 'Export all receipts and transactions',
-          action: () => handleExport('csv'),
+          title: 'Download your data',
+          description: 'Export your saved receipt and purchase-evidence records as a spreadsheet-safe CSV.',
+          action: handleExport,
           actionText: 'Download',
           color: 'text-blue-400'
         },
         {
-          icon: FileText,
-          title: 'Xero Integration',
-          description: 'Export in Xero-compatible format',
-          action: () => handleExport('xero'),
-          actionText: 'Download',
-          color: 'text-cyan-400'
-        },
-      ]
-    },
-    {
-      title: 'Notifications',
-      icon: Bell,
-      items: [
-        {
-          icon: Mail,
-          title: 'Receipt Captured',
-          description: 'Notify when new receipts are processed',
-          toggle: true,
-          value: notifications.receiptCaptured,
-          onChange: (val: boolean) => {
-            void handleNotificationToggle('receiptCaptured', val);
-          }
-        },
-        {
-          icon: Shield,
-          title: 'Warranty Expiring',
-          description: 'Alerts 30 days before warranty ends',
-          toggle: true,
-          value: notifications.warrantyExpiring,
-          onChange: (val: boolean) => {
-            void handleNotificationToggle('warrantyExpiring', val);
-          }
-        },
-        {
-          icon: Bell,
-          title: 'Budget Alerts',
-          description: 'Warning when approaching spending limit',
-          toggle: true,
-          value: notifications.budgetAlerts,
-          onChange: (val: boolean) => {
-            void handleNotificationToggle('budgetAlerts', val);
-          }
-        },
-        {
-          icon: Lock,
-          title: 'Security Alerts',
-          description: 'Suspicious activity notifications',
-          toggle: true,
-          value: notifications.securityAlerts,
-          onChange: (val: boolean) => {
-            void handleNotificationToggle('securityAlerts', val);
-          }
-        },
-      ]
-    },
-    {
-      title: 'Privacy & Security',
-      icon: Lock,
-      items: [
-        {
           icon: Trash2,
-          title: 'Auto-Delete Emails',
-          description: 'Remove emails after retention period',
-          toggle: true,
-          value: privacy.autoDelete,
-          onChange: (val: boolean) => {
-            void handlePrivacyToggle('autoDelete', val);
-          }
-        },
-        {
-          icon: Eye,
-          title: 'Analytics Sharing',
-          description: 'Help improve receiptIt with usage data',
-          toggle: true,
-          value: privacy.analyticsSharing,
-          onChange: (val: boolean) => {
-            void handlePrivacyToggle('analyticsSharing', val);
-          }
+          title: 'Delete account and originals',
+          description: 'Permanently remove your account, receipt data, and private originals.',
+          action: () => setShowDeleteModal(true),
+          actionText: 'Delete',
+          color: 'text-red-400'
         },
       ]
     },
