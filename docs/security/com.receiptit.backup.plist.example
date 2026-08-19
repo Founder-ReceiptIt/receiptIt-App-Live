@@ -10,8 +10,10 @@
   </array>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>RECEIPTIT_BACKUP_DESTINATION</key>
-    <string>/Volumes/ReceiptIt-Encrypted-Backups</string>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>RECEIPTIT_B2_BUCKET_ID</key>
+    <string>5a5415a43f281bb3a90b0b1c</string>
     <key>RECEIPTIT_BACKUP_KEEP</key>
     <string>14</string>
   </dict>
@@ -23,8 +25,8 @@
     <integer>15</integer>
   </dict>
   <key>StandardOutPath</key>
-  <string>/tmp/receiptit-backup.log</string>
+  <string>/Users/nicholascave/Library/Logs/ReceiptIt/backup.log</string>
   <key>StandardErrorPath</key>
-  <string>/tmp/receiptit-backup.error.log</string>
+  <string>/Users/nicholascave/Library/Logs/ReceiptIt/backup.error.log</string>
 </dict>
 </plist>
