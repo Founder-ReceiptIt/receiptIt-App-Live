@@ -12,7 +12,10 @@ const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const PDF_MAGIC = '%PDF-';
 const PDF_EOF = '%%EOF';
 
-const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png']);
+// Keep this list exactly aligned with the private Storage bucket policy.  The
+// browser normally reports JPEG files as image/jpeg; image/jpg is a
+// non-standard alias which the bucket intentionally does not accept.
+const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png']);
 const PDF_MIME_TYPE = 'application/pdf';
 const EXTENSION_KIND: Record<string, ReceiptUploadKind> = {
   jpg: 'image',
