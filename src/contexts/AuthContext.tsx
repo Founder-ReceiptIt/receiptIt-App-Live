@@ -32,10 +32,10 @@ interface AuthContextType {
   profileSettings: ProfileSettings;
   refreshProfileSettings: () => Promise<void>;
   updateProfileSettings: (nextSettings: Partial<ProfileSettings>) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, alias: string, fullName: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
-  createAlias: (alias: string) => Promise<{ error: any }>;
+  createAlias: () => Promise<{ error: any }>;
   recoverProfile: (username: string, fullName: string, alias: string | null) => Promise<{ error: any }>;
   forceRefresh: () => Promise<void>;
   deleteAccount: () => Promise<{ error: any }>;
@@ -183,6 +183,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setNeedsProfileRecovery(false);
     setNeedsAliasSetup(!alias);
     setProfileSettings(normalizeProfileSettings(profileData));
+  };
+
+  const ensureInboxAlias = async () => {
+    const { data, error } = await supabase.rpc('ensure_active_email_alias');
+    if (error) {
+      console.warn('[AuthContext] Private inbox alias is not available yet:', error.message);
+      return { alias: '', error };
+    }
+
+    const result = Array.isArray(data) ? data[0] : data;
+    const alias = typeof result?.email_address === 'string' ? result.email_address : '';
+    if (alias) {
+      setEmailAlias(alias);
+      setNeedsAliasSetup(false);
+    }
+    return { alias, error: null };
   };
 
   const refreshProfileSettings = async () => {
@@ -336,6 +352,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const alias = getReceiptItAlias(data, authEmail);
         applyProfileState(data, '', authEmail);
+        await ensureInboxAlias();
 
         if (!alias) {
           console.log('[fetchProfile] User profile exists but has no alias - needs setup');
@@ -423,7 +440,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signUp = async (email: string, password: string, alias: string, fullName: string) => {
+  const signUp = async (email: string, password: string, fullName: string) => {
     try {
       console.log('[signUp] Starting new account creation for email:', email);
       setIsSigningUp(true);
@@ -432,7 +449,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: {
           email,
           password,
-          alias,
           fullName,
           signupAuthorization: sessionStorage.getItem(signupAuthorizationKey),
         },
@@ -482,6 +498,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       applyProfileState(profileData, displayName, signInData.user.email);
+      await ensureInboxAlias();
 
       console.log('[signUp] Account created successfully');
       return { error: null };
@@ -611,24 +628,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const createAlias = async (alias: string) => {
+  const createAlias = async () => {
     if (!user) {
       return { error: new Error('No authenticated user') };
     }
 
-    console.log('[createAlias] Setting alias for authenticated user:', user.id);
+    console.log('[createAlias] Provisioning private inbox alias for authenticated user:', user.id);
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        email_alias: alias,
-      })
-      .eq('id', user.id);
-
-    if (error) {
-      console.error('[createAlias] Alias update error:', error);
-      return { error };
-    }
+    const { alias, error } = await ensureInboxAlias();
+    if (error || !alias) return { error: error || new Error('Could not create a private inbox address') };
 
     const { data: profileData, error: fetchError } = await profileQueryForUser(user.id);
 
@@ -637,7 +645,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: fetchError || new Error('Failed to verify alias') };
     }
 
-    setEmailAlias(getReceiptItAlias(profileData, user.email));
+    setEmailAlias(alias);
     setFullName(profileData.full_name || profileData.username || '');
     setNeedsAliasSetup(false);
 

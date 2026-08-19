@@ -33,7 +33,7 @@ export function AliasTab() {
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white">Your Alias</h1>
+          <h1 className="text-3xl font-bold text-white">Your ReceiptIt address</h1>
         </div>
 
         <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8 mb-6 relative overflow-hidden">
@@ -62,7 +62,7 @@ export function AliasTab() {
                 {emailAlias || 'No alias set'}
               </motion.div>
               <p className="text-gray-400 text-sm">
-                Use this email at checkout to protect your privacy
+                Give this address to shops instead of your personal email.
               </p>
             </div>
 
@@ -89,7 +89,7 @@ export function AliasTab() {
                 ) : (
                   <>
                     <Copy className="w-5 h-5" />
-                    <span>Copy Alias</span>
+                    <span>Copy address</span>
                   </>
                 )}
               </div>
@@ -117,10 +117,9 @@ export function AliasTab() {
           <h3 className="text-lg font-bold text-white mb-4">How it works</h3>
           <div className="space-y-4">
             {[
-              { step: '1', text: 'Use your alias email at any online store' },
-              { step: '2', text: 'We capture the receipt and extract warranty info' },
-              { step: '3', text: 'Promotional emails are automatically filtered' },
-              { step: '4', text: 'After warranty expires, emails auto-delete' },
+              { step: '1', text: 'Use this address when a retailer asks where to send your receipt' },
+              { step: '2', text: 'Purchase evidence sent here is added privately to ReceiptIt' },
+              { step: '3', text: 'Your personal sign-in email is not shared with the retailer' },
             ].map((item, index) => (
               <motion.div
                 key={index}

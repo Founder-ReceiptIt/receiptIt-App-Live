@@ -11,7 +11,6 @@ import {
 interface CreateAccountRequest {
   email?: unknown;
   password?: unknown;
-  alias?: unknown;
   fullName?: unknown;
   signupAuthorization?: unknown;
 }
@@ -54,12 +53,11 @@ Deno.serve(async (request: Request) => {
 
   const email = optionalText(body.email, 254).toLowerCase();
   const password = typeof body.password === "string" ? body.password : "";
-  const alias = optionalText(body.alias, 128).toLowerCase();
   const fullName = optionalText(body.fullName, 120);
   const signupAuthorization = optionalText(body.signupAuthorization, 256);
 
-  if (!email || !password || !alias || password.length < 8) {
-    return jsonResponse(request, { error: "Enter a valid email, alias, and password of at least 8 characters." }, 400);
+  if (!email || !password || password.length < 8) {
+    return jsonResponse(request, { error: "Enter a valid email and password of at least 8 characters." }, 400);
   }
 
   if (!signupAuthorization) {
@@ -96,7 +94,7 @@ Deno.serve(async (request: Request) => {
     email,
     password,
     email_confirm: true,
-    user_metadata: { full_name: fullName, username, email_alias: alias },
+    user_metadata: { full_name: fullName, username },
   });
 
   if (createUserError || !createdAccount.user) {
@@ -114,7 +112,7 @@ Deno.serve(async (request: Request) => {
     email,
     full_name: fullName,
     username,
-    email_alias: alias,
+    email_alias: null,
     plan: "free",
   });
 
@@ -122,6 +120,17 @@ Deno.serve(async (request: Request) => {
     console.error("[create-account] Profile creation failed", { code: profileError.code });
     await supabaseAdmin.auth.admin.deleteUser(userId, false);
     return jsonResponse(request, { error: "Could not finish account setup." }, 500);
+  }
+
+  const { error: aliasError } = await supabaseAdmin.rpc("provision_email_alias_for_user", {
+    p_user_id: userId,
+  });
+
+  if (aliasError) {
+    console.error("[create-account] Alias provisioning failed", { code: aliasError.code });
+    await supabaseAdmin.from("profiles").delete().eq("id", userId);
+    await supabaseAdmin.auth.admin.deleteUser(userId, false);
+    return jsonResponse(request, { error: "Could not finish private inbox setup." }, 500);
   }
 
   return jsonResponse(request, { success: true, userId, email }, 200);

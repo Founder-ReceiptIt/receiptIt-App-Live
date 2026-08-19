@@ -4,15 +4,9 @@ import { Shield } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 export function AliasSetupModal() {
-  const [aliasUsername, setAliasUsername] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { createAlias } = useAuth();
-
-  const handleAliasChange = (value: string) => {
-    const sanitized = value.toLowerCase().replace(/[^a-z0-9-]/g, '');
-    setAliasUsername(sanitized);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,12 +14,7 @@ export function AliasSetupModal() {
     setLoading(true);
 
     try {
-      if (!aliasUsername) {
-        throw new Error('Please enter a valid alias');
-      }
-
-      const finalAlias = `${aliasUsername}@receiptit.app`;
-      const { error } = await createAlias(finalAlias);
+      const { error } = await createAlias();
 
       if (error) {
         throw error;
@@ -56,35 +45,16 @@ export function AliasSetupModal() {
             >
               <Shield className="w-16 h-16 text-teal-400 mx-auto mb-4" strokeWidth={1.5} />
             </motion.div>
-            <h2 className="text-2xl font-bold text-white mb-2">Create Your Alias</h2>
+            <h2 className="text-2xl font-bold text-white mb-2">Create Your Private Address</h2>
             <p className="text-sm text-gray-400">
-              Choose an email alias to protect your privacy when shopping online
+              We create a private, unguessable address for your purchase emails.
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-semibold text-gray-300 mb-2">
-                Your Alias
-              </label>
-              <div className="relative flex items-center bg-white/5 border border-white/10 rounded-lg overflow-hidden focus-within:border-teal-400/50 transition-colors">
-                <input
-                  type="text"
-                  value={aliasUsername}
-                  onChange={(e) => handleAliasChange(e.target.value)}
-                  placeholder="john"
-                  required
-                  pattern="[a-z0-9-]+"
-                  className="flex-1 pl-4 pr-2 py-3 bg-transparent text-white placeholder-gray-500 focus:outline-none"
-                />
-                <div className="px-4 py-3 text-gray-400 bg-white/5 border-l border-white/10 font-mono text-sm">
-                  @receiptit.app
-                </div>
-              </div>
-              <p className="text-xs text-gray-400 mt-2">
-                Use lowercase letters, numbers, and hyphens only
-              </p>
-            </div>
+            <p className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-gray-300">
+              Your address is generated securely and never reveals your name or sign-in email.
+            </p>
 
             {error && (
               <motion.div
@@ -103,7 +73,7 @@ export function AliasSetupModal() {
               disabled={loading}
               className="w-full py-3 bg-teal-400 text-black font-bold rounded-lg hover:bg-teal-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Creating Alias...' : 'Create Alias'}
+              {loading ? 'Creating address...' : 'Create private address'}
             </motion.button>
           </form>
         </div>

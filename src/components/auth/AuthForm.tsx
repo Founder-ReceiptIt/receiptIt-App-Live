@@ -7,29 +7,10 @@ export function AuthForm() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [aliasUsername, setAliasUsername] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [showAliasSuggestion, setShowAliasSuggestion] = useState(false);
 
   const { signIn, signUp } = useAuth();
-
-  const generateAliasUsername = () => {
-    const username = email.split('@')[0] || 'user';
-    return username.toLowerCase().replace(/[^a-z0-9-]/g, '');
-  };
-
-  const handleAliasChange = (value: string) => {
-    const sanitized = value.toLowerCase().replace(/[^a-z0-9-]/g, '');
-    setAliasUsername(sanitized);
-  };
-
-  const handleEmailChange = (newEmail: string) => {
-    setEmail(newEmail);
-    if (isSignUp && !aliasUsername) {
-      setShowAliasSuggestion(true);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,12 +19,7 @@ export function AuthForm() {
 
     try {
       if (isSignUp) {
-        const username = aliasUsername || generateAliasUsername();
-        if (!username) {
-          throw new Error('Please enter a valid alias');
-        }
-        const finalAlias = `${username}@receiptit.app`;
-        const { error } = await signUp(email, password, finalAlias, '');
+        const { error } = await signUp(email, password, '');
         if (error) {
           const errorMessage = error.message || 'Signup failed';
           if (errorMessage.includes('already registered')) {
@@ -133,7 +109,7 @@ export function AuthForm() {
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => handleEmailChange(e.target.value)}
+                  onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
                   required
                   className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-teal-400/50 transition-colors"
@@ -159,27 +135,7 @@ export function AuthForm() {
               </div>
             </div>
 
-            {isSignUp && (
-              <div>
-                <label className="block text-sm font-semibold text-gray-300 mb-2">
-                  Choose your alias
-                </label>
-                <div className="relative flex items-center bg-white/5 border border-white/10 rounded-lg overflow-hidden focus-within:border-teal-400/50 transition-colors">
-                  <input
-                    type="text"
-                    value={aliasUsername}
-                    onChange={(e) => handleAliasChange(e.target.value)}
-                    placeholder={showAliasSuggestion ? generateAliasUsername() : 'john'}
-                    required
-                    pattern="[a-z0-9-]+"
-                    className="flex-1 pl-4 pr-2 py-3 bg-transparent text-white placeholder-gray-500 focus:outline-none"
-                  />
-                  <div className="px-4 py-3 text-gray-400 bg-white/5 border-l border-white/10 font-mono text-sm">
-                    @receiptit.app
-                  </div>
-                </div>
-              </div>
-            )}
+            {isSignUp && <p className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-gray-400">We’ll create a private, unguessable ReceiptIt address for your purchase emails.</p>}
 
             {error && (
               <motion.div
