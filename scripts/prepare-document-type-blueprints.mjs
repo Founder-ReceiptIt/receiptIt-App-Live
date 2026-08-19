@@ -6,6 +6,7 @@ const sources = {
   image: '/Users/nicholascave/Downloads/RECEIPTIT V2 - IMAGE PROCESSOR.blueprint (3).json',
   pdf: '/Users/nicholascave/Downloads/RECEIPTIT V2 - PDF PROCESSOR.blueprint (3).json',
 };
+const finaliseSource = '/Users/nicholascave/Downloads/RECEIPTIT V2 - FINALISE RECEIPT.blueprint (3).json';
 const outDir = path.join(root, 'tmp', 'document-type-blueprints');
 fs.mkdirSync(outDir, { recursive: true });
 
@@ -121,3 +122,15 @@ for (const [name, blueprint] of Object.entries({ image, pdf })) {
   JSON.parse(fs.readFileSync(file, 'utf8'));
   console.log(file);
 }
+
+const finalise = JSON.parse(fs.readFileSync(finaliseSource, 'utf8'));
+const finaliseParse = moduleById(finalise, 3);
+addInterfaceField(finaliseParse);
+const finaliseParsed = moduleById(finalise, 11);
+if (!finaliseParsed.mapper.body.includes('document_type')) {
+  finaliseParsed.mapper.body = finaliseParsed.mapper.body.replace('"parsed_at":"{{now}}"', '"parsed_at":"{{now}}","document_type":"{{3.document_type}}"');
+}
+const finaliseFile = path.join(outDir, 'RECEIPTIT V2 - FINALISE RECEIPT.document-type.blueprint.json');
+fs.writeFileSync(finaliseFile, JSON.stringify(finalise, null, 2) + '\n');
+JSON.parse(fs.readFileSync(finaliseFile, 'utf8'));
+console.log(finaliseFile);
