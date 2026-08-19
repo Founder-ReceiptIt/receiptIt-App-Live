@@ -155,7 +155,9 @@ export const getReceiptFailureDetails = ({
   if (status === 'needs_review') {
     return {
       title: 'Document review',
-      reason: 'This may be useful purchase evidence, but it is not a standard receipt.',
+      reason: normalizedErrorReason === 'non_standard_purchase_document'
+        ? 'This looks like purchase evidence rather than a standard receipt.'
+        : 'This may be useful purchase evidence, but it is not a standard receipt.',
       advice: 'Review the original and keep it if it is useful to you.',
     };
   }
