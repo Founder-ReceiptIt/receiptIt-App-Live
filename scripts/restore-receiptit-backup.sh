@@ -5,7 +5,11 @@ set -euo pipefail
 # not write to any database or Storage bucket: use it first for the isolated
 # restore drill described in docs/security/backup-and-restore.md.
 
-: "${RECEIPTIT_BACKUP_PASSPHRASE:?Set the backup passphrase outside the repository.}"
+if [[ -z "${RECEIPTIT_BACKUP_PASSPHRASE:-}" ]]; then
+  RECEIPTIT_BACKUP_PASSPHRASE="$(security find-generic-password -a "$(id -un)" -s receiptit-backup -w 2>/dev/null || true)"
+fi
+: "${RECEIPTIT_BACKUP_PASSPHRASE:?Set the backup passphrase outside the repository or store it in macOS Keychain.}"
+export RECEIPTIT_BACKUP_PASSPHRASE
 
 if [[ $# -ne 2 ]]; then
   echo "Usage: $0 /absolute/path/to/receiptit-YYYYMMDDTHHMMSSZ.tar.enc /absolute/isolated/restore-directory" >&2
@@ -38,7 +42,7 @@ openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -md sha256 \
 tar -xf "$restore_directory/receiptit.tar" -C "$restore_directory"
 rm -f "$restore_directory/receiptit.tar"
 
-if [[ ! -f "$restore_directory/database.sql" || ! -f "$restore_directory/manifest.json" ]]; then
+if [[ ! -f "$restore_directory/schema.sql" || ! -f "$restore_directory/public-data.sql" || ! -f "$restore_directory/storage-metadata.sql" || ! -f "$restore_directory/storage-policies.sql" || ! -f "$restore_directory/manifest.json" ]]; then
   rm -rf "$restore_directory"
   echo "Restore bundle is incomplete; refusing to continue." >&2
   exit 1
