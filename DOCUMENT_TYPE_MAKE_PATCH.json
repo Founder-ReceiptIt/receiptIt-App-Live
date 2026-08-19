@@ -1,0 +1,73 @@
+{
+  "purpose": "Narrow blueprint-level patch for canonical purchase-evidence classification. Apply only against a freshly exported live blueprint.",
+  "contract": {
+    "field": "document_type",
+    "type": "text",
+    "allowed_values": [
+      "receipt",
+      "invoice",
+      "order_confirmation",
+      "payment_confirmation",
+      "hotel_folio",
+      "eftpos_slip",
+      "other_purchase_proof",
+      "non_purchase_document"
+    ]
+  },
+  "image_processor": {
+    "scenario_id": "SCN_6950218",
+    "parser": {
+      "active_openai_module_id": 13,
+      "parsed_contract_module_id": 14,
+      "retry_openai_module_id": 44,
+      "retry_parsed_contract_module_id": 45,
+      "required_changes": [
+        "Append document_type to each prompt's exact top-level-field list.",
+        "Add one required text interface field named document_type to Parse Extraction (14) and Parse Retry Extraction JSON (45), using the shared ReceiptIt Extraction Contract data structure.",
+        "Add the explicit classification instructions from this file's contract to the initial and retry prompts."
+      ]
+    },
+    "router": {
+      "router_module_id": 10,
+      "existing_standard_routes": [72, 74],
+      "existing_rejection_patch_module": 50,
+      "required_changes": [
+        "Change the existing Not a receipt route to set status=rejected and error_reason=not_purchase_document.",
+        "Add a Document Review route before the currency and Finalise routes: is_receipt=true AND document_type in invoice,order_confirmation,payment_confirmation,hotel_folio,eftpos_slip,other_purchase_proof.",
+        "The Document Review PATCH must update only the same existing receipt, set status=needs_review, error_reason=non_standard_purchase_document, document_type={{14.document_type}}, and preserve storage_path/user_id.",
+        "Restrict both normal Finalise routes and the currency-missing route to document_type=receipt OR document_type does not exist, so old parser outputs remain backward compatible."
+      ]
+    }
+  },
+  "pdf_processor": {
+    "scenario_id": "SCN_6950220",
+    "parser": {
+      "request_builder_module_id": 32,
+      "openai_module_id": 25,
+      "parsed_contract_module_id": 26,
+      "required_changes": [
+        "Append document_type to the request-builder JSON contract and add the same explicit classification instructions.",
+        "Add one required text interface field named document_type to Parse JSON (26), using the shared ReceiptIt Extraction Contract data structure."
+      ]
+    },
+    "router": {
+      "router_module_id": 8,
+      "existing_rejection_module_id": 13,
+      "existing_currency_module_id": 14,
+      "existing_finalise_caller_module_id": 27,
+      "required_changes": [
+        "Change the existing Not a purchase proof route to set status=rejected and error_reason=not_purchase_document.",
+        "Add a Document Review route before Currency required and Finalise: is_receipt=true AND document_type in invoice,order_confirmation,payment_confirmation,hotel_folio,eftpos_slip,other_purchase_proof.",
+        "The Document Review upsert must update the existing receipt only, set status=needs_review, error_reason=non_standard_purchase_document, document_type={{26.document_type}}, and preserve storage_path/user_id.",
+        "Restrict Currency required and the Finalise caller to document_type=receipt OR document_type does not exist."
+      ]
+    }
+  },
+  "classification_instruction": "Set document_type exactly once. A completed conventional retail receipt is receipt. An invoice is invoice; an order confirmation is order_confirmation; a payment confirmation is payment_confirmation; a hotel folio is hotel_folio; an EFTPOS/payment-terminal slip is eftpos_slip; other legitimate purchase evidence is other_purchase_proof. Bank statements, screenshots, and unrelated documents are non_purchase_document. A merchant name, amount, card data, or transaction table alone never makes a document purchase evidence. Set is_receipt=false only for non_purchase_document; set it true for receipt and every valid purchase-evidence type.",
+  "structural_guards": [
+    "Do not change StartSubscenario, Storage download, duplicate, Finalise caller, or module IDs outside the listed parser/router modules.",
+    "Do not send document_type=non_purchase_document or any non-standard purchase evidence through Finalise.",
+    "Document Review and rejection routes must PATCH/UPSERT the existing receipt id; they must not insert receipts, items, or payments.",
+    "The receipt document_type remains nullable so historic receipts and a safe rollback continue to work."
+  ]
+}
