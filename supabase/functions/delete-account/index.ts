@@ -14,13 +14,14 @@ const jsonResponse = (request: Request, body: Record<string, unknown>, status: n
 
 const listUserObjects = async (
   storage: SupabaseClient["storage"],
+  bucket: string,
   userId: string,
 ): Promise<string[]> => {
   const objects: string[] = [];
   let offset = 0;
 
   while (true) {
-    const { data, error } = await storage.from("receipts").list(userId, {
+    const { data, error } = await storage.from(bucket).list(userId, {
       limit: 1000,
       offset,
       sortBy: { column: "name", order: "asc" },
@@ -84,11 +85,12 @@ Deno.serve(async (request: Request) => {
   }
 
   try {
-    const storagePaths = await listUserObjects(admin.storage, userId);
-    if (storagePaths.length > 0) {
-      const { error: storageDeleteError } = await admin.storage.from("receipts").remove(storagePaths);
+    for (const bucket of ["receipts", "proof-packs"]) {
+      const storagePaths = await listUserObjects(admin.storage, bucket, userId);
+      if (storagePaths.length === 0) continue;
+      const { error: storageDeleteError } = await admin.storage.from(bucket).remove(storagePaths);
       if (storageDeleteError) {
-        console.error("[delete-account] Storage cleanup failed", { code: storageDeleteError.name });
+        console.error("[delete-account] Storage cleanup failed", { bucket, code: storageDeleteError.name });
         return jsonResponse(request, { error: "We could not safely complete account deletion. Please try again." }, 503);
       }
     }
@@ -98,6 +100,8 @@ Deno.serve(async (request: Request) => {
     const cleanupResults = await Promise.all([
       admin.from("bug_reports").delete().eq("user_id", userId),
       admin.from("processing_logs").delete().eq("user_id", userId),
+      admin.from("proof_packs").delete().eq("user_id", userId),
+      admin.from("purchase_activity").delete().eq("user_id", userId),
     ]);
     if (cleanupResults.some(({ error }) => error)) {
       console.error("[delete-account] Supporting-record cleanup failed");

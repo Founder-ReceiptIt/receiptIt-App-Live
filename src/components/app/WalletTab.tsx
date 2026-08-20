@@ -14,6 +14,7 @@ import {
   RECEIPT_CURRENCY_CONFIRMATION_OPTIONS,
   RECEIPT_PRIMARY_CURRENCY_CONFIRMATION_OPTION,
   retryReceiptProcessing,
+  recordReceiptOriginalView,
   supabase,
   Receipt as SupabaseReceiptRow,
 } from '../../lib/supabase';
@@ -22,6 +23,7 @@ import { hasReceiptOriginal, openReceiptOriginal } from '../../lib/receiptOrigin
 import { useAuth } from '../../contexts/AuthContext';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { getReceiptFailureDetails, getReceiptPurchaseDateDisplay } from '../../lib/receiptUiUtils';
+import { getProtectionClasses, getPurchaseProtection, isProtectedValueEligible } from '../../lib/purchaseProtection';
 import { useToast } from '../../contexts/ToastContext';
 
 interface WalletTabProps {
@@ -331,6 +333,8 @@ const mapReceiptRowToWalletReceipt = (
     hasWarranty: !!row.warranty_date,
     warrantyDate: row.warranty_date || undefined,
     returnDate: row.return_date || undefined,
+    documentType: row.document_type || undefined,
+    source: row.source || undefined,
     referenceNumber,
     customerNumber: row.customer_number || undefined,
     orderNumber: row.order_number || undefined,
@@ -401,6 +405,8 @@ export interface Receipt {
   hasWarranty?: boolean;
   warrantyDate?: string;
   returnDate?: string;
+  documentType?: string;
+  source?: string;
   referenceNumber: string;
   customerNumber?: string;
   orderNumber?: string;
@@ -666,6 +672,10 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
     spent: Number(totalSpent.toFixed(2)),
     limit: 2500,
   };
+  const protectedValue = finalizedReceipts
+    .filter((receipt) => isProtectedValueEligible(receipt))
+    .reduce((sum, receipt) => sum + (receipt.amount_gbp || 0), 0);
+  const protectedPurchaseCount = finalizedReceipts.filter((receipt) => isProtectedValueEligible(receipt)).length;
 
   const percentage = (budget.spent / budget.limit) * 100;
 
@@ -1004,6 +1014,19 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
           </p>
         </div>
 
+        <div className="mb-6 rounded-2xl border border-emerald-400/25 bg-gradient-to-br from-emerald-400/15 to-teal-400/5 p-5 shadow-[0_0_28px_rgba(16,185,129,0.12)]">
+          <div className="flex items-start gap-3">
+            <div className="rounded-xl border border-emerald-300/25 bg-emerald-400/10 p-2.5">
+              <Shield className="h-5 w-5 text-emerald-300" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-300">Protected value</p>
+              <p className="mt-1 text-3xl font-bold text-white">£{protectedValue.toFixed(2)}</p>
+              <p className="mt-1 text-sm text-emerald-50/70">{protectedPurchaseCount} {protectedPurchaseCount === 1 ? 'purchase has' : 'purchases have'} usable proof securely stored.</p>
+            </div>
+          </div>
+        </div>
+
         <div className="mb-6">
           <div className="inline-flex w-full backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-1">
             {[
@@ -1112,6 +1135,16 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
             {filteredReceipts.length} {filteredReceipts.length === 1 ? 'Transaction' : 'Transactions'}
           </h2>
           <div className="flex items-center gap-2 relative">
+            {selectMode && (
+              <button
+                type="button"
+                onClick={() => setSelectedReceipts(new Set(filteredReceipts.map((receipt) => receipt.id)))}
+                disabled={filteredReceipts.length === 0}
+                className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-sm font-semibold text-gray-200 transition-colors hover:border-teal-400/35 hover:text-teal-200 disabled:opacity-50"
+              >
+                All
+              </button>
+            )}
             {selectedReceipts.size > 0 && (
               <>
                 <motion.button
@@ -1255,6 +1288,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                 const hasActiveWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) > new Date();
                 const hasExpiredWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) <= new Date();
                 const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
+                const protection = getPurchaseProtection(receipt);
                 const receiptFailureDetails = getReceiptFailureDetails({
                   status: receipt.status,
                   errorReason: receipt.errorReason,
@@ -1442,7 +1476,16 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                             {receipt.category}
                           </div>
                         )}
+                        {!isFreshProcessing && (
+                          <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${getProtectionClasses(protection.state)}`}>
+                            <Shield className="w-3 h-3" />
+                            {protection.label}
+                          </div>
+                        )}
                       </div>
+                      {!isFreshProcessing && protection.state !== 'protected' && (
+                        <p className="mt-2 text-xs text-gray-400">{protection.detail}</p>
+                      )}
                     </button>
 
                     {showOpenOriginalReceiptAction && (
@@ -1453,6 +1496,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                             event.stopPropagation();
                             void openReceiptOriginal(receipt).then((openedUrl) => {
                               if (!openedUrl) console.warn('No download URL available for this receipt');
+                              else void recordReceiptOriginalView(receipt.id);
                             });
                           }}
                           className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 transition-colors hover:text-teal-300"

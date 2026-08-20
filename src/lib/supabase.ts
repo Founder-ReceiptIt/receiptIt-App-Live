@@ -293,6 +293,27 @@ export const deleteReceiptRecord = async ({
     .eq('id', receiptId);
 };
 
+export const recordReceiptOriginalView = async (receiptId: string) => supabase
+  .rpc('record_original_view', { p_receipt_id: receiptId });
+
+export interface GeneratedProofPack {
+  packId: string;
+  downloadUrl: string;
+  expiresInSeconds: number;
+}
+
+export const generateProofPack = async (receiptId: string) => {
+  const result = await supabase.functions.invoke<GeneratedProofPack>('generate-proof-pack', {
+    body: { receiptId },
+  });
+
+  if (result.error || !result.data?.downloadUrl) {
+    return { data: null, error: result.error || new Error('Proof Pack could not be generated') };
+  }
+
+  return { data: result.data, error: null };
+};
+
 export const createBugReport = async ({
   receiptId,
   userId,
@@ -492,6 +513,7 @@ export interface Receipt {
   original_receipt_id?: string | null;
   confidence_score: number | null;
   parsed_at: string | null;
+  document_type?: string | null;
   items?: ReceiptItem[] | null;
 }
 
