@@ -64,12 +64,13 @@ export const getProtectionClasses = (state: PurchaseProtectionState) => {
 export const isProtectedValueEligible = (purchase: {
   status?: string | null;
   amountGbp?: number | null;
+  amount_gbp?: number | null;
   storagePath?: string | null;
   imageUrl?: string | null;
 }) => (
   ['parsed', 'completed'].includes(purchase.status || '')
-  && typeof purchase.amountGbp === 'number'
-  && Number.isFinite(purchase.amountGbp)
-  && purchase.amountGbp > 0
+  && typeof (purchase.amountGbp ?? purchase.amount_gbp) === 'number'
+  && Number.isFinite(purchase.amountGbp ?? purchase.amount_gbp)
+  && (purchase.amountGbp ?? purchase.amount_gbp ?? 0) > 0
   && Boolean(purchase.storagePath || purchase.imageUrl)
 );

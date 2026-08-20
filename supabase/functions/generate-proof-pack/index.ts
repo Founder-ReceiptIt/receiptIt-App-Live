@@ -121,6 +121,7 @@ const createPdf = (inputLines: Array<{ text: string; strong?: boolean }>) => {
 };
 
 Deno.serve(async (request) => {
+  console.log("[generate-proof-pack] request", { method: request.method, hasOrigin: Boolean(request.headers.get("Origin")), hasAuthorization: Boolean(request.headers.get("Authorization")) });
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeadersFor(request) });
   if (request.method !== "POST") return json(request, { error: "Method not allowed" }, 405);
   if (!isTrustedOrigin(request)) return json(request, { error: "Request origin is not allowed" }, 403);
@@ -128,7 +129,10 @@ Deno.serve(async (request) => {
   const bearer = request.headers.get("Authorization")?.replace(/^Bearer\s+/i, "").trim();
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!bearer) return json(request, { error: "Authentication is required" }, 401);
+  if (!bearer) {
+    console.error("[generate-proof-pack] missing authorization");
+    return json(request, { error: "Authentication is required" }, 401);
+  }
   if (!supabaseUrl || !serviceRoleKey) return json(request, { error: "Proof Pack is temporarily unavailable" }, 503);
 
   let receiptId = "";
@@ -140,18 +144,27 @@ Deno.serve(async (request) => {
 
   const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } });
   const { data: verified, error: authError } = await admin.auth.getUser(bearer);
-  if (authError || !verified.user) return json(request, { error: "Authentication could not be verified" }, 403);
+  if (authError || !verified.user) {
+    console.error("[generate-proof-pack] authentication failed", { message: authError?.message });
+    return json(request, { error: "Authentication could not be verified" }, 403);
+  }
 
   const { data: receipt, error: receiptError } = await admin.from("receipts").select("id,user_id,merchant,amount,amount_gbp,subtotal,vat_amount,currency,transaction_date,category,source,storage_path,status,document_type,reference_number,order_number,invoice_number,customer_number,loyalty_member_id,card_last_4,return_date,warranty_date").eq("id", receiptId).eq("user_id", verified.user.id).maybeSingle<ReceiptRow>();
-  if (receiptError || !receipt) return json(request, { error: "Purchase not found" }, 404);
+  if (receiptError || !receipt) {
+    console.error("[generate-proof-pack] purchase lookup failed", { message: receiptError?.message });
+    return json(request, { error: "Purchase not found" }, 404);
+  }
   if (!['parsed', 'completed'].includes(receipt.status || '')) return json(request, { error: "Proof Pack is available once a purchase is ready" }, 409);
   if (!receipt.storage_path) return json(request, { error: "No secured original is available for this purchase" }, 409);
 
   const [itemsResult, paymentsResult] = await Promise.all([
     admin.from("receipt_items").select("description,quantity,quantity_unit,unit_price,line_total").eq("receipt_id", receipt.id).order("line_index"),
-    admin.from("receipt_payments").select("payment_method,method,amount,currency").eq("receipt_id", receipt.id),
+    admin.from("receipt_payments").select("method,amount,currency").eq("receipt_id", receipt.id),
   ]);
-  if (itemsResult.error || paymentsResult.error) return json(request, { error: "Purchase details are temporarily unavailable" }, 503);
+  if (itemsResult.error || paymentsResult.error) {
+    console.error("[generate-proof-pack] child lookup failed", { items: itemsResult.error?.message, payments: paymentsResult.error?.message });
+    return json(request, { error: "Purchase details are temporarily unavailable" }, 503);
+  }
 
   const lines: Array<{ text: string; strong?: boolean }> = [
     { text: "PURCHASE SUMMARY", strong: true },
@@ -191,16 +204,23 @@ Deno.serve(async (request) => {
   const storagePath = `${verified.user.id}/${receipt.id}/${packId}.pdf`;
   const pdf = createPdf(lines);
   const { error: uploadError } = await admin.storage.from("proof-packs").upload(storagePath, pdf, { contentType: "application/pdf", upsert: false });
-  if (uploadError) return json(request, { error: "We could not secure the Proof Pack. Please try again." }, 503);
+  if (uploadError) {
+    console.error("[generate-proof-pack] storage upload failed", { message: uploadError.message });
+    return json(request, { error: "We could not secure the Proof Pack. Please try again." }, 503);
+  }
 
   const { error: recordError } = await admin.from("proof_packs").insert({ id: packId, user_id: verified.user.id, receipt_id: receipt.id, storage_path: storagePath, status: "ready" });
   if (recordError) {
+    console.error("[generate-proof-pack] record insert failed", { message: recordError.message });
     await admin.storage.from("proof-packs").remove([storagePath]);
     return json(request, { error: "We could not save the Proof Pack. Please try again." }, 503);
   }
   await admin.from("purchase_activity").insert({ user_id: verified.user.id, receipt_id: receipt.id, event_type: "proof_pack_generated" });
   const { data: signed, error: signedError } = await admin.storage.from("proof-packs").createSignedUrl(storagePath, 60);
-  if (signedError || !signed?.signedUrl) return json(request, { error: "Proof Pack created but could not be opened. Please try again." }, 503);
+  if (signedError || !signed?.signedUrl) {
+    console.error("[generate-proof-pack] signed URL failed", { message: signedError?.message });
+    return json(request, { error: "Proof Pack created but could not be opened. Please try again." }, 503);
+  }
 
   return json(request, { packId, downloadUrl: signed.signedUrl, expiresInSeconds: 60 });
 });
