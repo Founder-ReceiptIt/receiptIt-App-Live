@@ -162,9 +162,8 @@ Deno.serve(async (request) => {
     return json({ accepted: true });
   }
 
-  const { data: existing } = await admin.from("inbound_messages")
+  const { data: existingMessage } = await admin.from("inbound_messages")
     .select("id").eq("provider", "resend").eq("provider_event_id", providerEventId).maybeSingle();
-  if (existing) return json({ accepted: true, duplicate: true });
 
   const contentResponse = await fetch(`https://api.resend.com/emails/receiving/${encodeURIComponent(event.data.email_id)}`, {
     headers: { Authorization: `Bearer ${resendApiKey}` },
@@ -180,31 +179,35 @@ Deno.serve(async (request) => {
   const classification = classifyEnvelope(String(content.subject || event.data.subject || ""), bodyText);
   const attachments = (event.data.attachments || []).filter((attachment) => attachment.content_disposition !== "inline").slice(0, MAX_ATTACHMENTS);
 
-  const { data: message, error: messageError } = await admin.from("inbound_messages").insert({
-    user_id: alias.user_id,
-    alias_id: alias.id,
-    provider: "resend",
-    provider_event_id: providerEventId,
-    provider_message_id: typeof content.message_id === "string" ? content.message_id.slice(0, 998) : event.data.message_id || null,
-    recipient_address: recipient,
-    sender_address: typeof content.from === "string" ? content.from.slice(0, 998) : event.data.from || null,
-    reply_to_address: typeof content.reply_to === "string" ? content.reply_to.slice(0, 998) : null,
-    sender_domain: senderDomain(typeof content.from === "string" ? content.from : event.data.from),
-    subject: String(content.subject || event.data.subject || "").slice(0, 998) || null,
-    authentication_results: {
-      spf: headers["spf"] || headers["received-spf"] || null,
-      dkim: headers["dkim"] || null,
-      dmarc: headers["dmarc"] || null,
-    },
-    classification,
-    attachment_count: attachments.length,
-    body_sha256: bodyText ? await sha256(bodyText) : null,
-    status: classification === "marketing" ? "ignored" : "processing",
-  }).select("id").single();
-  if (messageError || !message) {
-    if (messageError?.code === "23505") return json({ accepted: true, duplicate: true });
-    console.error("[inbound-email] Could not create inbound message", { code: messageError?.code });
-    return json({ error: "Temporary failure" }, 503);
+  let messageId = existingMessage?.id;
+  if (!messageId) {
+    const { data: message, error: messageError } = await admin.from("inbound_messages").insert({
+      user_id: alias.user_id,
+      alias_id: alias.id,
+      provider: "resend",
+      provider_event_id: providerEventId,
+      provider_message_id: typeof content.message_id === "string" ? content.message_id.slice(0, 998) : event.data.message_id || null,
+      recipient_address: recipient,
+      sender_address: typeof content.from === "string" ? content.from.slice(0, 998) : event.data.from || null,
+      reply_to_address: typeof content.reply_to === "string" ? content.reply_to.slice(0, 998) : null,
+      sender_domain: senderDomain(typeof content.from === "string" ? content.from : event.data.from),
+      subject: String(content.subject || event.data.subject || "").slice(0, 998) || null,
+      authentication_results: {
+        spf: headers["spf"] || headers["received-spf"] || null,
+        dkim: headers["dkim"] || null,
+        dmarc: headers["dmarc"] || null,
+      },
+      classification,
+      attachment_count: attachments.length,
+      body_sha256: bodyText ? await sha256(bodyText) : null,
+      status: classification === "marketing" ? "ignored" : "processing",
+    }).select("id").single();
+    if (messageError || !message) {
+      if (messageError?.code === "23505") return json({ accepted: true, duplicate: true });
+      console.error("[inbound-email] Could not create inbound message", { code: messageError?.code });
+      return json({ error: "Temporary failure" }, 503);
+    }
+    messageId = message.id;
   }
 
   await admin.from("email_aliases").update({ last_received_at: new Date().toISOString() }).eq("id", alias.id);
@@ -212,25 +215,68 @@ Deno.serve(async (request) => {
 
   for (const attachment of attachments) {
     if (!attachment.id) continue;
-    const attachmentResponse = await fetch(`https://api.resend.com/emails/receiving/${encodeURIComponent(event.data.email_id)}/attachments/${encodeURIComponent(attachment.id)}`, {
+    const { data: existingAttachment } = await admin.from("inbound_attachments")
+      .select("status,receipt_id")
+      .eq("inbound_message_id", messageId)
+      .eq("provider_attachment_id", attachment.id)
+      .maybeSingle();
+    // A provider replay is idempotent after a receipt has been queued. Failed
+    // or rejected attachment retrievals intentionally remain retryable.
+    if (existingAttachment && ["stored", "queued", "duplicate"].includes(existingAttachment.status)) continue;
+
+    // The list endpoint supplies a fresh signed download URL for each
+    // attachment. It is more stable across Resend API versions than assuming
+    // the single-attachment response envelope.
+    const attachmentMetadataResponse = await fetch(`https://api.resend.com/emails/receiving/${encodeURIComponent(event.data.email_id)}/attachments`, {
       headers: { Authorization: `Bearer ${resendApiKey}` },
     });
-    if (!attachmentResponse.ok) {
-      await admin.from("inbound_attachments").insert({ inbound_message_id: message.id, user_id: alias.user_id, provider_attachment_id: attachment.id, safe_filename: sanitizeFilename(attachment.filename), content_type: attachment.content_type || "application/octet-stream", byte_size: 0, sha256: "0".repeat(64), storage_path: `${alias.user_id}/email-unavailable/${crypto.randomUUID()}`, status: "failed", error_reason: "provider_attachment_unavailable" });
+    if (!attachmentMetadataResponse.ok) {
+      await admin.from("inbound_attachments").upsert({ inbound_message_id: messageId, user_id: alias.user_id, provider_attachment_id: attachment.id, safe_filename: sanitizeFilename(attachment.filename), content_type: attachment.content_type || "application/octet-stream", byte_size: 0, sha256: "0".repeat(64), storage_path: `${alias.user_id}/email-unavailable/${crypto.randomUUID()}`, status: "failed", error_reason: `provider_attachment_metadata_${attachmentMetadataResponse.status}` }, { onConflict: "inbound_message_id,provider_attachment_id" });
       continue;
     }
-    const bytes = new Uint8Array(await attachmentResponse.arrayBuffer());
+
+    let downloadUrl = "";
+    try {
+      const responseBody = await attachmentMetadataResponse.json() as {
+        download_url?: unknown;
+        data?: Array<{ id?: unknown; download_url?: unknown }> | { download_url?: unknown };
+      };
+      const metadata = Array.isArray(responseBody.data)
+        ? responseBody.data.find((candidate) => candidate.id === attachment.id)
+        : responseBody.data && typeof responseBody.data === "object"
+          ? responseBody.data
+          : responseBody;
+      downloadUrl = metadata && typeof metadata.download_url === "string" ? metadata.download_url : "";
+      const parsedUrl = new URL(downloadUrl);
+      // The signed host is provider-controlled and can vary by Resend region.
+      // It is never supplied by the email itself; still reject non-HTTPS and
+      // obvious local targets before downloading it without credentials.
+      if (parsedUrl.protocol !== "https:" || !parsedUrl.hostname || /^(localhost|127\.|0\.0\.0\.0|\[::1\])$/i.test(parsedUrl.hostname)) downloadUrl = "";
+    } catch {
+      downloadUrl = "";
+    }
+    if (!downloadUrl) {
+      await admin.from("inbound_attachments").upsert({ inbound_message_id: messageId, user_id: alias.user_id, provider_attachment_id: attachment.id, safe_filename: sanitizeFilename(attachment.filename), content_type: attachment.content_type || "application/octet-stream", byte_size: 0, sha256: "0".repeat(64), storage_path: `${alias.user_id}/email-unavailable/${crypto.randomUUID()}`, status: "failed", error_reason: "provider_attachment_metadata_invalid" }, { onConflict: "inbound_message_id,provider_attachment_id" });
+      continue;
+    }
+
+    const attachmentDownloadResponse = await fetch(downloadUrl);
+    if (!attachmentDownloadResponse.ok) {
+      await admin.from("inbound_attachments").upsert({ inbound_message_id: messageId, user_id: alias.user_id, provider_attachment_id: attachment.id, safe_filename: sanitizeFilename(attachment.filename), content_type: attachment.content_type || "application/octet-stream", byte_size: 0, sha256: "0".repeat(64), storage_path: `${alias.user_id}/email-unavailable/${crypto.randomUUID()}`, status: "failed", error_reason: `provider_attachment_download_${attachmentDownloadResponse.status}` }, { onConflict: "inbound_message_id,provider_attachment_id" });
+      continue;
+    }
+    const bytes = new Uint8Array(await attachmentDownloadResponse.arrayBuffer());
     const detected = bytes.byteLength <= MAX_ATTACHMENT_BYTES ? inferredAttachmentType(bytes) : null;
     if (!detected) {
-      await admin.from("inbound_attachments").insert({ inbound_message_id: message.id, user_id: alias.user_id, provider_attachment_id: attachment.id, safe_filename: sanitizeFilename(attachment.filename), content_type: attachment.content_type || "application/octet-stream", byte_size: bytes.byteLength, sha256: await sha256(bytes.buffer), storage_path: `${alias.user_id}/email-rejected/${crypto.randomUUID()}`, status: "rejected", error_reason: bytes.byteLength > MAX_ATTACHMENT_BYTES ? "attachment_too_large" : "unsupported_or_invalid_attachment" });
+      await admin.from("inbound_attachments").upsert({ inbound_message_id: messageId, user_id: alias.user_id, provider_attachment_id: attachment.id, safe_filename: sanitizeFilename(attachment.filename), content_type: attachment.content_type || "application/octet-stream", byte_size: bytes.byteLength, sha256: await sha256(bytes.buffer), storage_path: `${alias.user_id}/email-rejected/${crypto.randomUUID()}`, status: "rejected", error_reason: bytes.byteLength > MAX_ATTACHMENT_BYTES ? "attachment_too_large" : "unsupported_or_invalid_attachment" }, { onConflict: "inbound_message_id,provider_attachment_id" });
       continue;
     }
 
     const fileHash = await sha256(bytes.buffer);
-    const storagePath = `${alias.user_id}/email/${message.id}/${crypto.randomUUID()}.${detected.extension}`;
+    const storagePath = `${alias.user_id}/email/${messageId}/${crypto.randomUUID()}.${detected.extension}`;
     const { error: uploadError } = await admin.storage.from("receipts").upload(storagePath, bytes, { contentType: detected.contentType, upsert: false });
     if (uploadError) {
-      await admin.from("inbound_attachments").insert({ inbound_message_id: message.id, user_id: alias.user_id, provider_attachment_id: attachment.id, safe_filename: sanitizeFilename(attachment.filename), content_type: detected.contentType, byte_size: bytes.byteLength, sha256: fileHash, storage_path: storagePath, status: "failed", error_reason: "private_storage_upload_failed" });
+      await admin.from("inbound_attachments").upsert({ inbound_message_id: messageId, user_id: alias.user_id, provider_attachment_id: attachment.id, safe_filename: sanitizeFilename(attachment.filename), content_type: detected.contentType, byte_size: bytes.byteLength, sha256: fileHash, storage_path: storagePath, status: "failed", error_reason: "private_storage_upload_failed" }, { onConflict: "inbound_message_id,provider_attachment_id" });
       continue;
     }
 
@@ -238,16 +284,16 @@ Deno.serve(async (request) => {
       user_id: alias.user_id, source: "email", storage_path: storagePath, image_url: storagePath,
       file_hash: fileHash, status: "processing", processing_attempt_started_at: new Date().toISOString(),
       merchant: "Analyzing...", amount: 0, subtotal: 0, vat_amount: 0, currency: "GBP", category: "Other",
-      reference_number: `EMAIL-${message.id.slice(0, 8)}`,
+      reference_number: `EMAIL-${messageId.slice(0, 8)}`,
     }).select("id").single();
     if (receiptError || !receipt) {
       await admin.storage.from("receipts").remove([storagePath]);
-      await admin.from("inbound_attachments").insert({ inbound_message_id: message.id, user_id: alias.user_id, provider_attachment_id: attachment.id, safe_filename: sanitizeFilename(attachment.filename), content_type: detected.contentType, byte_size: bytes.byteLength, sha256: fileHash, storage_path: storagePath, status: receiptError?.code === "23505" ? "duplicate" : "failed", error_reason: receiptError?.code === "23505" ? "exact_duplicate" : "receipt_queue_failed" });
+      await admin.from("inbound_attachments").upsert({ inbound_message_id: messageId, user_id: alias.user_id, provider_attachment_id: attachment.id, safe_filename: sanitizeFilename(attachment.filename), content_type: detected.contentType, byte_size: bytes.byteLength, sha256: fileHash, storage_path: storagePath, status: receiptError?.code === "23505" ? "duplicate" : "failed", error_reason: receiptError?.code === "23505" ? "exact_duplicate" : "receipt_queue_failed" }, { onConflict: "inbound_message_id,provider_attachment_id" });
       continue;
     }
-    await admin.from("inbound_attachments").insert({ inbound_message_id: message.id, user_id: alias.user_id, provider_attachment_id: attachment.id, safe_filename: sanitizeFilename(attachment.filename), content_type: detected.contentType, byte_size: bytes.byteLength, sha256: fileHash, storage_path: storagePath, receipt_id: receipt.id, status: "queued" });
+    await admin.from("inbound_attachments").upsert({ inbound_message_id: messageId, user_id: alias.user_id, provider_attachment_id: attachment.id, safe_filename: sanitizeFilename(attachment.filename), content_type: detected.contentType, byte_size: bytes.byteLength, sha256: fileHash, storage_path: storagePath, receipt_id: receipt.id, status: "queued", error_reason: null }, { onConflict: "inbound_message_id,provider_attachment_id" });
   }
 
-  await admin.from("inbound_messages").update({ status: attachments.length ? "processed" : "received", processed_at: attachments.length ? new Date().toISOString() : null }).eq("id", message.id);
-  return json({ accepted: true });
+  await admin.from("inbound_messages").update({ status: attachments.length ? "processed" : "received", processed_at: attachments.length ? new Date().toISOString() : null }).eq("id", messageId);
+  return json({ accepted: true, ...(existingMessage ? { replayed: true } : {}) });
 });

@@ -44,13 +44,21 @@ alias lookup or message processing.
 5. At most five non-inline attachments are considered. Each is capped at 6
    MiB and must pass PDF/JPEG/PNG magic-byte validation. Filenames are reduced
    to safe metadata; they never influence paths.
-6. Accepted attachment originals are written directly to the existing private
+6. Resend attachment metadata is retrieved through its authenticated
+   Receiving API. ReceiptIt then downloads the provider-issued, short-lived
+   HTTPS attachment URL without forwarding credentials. A failed metadata or
+   download attempt is recorded as retryable; a later signed webhook replay
+   reuses the same inbound-message record and retries only failed/rejected
+   attachment retrievals.
+7. Accepted attachment originals are written directly to the existing private
    `receipts` bucket under a random, user-scoped path. The attachment hash is
    used for the existing active-file duplicate guard. No public URL is created.
-7. An attachment creates the same `receipts` processing row used by uploads,
+8. An attachment creates the same `receipts` processing row used by uploads,
    allowing Scanner Dispatch to use the established PDF or image processor.
-   Replayed webhooks and exact attachments cannot create a second processing
-   record. The original is removed if the receipt queue insert fails.
+   A completed provider replay is idempotent, and a separately received exact
+   attachment is marked `exact_duplicate`; neither creates a second processing
+   record or leaves a second private Storage object. The original is removed if
+   the receipt queue insert fails.
 
 The service stores minimal mail metadata for observability: sender/reply-to,
 sender domain, subject, provider IDs, selected authentication-result headers,
@@ -99,6 +107,23 @@ their own aliases/messages/attachments.
 5. Confirm a PDF, scanned PDF and image attachment become a single private
    receipt; test replay and exact attachment duplicate behavior.
 6. Add the Email Text Processor before advertising body-only receipt support.
+
+## Verified v0 acceptance checks
+
+- A signed email with a valid PDF attachment creates one private, user-scoped
+  object, one receipt row, and follows the existing PDF processor through to
+  Wallet and signed Original viewing.
+- Replaying the same provider event does not create another message attachment,
+  receipt, or Storage object. A separately received exact attachment is
+  recorded as an attachment-level duplicate and is not dispatched.
+- Unknown aliases are generically denied and recorded only as a hashed
+  rejection reason. An invalid or unsigned webhook request is denied before
+  any alias lookup.
+- Body-only marketing is recorded as ignored and never becomes a Wallet
+  purchase. A valid order-confirmation attachment follows Document Review;
+  hostile/non-purchase evidence is rejected without child item/payment rows.
+- Email-originated purchase originals use the same short-lived signed URL flow
+  as every other receipt original.
 
 ## Retention
 
