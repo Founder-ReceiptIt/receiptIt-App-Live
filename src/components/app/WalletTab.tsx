@@ -1356,6 +1356,9 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                                 {purchaseDateDisplay}
                               </p>
                             )}
+                            {!isFreshProcessing && !showIssueHeading && receipt.category && (
+                              <span className="text-xs text-gray-500">{receipt.category}</span>
+                            )}
                             {returnWindowStatus.status === 'urgent' && !isFreshProcessing && (
                               <div className="flex items-center gap-1 px-1.5 py-0.5 bg-red-500/20 border border-red-500/40 rounded-full">
                                 <Undo2 className="w-2.5 h-2.5 text-red-400" strokeWidth={2.5} />

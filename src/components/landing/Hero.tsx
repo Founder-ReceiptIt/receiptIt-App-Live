@@ -71,7 +71,7 @@ export function Hero({ onReserve }: HeroProps) {
           transition={{ duration: 0.8, delay: 0.4, ease: [0.22, 1, 0.36, 1] }}
           className="text-xl md:text-2xl text-gray-400 mb-12 font-light tracking-wide"
         >
-          The privacy firewall for your financial life.
+          A private address for every purchase.
         </motion.p>
 
         <motion.button
@@ -92,7 +92,7 @@ export function Hero({ onReserve }: HeroProps) {
             className="absolute inset-0 blur-xl bg-teal-400/50 rounded-full"
           />
           <div className="relative px-12 py-5 bg-teal-400 text-black font-bold text-lg rounded-full backdrop-blur-xl border border-teal-300 shadow-[0_0_30px_rgba(45,212,191,0.5)]">
-            Reserve Alias
+            Get a private address
           </div>
         </motion.button>
       </div>

@@ -58,6 +58,11 @@ const britishDate = (value: string | null) => {
   const date = new Date(`${value.slice(0, 10)}T12:00:00Z`);
   return Number.isNaN(date.getTime()) ? "Not recorded" : new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(date);
 };
+const paymentDescription = (value: string | null) => {
+  const method = asText(value) || "Card";
+  const titled = method.charAt(0).toUpperCase() + method.slice(1);
+  return /payment$/i.test(titled) ? titled : `${titled} payment`;
+};
 
 const wrap = (value: string, width = 86) => {
   const words = value.trim().split(/\s+/).filter(Boolean);
@@ -169,26 +174,27 @@ Deno.serve(async (request) => {
     ...(asText(receipt.loyalty_member_id) ? [{ text: `Loyalty number: ${receipt.loyalty_member_id}` }] : []),
   ];
   const itemLines = ((itemsResult.data || []) as ItemRow[]).map((item) => ({ text: `${asText(item.description) || "Item"}${toNumber(item.quantity) !== null ? ` · ${item.quantity}${asText(item.quantity_unit) ? ` ${item.quantity_unit}` : ""}` : ""}${toNumber(item.line_total) !== null ? ` · ${money(receipt.currency, item.line_total)}` : toNumber(item.unit_price) !== null ? ` · ${money(receipt.currency, item.unit_price)}` : ""}` }));
-  const paymentLines = ((paymentsResult.data || []) as PaymentRow[]).map((payment) => ({ text: `${asText(payment.payment_method) || asText(payment.method) || "Card"} · ${money(payment.currency || receipt.currency, payment.amount)}` }));
+  const paymentLines = ((paymentsResult.data || []) as PaymentRow[]).map((payment) => ({ text: `${paymentDescription(asText(payment.payment_method) || asText(payment.method))} · ${money(payment.currency || receipt.currency, payment.amount)}` }));
   const lines: Array<{ text: string; strong?: boolean }> = [
-    { text: "PROOF OF PURCHASE", strong: true },
+    { text: "Proof of purchase", strong: true },
     { text: `Store: ${asText(receipt.merchant) || "Store unknown"}` },
     { text: `Date: ${britishDate(asText(receipt.transaction_date))}` },
     { text: `Amount: ${money(receipt.currency, receipt.amount)}` },
-    ...(referenceLines.length ? [{ text: "" }, { text: "REFERENCES", strong: true }, ...referenceLines] : []),
-    ...(itemLines.length ? [{ text: "" }, { text: "ITEMS", strong: true }, ...itemLines] : []),
-    ...(paymentLines.length ? [{ text: "" }, { text: "PAYMENT", strong: true }, ...paymentLines] : []),
-    ...(asText(receipt.return_date) || asText(receipt.warranty_date) ? [{ text: "" }, { text: "AFTERCARE", strong: true }] : []),
+    ...(referenceLines.length ? [{ text: "" }, { text: "References", strong: true }, ...referenceLines] : []),
+    ...(itemLines.length ? [{ text: "" }, { text: "Items", strong: true }, ...itemLines] : []),
+    ...(paymentLines.length ? [{ text: "" }, { text: "Payment", strong: true }, ...paymentLines] : []),
+    ...(asText(receipt.return_date) || asText(receipt.warranty_date) ? [{ text: "" }, { text: "Returns & warranty", strong: true }] : []),
     ...(asText(receipt.return_date) ? [{ text: `Return by: ${britishDate(receipt.return_date)}` }] : []),
     ...(asText(receipt.warranty_date) ? [{ text: `Warranty until: ${britishDate(receipt.warranty_date)}` }] : []),
     { text: "" },
     { text: "Created for returns, warranties or insurance." },
+    { text: "Original receipt attached." },
   ];
 
   const { data: originalBlob, error: originalError } = await admin.storage.from("receipts").download(receipt.storage_path);
   if (originalError || !originalBlob) {
     console.error("[generate-proof-pack] original download failed", { message: originalError?.message });
-    return json(request, { error: "The original receipt could not be included. Please try again." }, 503);
+    return json(request, { error: "The receipt could not be included. Please try again." }, 503);
   }
 
   const packId = crypto.randomUUID();

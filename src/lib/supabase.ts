@@ -308,7 +308,7 @@ export const generateProofPack = async (receiptId: string) => {
   });
 
   if (result.error || !result.data?.downloadUrl) {
-    return { data: null, error: result.error || new Error('Proof Pack could not be generated') };
+    return { data: null, error: result.error || new Error('Proof of purchase could not be prepared') };
   }
 
   return { data: result.data, error: null };

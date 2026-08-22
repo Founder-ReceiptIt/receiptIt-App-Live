@@ -16,7 +16,7 @@ export function Solution() {
             One alias. <span className="text-teal-400">Zero noise.</span>
           </h2>
           <p className="text-xl text-gray-400">
-            Give retailers a unique receiptIt address. We capture your receipts, protect your warranty, and keep the spam away.
+            Give shops a private address for receipts. Keep your personal email private, with receipts and warranties in one place.
           </p>
         </motion.div>
 
@@ -55,7 +55,7 @@ export function Solution() {
             </div>
 
             <p className="mt-6 text-gray-400 text-lg">
-              Your cryptographic shield for every transaction
+              Your private address for every purchase
             </p>
           </div>
         </motion.div>
@@ -64,18 +64,18 @@ export function Solution() {
           {[
             {
               icon: Mail,
-              title: 'Receipt Capture',
-              description: 'Receipts automatically extracted and organized'
+              title: 'Receipt address',
+              description: 'Receipts arrive in one place'
             },
             {
               icon: Shield,
-              title: 'Warranty Tracking',
-              description: 'Never lose another warranty or return window'
+              title: 'Returns & warranties',
+              description: 'Keep useful return and warranty details together'
             },
             {
               icon: Lock,
-              title: 'Auto-Delete',
-              description: 'Emails vanish after warranty expires'
+              title: 'Your data',
+              description: 'Download or delete your data whenever you need to'
             }
           ].map((feature, index) => (
             <motion.div

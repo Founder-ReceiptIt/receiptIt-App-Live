@@ -573,7 +573,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                     className="inline-flex h-10 items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-4 text-sm font-semibold text-emerald-100 transition-colors hover:border-emerald-300/45 hover:text-white disabled:opacity-50"
                   >
                     <FileText className="w-4 h-4" />
-                    <span>{isGeneratingProofPack ? 'Preparing...' : 'Create proof of purchase'}</span>
+                    <span>{isGeneratingProofPack ? 'Preparing...' : 'Proof of purchase'}</span>
                   </motion.button>
                 )}
                 {hasOriginalReceipt && (
@@ -602,8 +602,8 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                 </motion.button>
                 <motion.button
                   type="button"
-                  whileHover={{ scale: 1.1, rotate: 90 }}
-                  whileTap={{ scale: 0.9 }}
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.96 }}
                   onClick={onClose}
                   className="w-10 h-10 rounded-full backdrop-blur-md bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:border-white/20 transition-colors"
                 >
