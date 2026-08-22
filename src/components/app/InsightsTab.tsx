@@ -247,7 +247,7 @@ export function InsightsTab() {
           <div className="mb-8">
             <p className="ri-eyebrow mb-2">Finalised purchases only</p>
             <h1 className="ri-page-heading text-3xl font-bold text-white sm:text-4xl">Spending Insights</h1>
-            <p className="mt-2 text-sm text-gray-400">Preparing your GBP-normalised overview</p>
+            <p className="mt-2 text-sm text-gray-400">Preparing your GBP spending overview</p>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2 mb-4">
@@ -351,7 +351,7 @@ export function InsightsTab() {
             <span className="text-gray-600">•</span>
             <span>Finalised receipts only</span>
             <span className="text-gray-600">•</span>
-            <span>{gbpNormalizedCount}/{totalReceipts} using `amount_gbp`</span>
+            <span>{gbpNormalizedCount}/{totalReceipts} with a GBP value</span>
             {fallbackAmountCount > 0 && (
               <>
                 <span className="text-gray-600">•</span>
@@ -388,12 +388,12 @@ export function InsightsTab() {
             <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
               <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Coverage</div>
               <div className="mt-1 text-sm font-bold text-white">
-                {gbpNormalizedCount}/{totalReceipts} receipts using `amount_gbp`
+                {gbpNormalizedCount}/{totalReceipts} receipts with a GBP value
               </div>
               <div className="mt-1 text-xs text-gray-400">
                 {fallbackAmountCount > 0
                   ? `${fallbackAmountCount} receipts currently fall back to raw amount`
-                  : 'All current rollups are GBP-normalised'}
+                  : 'All current rollups use a GBP value'}
               </div>
             </div>
           </motion.div>
