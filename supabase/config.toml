@@ -1,0 +1,4 @@
+[functions.inbound-email]
+# Resend cannot supply a Supabase JWT. The function verifies the raw Svix
+# signature and five-minute timestamp before reading any message data.
+verify_jwt = false
