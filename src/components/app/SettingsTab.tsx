@@ -55,13 +55,12 @@ export function SettingsTab() {
   const { showToast } = useToast();
 
   const getDisplayName = () => {
-    // Fallback order: alias handle before @ > username > full name > email prefix
-    if (emailAlias) {
-      return emailAlias.split('@')[0];
-    }
-    if (username) return username;
-    if (fullName) return fullName;
-    return 'Not set';
+    const isSystemLikeName = (value: string) => (
+      /^ri-[a-f0-9]{16,}$/i.test(value) || /^[a-f0-9]{24,}$/i.test(value)
+    );
+    if (fullName && !isSystemLikeName(fullName.trim())) return fullName.trim();
+    if (username && !isSystemLikeName(username.trim())) return username.trim();
+    return 'Private account';
   };
   const [receiptsCount, setReceiptsCount] = useState(0);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
