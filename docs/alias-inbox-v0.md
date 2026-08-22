@@ -2,14 +2,20 @@
 
 ## Scope
 
-Alias Inbox gives each ReceiptIt account one opaque inbound address:
+Alias Inbox gives each ReceiptIt account a friendly public receipt address:
+
+`username@in.receiptit.app`
+
+It maps server-side to one opaque inbound routing identity:
 
 `ri-<40 random hexadecimal characters>@in.receiptit.app`
 
-It is generated only by the database, is not derived from an account ID or
-sign-in email, and is intentionally separate from historic user-chosen profile
-aliases. The data model supports multiple, rotated and disabled aliases later;
-v0 permits one active alias per user.
+The friendly local part is unique, derived and validated by the database, and
+never grants a client the ability to assign or reassign ownership. The opaque
+identity is generated only by the database, is never shown in normal product
+UI, and remains available for backwards-compatible routing. The data model
+supports multiple, rotated and disabled aliases later; v0 permits one active
+friendly and one active opaque alias per user.
 
 ## Provider and domain
 
@@ -35,9 +41,11 @@ alias lookup or message processing.
    verifies the raw Resend/Svix signature before alias resolution.
 2. The Svix timestamp is accepted for five minutes only. `svix-id` is the
    first idempotency key; provider `message_id` is a second dedupe key.
-3. A recipient resolves only against one active opaque alias. Unknown,
-   disabled and malformed addresses receive the same generic accepted result,
-   avoiding account/alias enumeration.
+3. A recipient first resolves against an active friendly alias and then its
+   server-owned opaque routing identity; an opaque recipient remains supported
+   for backwards compatibility. Unknown, disabled and malformed addresses
+   receive the same generic accepted result, avoiding account/alias
+   enumeration.
 4. Email content is hostile evidence. The webhook never follows links, does
    not use sender-provided ownership data, and only retrieves the message and
    attachments from Resend's authenticated Receiving API.

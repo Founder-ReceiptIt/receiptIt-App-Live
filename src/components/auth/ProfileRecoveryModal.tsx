@@ -26,7 +26,7 @@ export function ProfileRecoveryModal() {
         throw new Error('Please enter a username');
       }
 
-      const finalAlias = aliasUsername ? `${aliasUsername}@receiptit.app` : null;
+      const finalAlias = aliasUsername ? `${aliasUsername}@in.receiptit.app` : null;
       const { error } = await recoverProfile(username, fullName, finalAlias);
 
       if (error) {
@@ -110,7 +110,7 @@ export function ProfileRecoveryModal() {
                   className="flex-1 pl-4 pr-2 py-3 bg-transparent text-white placeholder-gray-500 focus:outline-none"
                 />
                 <div className="px-4 py-3 text-gray-400 bg-white/5 border-l border-white/10 font-mono text-sm">
-                  @receiptit.app
+                  @in.receiptit.app
                 </div>
               </div>
               <p className="text-xs text-gray-400 mt-2">
