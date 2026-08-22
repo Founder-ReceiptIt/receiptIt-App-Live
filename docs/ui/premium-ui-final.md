@@ -11,7 +11,7 @@
 
 - Baseline source and presentation audit: `docs/ui/current-ui-audit.md`.
 - Final component/system record: this document and `docs/ui/design-system.md`.
-- A signed-in production capture was reviewed using a controlled Harbour Market receipt. The real empty Wallet, protected Wallet and Passport were verified, including items, payment and private-original language. Screenshot artifacts are deliberately not committed because they include private account data; `docs/ui/baseline/` and `docs/ui/final/` remain the safe destination for anonymised fixture screenshots if a visual-regression harness is added.
+- A signed-in production capture was reviewed using a controlled Harbour Market receipt. The real empty Wallet, protected Wallet and Passport were verified, including items, payment and private-original language. The controlled fixture screenshots are committed at `docs/ui/final/protected-wallet-live.png` and `docs/ui/final/purchase-passport-live.png`; they contain no email alias, credential or private-original URL.
 
 ## Regression boundary
 
