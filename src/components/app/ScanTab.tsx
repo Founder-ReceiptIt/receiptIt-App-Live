@@ -541,9 +541,8 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
         className="mb-8"
       >
-        <p className="ri-eyebrow mb-2">Private capture</p>
-        <h1 className="ri-page-heading text-3xl font-bold text-white sm:text-4xl">Add a purchase</h1>
-        <p className="mt-3 max-w-xl text-sm text-gray-400">A photo or PDF is stored privately first, then processed in the background.</p>
+        <h1 className="ri-page-heading text-3xl font-bold text-white sm:text-4xl">Add receipt</h1>
+        <p className="mt-3 max-w-xl text-sm text-gray-400">Add a receipt and we’ll take care of the rest.</p>
       </motion.div>
 
       <div className="flex-1 flex items-center justify-center">
@@ -560,8 +559,8 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
               >
                 <div className="text-center mb-8">
                   <Camera className="w-20 h-20 text-teal-400 mx-auto mb-4" strokeWidth={1.5} />
-                  <h2 className="text-2xl font-bold text-white mb-2">Capture purchase proof</h2>
-                  <p className="text-gray-400">Choose a receipt photo, scan, or PDF to begin.</p>
+                  <h2 className="text-2xl font-bold text-white mb-2">Choose a photo or PDF</h2>
+                  <p className="text-gray-400">JPG, PNG or PDF · up to 10 MB</p>
                 </div>
 
                 <input
@@ -628,18 +627,6 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                   </button>
                 </div>
 
-                <div className="mt-5 space-y-1 text-center">
-                  <p className="text-xs text-gray-500 leading-relaxed">
-                    For best results, keep the receipt flat, well-lit, and close enough that the text is clear.
-                  </p>
-                  <p className="text-xs text-gray-600 leading-relaxed">
-                    Long receipts may scan better if photographed closer or in sections.
-                  </p>
-                </div>
-
-                <p className="text-xs text-gray-500 text-center mt-6">
-                  Supports JPG, PNG, PDF up to 10MB
-                </p>
               </motion.div>
             )}
 

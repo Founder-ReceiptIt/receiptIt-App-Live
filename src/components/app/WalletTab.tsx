@@ -23,7 +23,6 @@ import { hasReceiptOriginal, openReceiptOriginal } from '../../lib/receiptOrigin
 import { useAuth } from '../../contexts/AuthContext';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { getReceiptFailureDetails, getReceiptPurchaseDateDisplay } from '../../lib/receiptUiUtils';
-import { getProtectionClasses, getPurchaseProtection, isProtectedValueEligible } from '../../lib/purchaseProtection';
 import { useToast } from '../../contexts/ToastContext';
 
 interface WalletTabProps {
@@ -196,15 +195,6 @@ const filterVisibleWalletReceipts = (receipts: Receipt[]): Receipt[] =>
     if (isHiddenWalletReceiptStatus(receipt.status)) return false;
     return false;
   });
-
-const getReceiptGbpDisplayAmount = (receipt: Receipt): number => {
-  const receiptCurrencyCode = receipt.currency?.toUpperCase() || 'GBP';
-  if (receiptCurrencyCode === 'GBP') {
-    return receipt.amount;
-  }
-
-  return receipt.amount_gbp ?? receipt.amount;
-};
 
 const getNullableNumber = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -441,19 +431,8 @@ export interface Receipt {
 }
 
 export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) {
-  const { user, username, fullName } = useAuth();
+  const { user } = useAuth();
   const { showToast } = useToast();
-
-  const getWelcomeName = () => {
-    // Email aliases are deliberately unguessable and should never be presented
-    // as a person's name. Avoid exposing system-like usernames in the greeting.
-    const isSystemLikeName = (value: string) => (
-      /^ri-[a-f0-9]{16,}$/i.test(value) || /^[a-f0-9]{24,}$/i.test(value)
-    );
-    if (fullName && !isSystemLikeName(fullName.trim())) return fullName.trim();
-    if (username && !isSystemLikeName(username.trim())) return username.trim();
-    return '';
-  };
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -666,18 +645,6 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
 
   const visibleReceipts = filterVisibleWalletReceipts(dedupeWalletReceipts(effectiveReceipts));
   const finalizedReceipts = visibleReceipts.filter((receipt) => isFinalizedReceiptStatus(receipt.status));
-  const totalSpent = finalizedReceipts.reduce((sum, receipt) => sum + getReceiptGbpDisplayAmount(receipt), 0);
-  const budget = {
-    currency: '£',
-    spent: Number(totalSpent.toFixed(2)),
-    limit: 2500,
-  };
-  const protectedValue = finalizedReceipts
-    .filter((receipt) => isProtectedValueEligible(receipt))
-    .reduce((sum, receipt) => sum + (receipt.amount_gbp || 0), 0);
-  const protectedPurchaseCount = finalizedReceipts.filter((receipt) => isProtectedValueEligible(receipt)).length;
-
-  const percentage = (budget.spent / budget.limit) * 100;
 
   const uniqueCategories = Array.from(new Set(finalizedReceipts.map(r => r.category)));
   const categories = ['All', ...uniqueCategories];
@@ -970,63 +937,10 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
         <div className="mb-8">
-          <p className="ri-eyebrow mb-2">Private purchase vault</p>
           <h1 className="ri-page-heading text-3xl font-bold text-white sm:text-4xl">
-            Welcome back{getWelcomeName() && ` ${getWelcomeName()}`}
+            Receipts
           </h1>
         </div>
-
-        <div className="ri-surface p-5 sm:p-6 mb-6">
-          <div className="flex items-baseline justify-between mb-4">
-            <div>
-              <span className="text-4xl font-bold text-white">
-                {budget.currency}{budget.spent.toFixed(2)}
-              </span>
-              <span className="text-gray-400 ml-2">
-                / {budget.currency}{budget.limit.toFixed(2)}
-              </span>
-            </div>
-            <span className={`text-lg font-semibold ${
-              percentage > 90 ? 'text-red-400' : percentage > 70 ? 'text-orange-400' : 'text-teal-400'
-            }`}>
-              {percentage.toFixed(1)}%
-            </span>
-          </div>
-
-          <div className="relative h-3 bg-white/5 rounded-full overflow-hidden">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${percentage}%` }}
-              transition={{ duration: 1, ease: [0.22, 1, 0.36, 1], delay: 0.3 }}
-              className={`absolute inset-y-0 left-0 rounded-full ${
-                percentage > 90
-                  ? 'bg-gradient-to-r from-red-500 to-red-400'
-                  : percentage > 70
-                  ? 'bg-gradient-to-r from-orange-500 to-orange-400'
-                  : 'bg-gradient-to-r from-teal-500 to-teal-400'
-              }`}
-            >
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse" />
-            </motion.div>
-          </div>
-
-          <p className="text-sm text-gray-400 mt-3">
-            {budget.currency}{(budget.limit - budget.spent).toFixed(2)} remaining this month
-          </p>
-        </div>
-
-        <section className="mb-6 rounded-[18px] border border-emerald-400/25 bg-gradient-to-br from-emerald-400/15 to-teal-400/5 p-5 shadow-[0_16px_42px_rgba(16,185,129,0.1)]" aria-label="Protected value">
-          <div className="flex items-start gap-3">
-            <div className="rounded-xl border border-emerald-300/25 bg-emerald-400/10 p-2.5">
-              <Shield className="h-5 w-5 text-emerald-300" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-300">Protected value</p>
-              <p className="mt-1 text-3xl font-bold text-white">£{protectedValue.toFixed(2)}</p>
-              <p className="mt-1 text-sm text-emerald-50/70">{protectedPurchaseCount} {protectedPurchaseCount === 1 ? 'purchase has' : 'purchases have'} usable proof securely stored.</p>
-            </div>
-          </div>
-        </section>
 
         <div className="mb-6">
           <div className="inline-flex w-full bg-white/[0.035] border border-white/10 rounded-xl p-1" role="tablist" aria-label="Wallet folders">
@@ -1291,7 +1205,6 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                 const hasActiveWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) > new Date();
                 const hasExpiredWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) <= new Date();
                 const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
-                const protection = getPurchaseProtection(receipt);
                 const receiptFailureDetails = getReceiptFailureDetails({
                   status: receipt.status,
                   errorReason: receipt.errorReason,
@@ -1479,16 +1392,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                             {receipt.category}
                           </div>
                         )}
-                        {!isFreshProcessing && (
-                          <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${getProtectionClasses(protection.state)}`}>
-                            <Shield className="w-3 h-3" />
-                            {protection.label}
-                          </div>
-                        )}
                       </div>
-                      {!isFreshProcessing && protection.state !== 'protected' && (
-                        <p className="mt-2 text-xs text-gray-400">{protection.detail}</p>
-                      )}
                     </button>
 
                     {showOpenOriginalReceiptAction && (

@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
 import { corsHeadersFor, isTrustedOrigin } from "../_shared/security.ts";
 
 type ReceiptRow = {
@@ -47,7 +48,15 @@ const toNumber = (value: unknown): number | null => {
 const asText = (value: unknown) => typeof value === "string" && value.trim() ? value.trim() : null;
 const money = (currency: string | null, value: unknown) => {
   const amount = toNumber(value);
-  return amount === null ? "Not recorded" : `${(currency || "GBP").toUpperCase()} ${amount.toFixed(2)}`;
+  if (amount === null) return "Not recorded";
+  const code = (currency || "GBP").toUpperCase();
+  const symbol = code === "GBP" ? "£" : code === "EUR" ? "€" : code === "USD" ? "$" : `${code} `;
+  return `${symbol}${amount.toFixed(2)}`;
+};
+const britishDate = (value: string | null) => {
+  if (!value) return "Not recorded";
+  const date = new Date(`${value.slice(0, 10)}T12:00:00Z`);
+  return Number.isNaN(date.getTime()) ? "Not recorded" : new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(date);
 };
 
 const pdfText = (value: string) => value
@@ -82,11 +91,11 @@ const createPdf = (inputLines: Array<{ text: string; strong?: boolean }>) => {
       "/F1 17 Tf",
       "50 790 Td",
       "21 TL",
-      `(ReceiptIt Proof Pack) Tj`,
+      `(ReceiptIt) Tj`,
       "0 -10 Td",
       "/F1 9 Tf",
       "14 TL",
-      "(Private purchase-evidence summary) Tj",
+      "(Proof of purchase) Tj",
       "0 -22 Td",
     ];
     for (const line of pageLines) {
@@ -118,6 +127,46 @@ const createPdf = (inputLines: Array<{ text: string; strong?: boolean }>) => {
   for (let index = 1; index < objects.length; index += 1) output += `${String(offsets[index]).padStart(10, "0")} 00000 n \n`;
   output += `trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
   return new TextEncoder().encode(output);
+};
+
+const createProofPdf = async (inputLines: Array<{ text: string; strong?: boolean }>, original: Uint8Array | null) => {
+  const document = await PDFDocument.create();
+  const regular = await document.embedFont(StandardFonts.Helvetica);
+  const bold = await document.embedFont(StandardFonts.HelveticaBold);
+  const lines = inputLines.flatMap(({ text, strong }) => wrap(text, 80).map((line) => ({ text: line, strong })));
+  const perPage = 42;
+  for (let start = 0; start < lines.length; start += perPage) {
+    const page = document.addPage([595, 842]);
+    page.drawText("ReceiptIt", { x: 48, y: 790, size: 18, font: bold, color: rgb(0.12, 0.72, 0.68) });
+    page.drawText("Proof of purchase", { x: 48, y: 766, size: 11, font: regular, color: rgb(0.36, 0.4, 0.45) });
+    let y = 730;
+    for (const line of lines.slice(start, start + perPage)) {
+      page.drawText(line.text, { x: 48, y, size: line.strong ? 11 : 9.5, font: line.strong ? bold : regular, color: rgb(0.1, 0.12, 0.14) });
+      y -= line.strong ? 18 : 15;
+    }
+  }
+
+  if (original?.byteLength) {
+    try {
+      if (new TextDecoder().decode(original.slice(0, 5)) === "%PDF-") {
+        const originalDocument = await PDFDocument.load(original, { ignoreEncryption: false });
+        const copiedPages = await document.copyPages(originalDocument, originalDocument.getPageIndices());
+        copiedPages.forEach((page) => document.addPage(page));
+      } else {
+        const image = original[0] === 0xff && original[1] === 0xd8
+          ? await document.embedJpg(original)
+          : await document.embedPng(original);
+        const page = document.addPage([595, 842]);
+        const scale = Math.min(499 / image.width, 746 / image.height);
+        const width = image.width * scale;
+        const height = image.height * scale;
+        page.drawImage(image, { x: (595 - width) / 2, y: (842 - height) / 2, width, height });
+      }
+    } catch (error) {
+      console.warn("[generate-proof-pack] Original could not be appended", { name: error instanceof Error ? error.name : "unknown" });
+    }
+  }
+  return document.save();
 };
 
 Deno.serve(async (request) => {
@@ -154,8 +203,8 @@ Deno.serve(async (request) => {
     console.error("[generate-proof-pack] purchase lookup failed", { message: receiptError?.message });
     return json(request, { error: "Purchase not found" }, 404);
   }
-  if (!['parsed', 'completed'].includes(receipt.status || '')) return json(request, { error: "Proof Pack is available once a purchase is ready" }, 409);
-  if (!receipt.storage_path) return json(request, { error: "No secured original is available for this purchase" }, 409);
+  if (!['parsed', 'completed'].includes(receipt.status || '')) return json(request, { error: "Proof pack is available once a receipt is ready" }, 409);
+  if (!receipt.storage_path) return json(request, { error: "No original receipt is available for this receipt" }, 409);
 
   const [itemsResult, paymentsResult] = await Promise.all([
     admin.from("receipt_items").select("description,quantity,quantity_unit,unit_price,line_total").eq("receipt_id", receipt.id).order("line_index"),
@@ -167,42 +216,39 @@ Deno.serve(async (request) => {
   }
 
   const lines: Array<{ text: string; strong?: boolean }> = [
-    { text: "PURCHASE SUMMARY", strong: true },
+    { text: "PROOF OF PURCHASE", strong: true },
     { text: `Merchant: ${asText(receipt.merchant) || "Seller unknown"}` },
-    { text: `Purchase date: ${asText(receipt.transaction_date) || "Not recorded"}` },
+    { text: `Date: ${britishDate(asText(receipt.transaction_date))}` },
     { text: `Amount: ${money(receipt.currency, receipt.amount)}` },
-    { text: `Category: ${asText(receipt.category) || "Other"}` },
-    { text: `Captured via: ${asText(receipt.source) || "Scan"}` },
     { text: "" },
-    { text: "EVIDENCE & REFERENCES", strong: true },
+    { text: "REFERENCES", strong: true },
     ...(asText(receipt.order_number) ? [{ text: `Order number: ${receipt.order_number}` }] : []),
     ...(asText(receipt.invoice_number) ? [{ text: `Invoice number: ${receipt.invoice_number}` }] : []),
     ...(asText(receipt.reference_number) ? [{ text: `Reference: ${receipt.reference_number}` }] : []),
-    ...(asText(receipt.customer_number) ? [{ text: `Customer reference: ${receipt.customer_number}` }] : []),
-    ...(asText(receipt.loyalty_member_id) ? [{ text: `Member reference: ${receipt.loyalty_member_id}` }] : []),
-    ...(asText(receipt.card_last_4) ? [{ text: `Card: ending ${receipt.card_last_4}` }] : []),
-    { text: "Original document: securely retained in ReceiptIt and available only to the account owner through a time-limited private link." },
+    ...(asText(receipt.customer_number) ? [{ text: `Customer number: ${receipt.customer_number}` }] : []),
+    ...(asText(receipt.loyalty_member_id) ? [{ text: `Loyalty number: ${receipt.loyalty_member_id}` }] : []),
     { text: "" },
     { text: "ITEMS", strong: true },
-    ...((itemsResult.data || []) as ItemRow[]).map((item) => ({ text: `${asText(item.description) || "Item"}${toNumber(item.quantity) !== null ? ` · Qty ${item.quantity}${asText(item.quantity_unit) ? ` ${item.quantity_unit}` : ""}` : ""}${toNumber(item.line_total) !== null ? ` · ${money(receipt.currency, item.line_total)}` : toNumber(item.unit_price) !== null ? ` · ${money(receipt.currency, item.unit_price)}` : ""}` })),
-    ...((itemsResult.data || []).length ? [] : [{ text: "Item-level detail was not supplied by the original document." }]),
+    ...((itemsResult.data || []) as ItemRow[]).map((item) => ({ text: `${asText(item.description) || "Item"}${toNumber(item.quantity) !== null ? ` · ${item.quantity}${asText(item.quantity_unit) ? ` ${item.quantity_unit}` : ""}` : ""}${toNumber(item.line_total) !== null ? ` · ${money(receipt.currency, item.line_total)}` : toNumber(item.unit_price) !== null ? ` · ${money(receipt.currency, item.unit_price)}` : ""}` })),
     { text: "" },
     { text: "PAYMENT", strong: true },
-    ...((paymentsResult.data || []) as PaymentRow[]).map((payment) => ({ text: `${asText(payment.payment_method) || asText(payment.method) || "Payment"}: ${money(payment.currency || receipt.currency, payment.amount)}` })),
-    ...((paymentsResult.data || []).length ? [] : [{ text: "Payment detail was not supplied by the original document." }]),
+    ...((paymentsResult.data || []) as PaymentRow[]).map((payment) => ({ text: `${asText(payment.payment_method) || asText(payment.method) || "Card"} · ${money(payment.currency || receipt.currency, payment.amount)}` })),
+    ...(asText(receipt.return_date) || asText(receipt.warranty_date) ? [{ text: "" }, { text: "AFTERCARE", strong: true }] : []),
+    ...(asText(receipt.return_date) ? [{ text: `Return by: ${britishDate(receipt.return_date)}` }] : []),
+    ...(asText(receipt.warranty_date) ? [{ text: `Warranty until: ${britishDate(receipt.warranty_date)}` }] : []),
     { text: "" },
-    { text: "PROTECTION", strong: true },
-    ...(asText(receipt.return_date) ? [{ text: `Return deadline: ${receipt.return_date}` }] : []),
-    ...(asText(receipt.warranty_date) ? [{ text: `Warranty expiry: ${receipt.warranty_date}` }] : []),
-    ...(!asText(receipt.return_date) && !asText(receipt.warranty_date) ? [{ text: "No explicit return or warranty date was recorded." }] : []),
-    { text: "" },
-    { text: `Generated by ReceiptIt on ${new Date().toISOString().slice(0, 10)}.` },
-    { text: "ReceiptIt organizes user-held evidence. It does not certify legal validity or guarantee claim acceptance." },
+    { text: "This pack summarises the receipt details supplied to ReceiptIt." },
   ];
+
+  const { data: originalBlob, error: originalError } = await admin.storage.from("receipts").download(receipt.storage_path);
+  if (originalError || !originalBlob) {
+    console.error("[generate-proof-pack] original download failed", { message: originalError?.message });
+    return json(request, { error: "The original receipt could not be included. Please try again." }, 503);
+  }
 
   const packId = crypto.randomUUID();
   const storagePath = `${verified.user.id}/${receipt.id}/${packId}.pdf`;
-  const pdf = createPdf(lines);
+  const pdf = await createProofPdf(lines, new Uint8Array(await originalBlob.arrayBuffer()));
   const { error: uploadError } = await admin.storage.from("proof-packs").upload(storagePath, pdf, { contentType: "application/pdf", upsert: false });
   if (uploadError) {
     console.error("[generate-proof-pack] storage upload failed", { message: uploadError.message });

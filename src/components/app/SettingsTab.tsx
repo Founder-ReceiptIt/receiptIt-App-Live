@@ -1,19 +1,16 @@
 import { motion } from 'framer-motion';
 import {
   FileText,
-  Lock,
   Trash2,
   Shield,
   Globe,
-  Check,
   AlertTriangle,
   X,
   ShieldCheck,
-  Link,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { useState, useEffect } from 'react';
-import { FINALIZED_RECEIPT_STATUSES, supabase } from '../../lib/supabase';
+import { useState } from 'react';
+import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -46,7 +43,6 @@ export function SettingsTab() {
   const {
     user,
     username,
-    emailAlias,
     fullName,
     signOut,
     profileLoading,
@@ -62,28 +58,9 @@ export function SettingsTab() {
     if (username && !isSystemLikeName(username.trim())) return username.trim();
     return 'Private account';
   };
-  const [receiptsCount, setReceiptsCount] = useState(0);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  console.log('SettingsTab - emailAlias:', emailAlias, 'username:', username, 'profileLoading:', profileLoading);
-  useEffect(() => {
-    if (!user) return;
-
-    const fetchUserData = async () => {
-      const { count, error } = await supabase
-        .from('receipts')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .in('status', [...FINALIZED_RECEIPT_STATUSES]);
-
-      if (!error && count !== null) {
-        setReceiptsCount(count);
-      }
-    };
-
-    fetchUserData();
-  }, [user]);
 
   const handleExport = async () => {
     if (!user) return;
@@ -154,24 +131,16 @@ export function SettingsTab() {
 
   const settingsSections: SettingsSection[] = [
     {
-      title: 'Security Centre',
+      title: 'Privacy & security',
       icon: ShieldCheck,
       items: [
         {
-          icon: Lock,
-          title: 'Private originals',
-          description: 'Receipt originals are kept in private storage and are only available to your signed-in account.',
-          action: () => showToast('Your originals are private to your signed-in account.'),
-          actionText: 'Protected',
+          icon: Shield,
+          title: 'Your data is private',
+          description: 'Your receipts and purchase data are private to your account.',
+          action: () => showToast('Your receipts and purchase data are private to your account.'),
+          actionText: 'Details',
           color: 'text-teal-400'
-        },
-        {
-          icon: Link,
-          title: 'Signed viewing links',
-          description: 'Opening an original creates a short-lived viewing link instead of a permanent public URL.',
-          action: () => showToast('Original viewing links expire after 60 seconds.'),
-          actionText: '60 seconds',
-          color: 'text-cyan-400'
         },
         {
           icon: FileText,
@@ -183,8 +152,8 @@ export function SettingsTab() {
         },
         {
           icon: Trash2,
-          title: 'Delete account and originals',
-          description: 'Permanently remove your account, receipt data, and private originals.',
+          title: 'Delete account',
+          description: 'Permanently deletes your account and saved receipts.',
           action: () => setShowDeleteModal(true),
           actionText: 'Delete',
           color: 'text-red-400'
@@ -194,14 +163,13 @@ export function SettingsTab() {
   ];
 
   return (
-    <main className="ri-page" aria-label="Settings and Security Centre">
+    <main className="ri-page" aria-label="Settings">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
         <div className="mb-8">
-          <p className="ri-eyebrow mb-2">Account and privacy</p>
           <h1 className="ri-page-heading text-3xl font-bold text-white sm:text-4xl">Settings</h1>
         </div>
 
@@ -219,21 +187,7 @@ export function SettingsTab() {
               <h3 className="text-xl font-bold text-white mb-1">
                 {profileLoading ? 'Loading...' : getDisplayName()}
               </h3>
-              <p className="text-gray-400 text-sm mb-3">Your privacy-protected alias</p>
-              <div className="flex flex-col gap-2">
-                <div className="text-sm text-gray-400">
-                  Email: <span className="text-white font-semibold">{profileLoading ? 'Loading...' : emailAlias || 'Not set'}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md text-green-400 bg-green-400/10 border-green-400/30">
-                    <Check className="w-3 h-3" />
-                    Active
-                  </div>
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md text-gray-400 bg-white/5 border-white/10">
-                    {receiptsCount} receipts captured
-                  </div>
-                </div>
-              </div>
+              <p className="text-gray-400 text-sm">Manage your account and saved receipts.</p>
             </div>
           </div>
         </motion.div>
@@ -316,14 +270,6 @@ export function SettingsTab() {
             <div className="flex items-center justify-between">
               <span className="text-gray-400">Version</span>
               <span className="text-white font-mono">v1.0.0</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-400">Platform</span>
-              <span className="text-white font-mono">Web</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-400">Last Sync</span>
-              <span className="text-white font-mono">Just now</span>
             </div>
           </div>
 

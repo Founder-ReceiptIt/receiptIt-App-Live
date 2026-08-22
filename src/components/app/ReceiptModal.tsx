@@ -22,7 +22,6 @@ import { formatReceiptDate } from '../../lib/receiptDateUtils';
 import { hasReceiptOriginal, openReceiptOriginal } from '../../lib/receiptOriginalUtils';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { getReceiptFailureDetails, getReceiptPurchaseDateDisplay } from '../../lib/receiptUiUtils';
-import { getProtectionClasses, getPurchaseProtection } from '../../lib/purchaseProtection';
 import { useToast } from '../../contexts/ToastContext';
 
 const getCurrencySymbol = (currencyCode: string): string => {
@@ -142,7 +141,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const [showOtherCurrencyOptions, setShowOtherCurrencyOptions] = useState(false);
   const [showReportProblemDialog, setShowReportProblemDialog] = useState(false);
   const [isGeneratingProofPack, setIsGeneratingProofPack] = useState(false);
-  const [activity, setActivity] = useState<Array<{ event_type: string; created_at: string }>>([]);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -164,24 +162,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     setShowCompanyDetails(false);
     setShowOtherCurrencyOptions(false);
     setShowReportProblemDialog(false);
-  }, [receipt?.id]);
-
-  useEffect(() => {
-    if (!receipt?.id) {
-      setActivity([]);
-      return;
-    }
-    let cancelled = false;
-    void supabase
-      .from('purchase_activity')
-      .select('event_type,created_at')
-      .eq('receipt_id', receipt.id)
-      .order('created_at', { ascending: false })
-      .limit(8)
-      .then(({ data }) => {
-        if (!cancelled) setActivity((data || []) as Array<{ event_type: string; created_at: string }>);
-      });
-    return () => { cancelled = true; };
   }, [receipt?.id]);
 
   useEffect(() => {
@@ -534,7 +514,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
 
   // Return window status
   const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
-  const protection = getPurchaseProtection(receipt);
 
   const hasOriginalReceipt = hasReceiptOriginal(receipt);
   const shouldHideBreakdownSection = isCompactFailedReceipt || (
@@ -571,14 +550,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
       const { data, error } = await generateProofPack(receipt.id);
       if (error || !data?.downloadUrl) throw error || new Error('Proof Pack could not be generated');
       window.open(data.downloadUrl, '_blank', 'noopener,noreferrer');
-      showToast('Proof Pack ready', 'Your private evidence summary opened in a new tab.');
-      const { data: refreshed } = await supabase
-        .from('purchase_activity')
-        .select('event_type,created_at')
-        .eq('receipt_id', receipt.id)
-        .order('created_at', { ascending: false })
-        .limit(8);
-      setActivity((refreshed || []) as Array<{ event_type: string; created_at: string }>);
+      showToast('Proof pack ready', 'Opened in a new tab.');
     } catch (error) {
       console.error('[ReceiptModal] Proof Pack error:', error);
       showToast('Proof Pack unavailable', 'Please try again in a moment.');
@@ -612,7 +584,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
           onClick={(e) => e.stopPropagation()}
           role="dialog"
           aria-modal="true"
-          aria-labelledby="purchase-passport-title"
+          aria-labelledby="receipt-title"
           tabIndex={-1}
           ref={dialogRef}
         >
@@ -620,7 +592,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
             
             {/* --- HEADER --- */}
             <div className="p-6 border-b border-white/10 flex items-center justify-between">
-              <h2 id="purchase-passport-title" className="text-2xl font-bold text-white">Purchase Passport</h2>
+              <h2 id="receipt-title" className="text-2xl font-bold text-white">Receipt</h2>
               <div className="flex items-center gap-2">
                 {hasOriginalReceipt && isFinalizedReceiptStatus(receipt.status) && (
                   <motion.button
@@ -632,7 +604,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                     className="inline-flex h-10 items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-4 text-sm font-semibold text-emerald-100 transition-colors hover:border-emerald-300/45 hover:text-white disabled:opacity-50"
                   >
                     <FileText className="w-4 h-4" />
-                    <span>{isGeneratingProofPack ? 'Preparing...' : 'Proof Pack'}</span>
+                    <span>{isGeneratingProofPack ? 'Preparing…' : 'Create proof pack'}</span>
                   </motion.button>
                 )}
                 {hasOriginalReceipt && (
@@ -666,7 +638,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   whileTap={{ scale: 0.9 }}
                   onClick={onClose}
                   className="w-10 h-10 rounded-full backdrop-blur-md bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:border-white/20 transition-colors"
-                  aria-label="Close Purchase Passport"
+                  aria-label="Close receipt"
                 >
                   <X className="w-5 h-5" />
                 </motion.button>
@@ -775,10 +747,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                     <Tag className="w-4 h-4" />
                     {receipt.category || 'Receipt'}
                   </div>
-                  <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border ${getProtectionClasses(protection.state)}`}>
-                    <Shield className="w-4 h-4" />
-                    {protection.label}
-                  </div>
                   {heroMetadataChips.map((chip) => {
                     const Icon = chip.icon;
 
@@ -827,35 +795,12 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   )}
                 </div>
 
-                <div className={`mt-4 rounded-xl border px-4 py-3 ${getProtectionClasses(protection.state)}`}>
-                  <div className="flex items-start gap-3">
-                    <Shield className="mt-0.5 h-5 w-5 shrink-0" />
-                    <div>
-                      <p className="text-sm font-semibold">{protection.label}</p>
-                      <p className="mt-0.5 text-xs opacity-80">{protection.detail}</p>
-                    </div>
-                  </div>
-                </div>
-
                 {receipt.status === 'needs_review' && (
                   <div className="mt-4 rounded-xl border border-sky-400/25 bg-sky-400/10 px-4 py-3 text-sm text-sky-100">
                     <p className="font-semibold">Document review</p>
                     <p className="mt-1 text-xs text-sky-100/75">This looks like purchase evidence rather than a standard receipt. Keep it as evidence or delete it when you no longer need it.</p>
                   </div>
                 )}
-
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-xl border border-white/10 bg-black/10 px-4 py-3">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500">Proof</p>
-                    <p className="mt-1 text-sm font-semibold text-gray-100">{hasOriginalReceipt ? 'Original secured privately' : 'Original unavailable'}</p>
-                    <p className="mt-1 text-xs text-gray-500">{hasOriginalReceipt ? 'Opened only with a short-lived signed link.' : 'This purchase needs its original evidence.'}</p>
-                  </div>
-                  <div className="rounded-xl border border-white/10 bg-black/10 px-4 py-3">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500">Captured via</p>
-                    <p className="mt-1 text-sm font-semibold capitalize text-gray-100">{receipt.source || 'Scan'}</p>
-                    <p className="mt-1 text-xs text-gray-500">{receipt.documentType ? receipt.documentType.replace(/_/g, ' ') : 'Purchase document'}</p>
-                  </div>
-                </div>
 
                 <AnimatePresence>
                   {showCompanyDetails && hasCompanyDetails && (
@@ -1000,31 +945,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   </div>
                 </div>
               )}
-
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                <h4 className="flex items-center gap-2 text-base font-bold text-white">
-                  <Clock className="h-4 w-4 text-teal-300" />
-                  Purchase timeline
-                </h4>
-                <div className="mt-4 space-y-3 text-sm">
-                  <div className="flex items-start gap-3">
-                    <span className="mt-1.5 h-2 w-2 rounded-full bg-teal-300" />
-                    <div><p className="font-medium text-gray-100">Purchase captured</p><p className="text-xs text-gray-500">{formatReceiptDate(receipt.createdAt, 'long') || 'Captured by ReceiptIt'}</p></div>
-                  </div>
-                  {isFinalizedReceiptStatus(receipt.status) && (
-                    <div className="flex items-start gap-3"><span className="mt-1.5 h-2 w-2 rounded-full bg-emerald-300" /><div><p className="font-medium text-gray-100">Original secured</p><p className="text-xs text-gray-500">Private proof is available through a signed link.</p></div></div>
-                  )}
-                  {receipt.status === 'needs_review' && (
-                    <div className="flex items-start gap-3"><span className="mt-1.5 h-2 w-2 rounded-full bg-sky-300" /><div><p className="font-medium text-gray-100">Document review requested</p><p className="text-xs text-gray-500">ReceiptIt kept this evidence out of spending totals.</p></div></div>
-                  )}
-                  {activity.map((event) => (
-                    <div key={`${event.event_type}-${event.created_at}`} className="flex items-start gap-3">
-                      <span className="mt-1.5 h-2 w-2 rounded-full bg-white/40" />
-                      <div><p className="font-medium text-gray-100">{event.event_type === 'proof_pack_generated' ? 'Proof Pack generated' : 'Original viewed'}</p><p className="text-xs text-gray-500">{formatReceiptDate(event.created_at, 'long') || 'Recorded privately'}</p></div>
-                    </div>
-                  ))}
-                </div>
-              </div>
 
               {/* --- WARRANTY SECTION (Animated & Glowing) --- */}
               {isWarrantyActive && (
