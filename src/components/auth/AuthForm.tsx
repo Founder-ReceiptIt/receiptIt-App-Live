@@ -135,7 +135,7 @@ export function AuthForm() {
               </div>
             </div>
 
-            {isSignUp && <p className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-gray-400">We’ll create a private, unguessable ReceiptIt address for your purchase emails.</p>}
+            {isSignUp && <p className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-gray-400">We’ll create a private, unguessable receiptIt address for your purchase emails.</p>}
 
             {error && (
               <motion.div
