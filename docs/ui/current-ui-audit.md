@@ -23,4 +23,4 @@
 ## Current constraints retained
 
 - Processing, document routing, duplicate detection, private storage, signed URLs, Proof Pack generation and all backend states are unchanged.
-- The audit does not claim a live authenticated visual capture where the user-owned production test account is not available in the current session. Final visual checks therefore pair source-level responsive inspection with public/auth presentation checks; a friends-and-family device sweep remains in the P1 checklist.
+- A live signed-in production verification was completed after deployment using the controlled Harbour Market PDF fixture. The empty Wallet, protected Wallet, Passport, item/payment breakdown, Alias, Scan and Insights screens were checked without exposing private address data in documentation. A broader friends-and-family device sweep remains in the P1 checklist.

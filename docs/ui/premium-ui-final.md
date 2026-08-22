@@ -11,7 +11,7 @@
 
 - Baseline source and presentation audit: `docs/ui/current-ui-audit.md`.
 - Final component/system record: this document and `docs/ui/design-system.md`.
-- The current environment has no authenticated production tab to lawfully capture a populated user Wallet. `docs/ui/baseline/` and `docs/ui/final/` are reserved for the final signed-in device capture; no fabricated state screenshot is included.
+- A signed-in production capture was reviewed using a controlled Harbour Market receipt. The real empty Wallet, protected Wallet and Passport were verified, including items, payment and private-original language. Screenshot artifacts are deliberately not committed because they include private account data; `docs/ui/baseline/` and `docs/ui/final/` remain the safe destination for anonymised fixture screenshots if a visual-regression harness is added.
 
 ## Regression boundary
 
