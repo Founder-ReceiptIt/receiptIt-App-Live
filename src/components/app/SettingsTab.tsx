@@ -145,7 +145,7 @@ export function SettingsTab() {
         {
           icon: FileText,
           title: 'Download your data',
-          description: 'Export your saved receipt and purchase-evidence records as a spreadsheet-safe CSV.',
+          description: 'Export your saved receipts as a CSV file.',
           action: handleExport,
           actionText: 'Download',
           color: 'text-blue-400'
