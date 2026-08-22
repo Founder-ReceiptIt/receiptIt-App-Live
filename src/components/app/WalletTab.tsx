@@ -654,6 +654,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
 
   const visibleReceipts = filterVisibleWalletReceipts(dedupeWalletReceipts(effectiveReceipts));
   const finalizedReceipts = visibleReceipts.filter((receipt) => isFinalizedReceiptStatus(receipt.status));
+  const totalRecorded = finalizedReceipts.reduce((sum, receipt) => sum + getReceiptGbpDisplayAmount(receipt), 0);
   const currentMonthKey = new Date().toISOString().slice(0, 7);
   const receiptsThisMonth = finalizedReceipts.filter((receipt) => (
     (receipt.date || receipt.createdAt || '').slice(0, 7) === currentMonthKey
@@ -667,6 +668,9 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
     return [];
   });
   const primaryAction = actionReceipts[0];
+  const actionHeading = actionReceipts.length === 1
+    ? '1 thing needs you'
+    : `${actionReceipts.length} things need you`;
 
   const uniqueCategories = Array.from(new Set(finalizedReceipts.map(r => r.category)));
   const categories = ['All', ...uniqueCategories];
@@ -958,17 +962,29 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
-        <div className="mb-8"><h1 className="text-3xl font-bold text-white">Receipts</h1></div>
+        <div className="mb-7">
+          <h1 className="text-3xl font-bold text-white">Receipts</h1>
+          <p className="mt-2 text-sm text-gray-400">Your purchases, in one place.</p>
+        </div>
 
         <div className={`mb-6 rounded-2xl border p-5 ${primaryAction ? 'border-amber-300/25 bg-gradient-to-br from-amber-400/12 to-teal-400/5' : 'border-teal-300/25 bg-gradient-to-br from-teal-400/15 to-cyan-400/5'}`}>
           <div className="flex items-start gap-3">
             <div className={`rounded-xl border p-2.5 ${primaryAction ? 'border-amber-300/25 bg-amber-400/10' : 'border-teal-300/25 bg-teal-400/10'}`}><AlertCircle className={`h-5 w-5 ${primaryAction ? 'text-amber-200' : 'text-teal-200'}`} /></div>
             <div className="min-w-0 flex-1">
-              <p className={`text-xs font-bold uppercase tracking-[0.16em] ${primaryAction ? 'text-amber-200' : 'text-teal-200'}`}>{primaryAction ? primaryAction.label : 'This month'}</p>
+              <p className={`text-xs font-bold uppercase tracking-[0.16em] ${primaryAction ? 'text-amber-200' : 'text-teal-200'}`}>{primaryAction ? actionHeading : 'This month'}</p>
               <p className="mt-1 text-2xl font-bold text-white">{primaryAction ? primaryAction.detail : `£${spentThisMonth.toFixed(2)} · ${receiptsThisMonth.length} ${receiptsThisMonth.length === 1 ? 'receipt' : 'receipts'}`}</p>
             </div>
           </div>
         </div>
+
+        <section className="mb-6">
+          <h2 className="text-base font-bold text-white">At a glance</h2>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-white/10 bg-white/[0.045] px-4 py-3.5"><p className="text-xs font-semibold uppercase tracking-[0.13em] text-gray-500">All purchases</p><p className="mt-1 text-xl font-bold text-white">{finalizedReceipts.length}</p></div>
+            <div className="rounded-xl border border-white/10 bg-white/[0.045] px-4 py-3.5"><p className="text-xs font-semibold uppercase tracking-[0.13em] text-gray-500">Total recorded</p><p className="mt-1 text-xl font-bold text-white">£{totalRecorded.toFixed(2)}</p></div>
+            <div className="rounded-xl border border-white/10 bg-white/[0.045] px-4 py-3.5"><p className="text-xs font-semibold uppercase tracking-[0.13em] text-gray-500">Active warranties</p><p className="mt-1 text-xl font-bold text-white">{warrantyReceipts.length}</p></div>
+          </div>
+        </section>
 
         <div className="mb-6">
           <div className="inline-flex w-full backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-1">
@@ -1075,7 +1091,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
 
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-white">
-            {filteredReceipts.length} {filteredReceipts.length === 1 ? 'Transaction' : 'Transactions'}
+            {filteredReceipts.length} {filteredReceipts.length === 1 ? 'purchase' : 'purchases'}
           </h2>
           <div className="flex items-center gap-2 relative">
             {selectMode && (
