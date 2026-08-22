@@ -402,7 +402,7 @@ export function InsightsTab() {
           </motion.div>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr] mb-8">
+        {totalReceipts >= 2 && <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr] mb-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -514,7 +514,7 @@ export function InsightsTab() {
             </div>
           </motion.div>
 
-        </div>
+        </div>}
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -528,7 +528,7 @@ export function InsightsTab() {
                 <Store className="w-5 h-5 text-teal-400" />
                 Top Merchants
               </h2>
-              <p className="mt-2 text-sm text-gray-400">Where the most spend is landing</p>
+              <p className="mt-2 text-sm text-gray-400">Your most frequent merchant.</p>
             </div>
           </div>
 
