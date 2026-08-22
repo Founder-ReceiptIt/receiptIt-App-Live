@@ -140,15 +140,15 @@ export const getReceiptFailureDetails = ({
     return {
       title: 'Document review',
       reason: 'This may not be a standard receipt',
-      advice: 'Keep the original if it is useful purchase evidence.',
+      advice: 'Keep the receipt if it is useful to you.',
     };
   }
 
   if (status === 'rejected') {
     return {
       title: 'Not a purchase document',
-      reason: 'This file does not appear to be purchase evidence.',
-      advice: 'Upload a receipt, invoice, order confirmation or payment proof instead.',
+      reason: 'This file does not appear to be a receipt or purchase document.',
+      advice: 'Try a receipt, invoice, order confirmation or payment confirmation instead.',
     };
   }
 
@@ -156,9 +156,9 @@ export const getReceiptFailureDetails = ({
     return {
       title: 'Document review',
       reason: normalizedErrorReason === 'non_standard_purchase_document'
-        ? 'This looks like purchase evidence rather than a standard receipt.'
-        : 'This may be useful purchase evidence, but it is not a standard receipt.',
-      advice: 'Review the original and keep it if it is useful to you.',
+        ? 'This looks like a purchase document rather than a standard receipt.'
+        : 'This may be useful, but it is not a standard receipt.',
+      advice: 'Review the receipt and keep it if it is useful to you.',
     };
   }
 

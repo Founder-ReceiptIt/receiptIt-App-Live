@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Lock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { ReceiptItWordmark } from '../ReceiptItWordmark';
 
 const signupAuthorizationKey = 'receiptit_signup_authorization';
 
@@ -39,7 +40,7 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
 
       if (verificationError || !data?.valid || typeof data.signupAuthorization !== 'string') {
         console.error('Access-code verification failed');
-        setError('Invalid Key. Please request access at founder@receiptit.co.uk');
+        setError('That access code didn’t work. Please request access from the team.');
         setIsLoading(false);
         return;
       }
@@ -49,7 +50,7 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
       setIsVerified(true);
     } catch (err) {
       console.error('Access code verification error:', err);
-      setError('Invalid Key. Please request access at founder@receiptit.co.uk');
+      setError('That access code didn’t work. Please request access from the team.');
     } finally {
       setIsLoading(false);
     }
@@ -75,21 +76,15 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
             <Lock className="w-8 h-8 text-[#2DD4BF]" />
           </div>
 
-          <div className="flex justify-center mb-4">
-            <img
-              src="/logo.png"
-              alt="receiptIt"
-              className="h-12 w-auto"
-            />
-          </div>
+          <div className="mb-4"><ReceiptItWordmark className="text-4xl" /></div>
 
           <h1 className="text-2xl font-bold text-white tracking-tight">
-            TECHNICAL ALPHA
+            Early access
           </h1>
 
           <p className="text-gray-400 text-sm leading-relaxed">
-            Access restricted to verified partners.<br />
-            Please enter your Access Key below.
+            Access is limited to invited beta members.<br />
+            Please enter your access code below.
           </p>
         </div>
 
@@ -102,7 +97,7 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
                 setAccessCode(e.target.value);
                 setError('');
               }}
-              placeholder="Enter Access Key"
+              placeholder="Enter access code"
               className="w-full px-4 py-3 bg-black/50 border border-gray-800 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-[#2DD4BF] focus:ring-1 focus:ring-[#2DD4BF] transition-all font-mono text-sm"
               disabled={isLoading}
             />
@@ -119,13 +114,13 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
             disabled={isLoading}
             className="w-full py-3 bg-[#2DD4BF] text-black font-semibold rounded-lg hover:bg-[#2DD4BF]/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isLoading ? 'Verifying...' : 'Submit Access Key'}
+            {isLoading ? 'Checking...' : 'Continue'}
           </button>
         </form>
 
         <div className="text-center pt-4">
           <p className="text-gray-600 text-xs">
-            Need an access key?<br />
+            Need an access code?<br />
             <a
               href="mailto:founder@receiptit.co.uk"
               className="text-[#2DD4BF] hover:text-[#2DD4BF]/80 transition-colors"

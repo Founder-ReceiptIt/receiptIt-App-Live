@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Wallet, AtSign, ScanLine, TrendingUp, Settings, Menu, X } from 'lucide-react';
 import { useState } from 'react';
+import { ReceiptItWordmark } from '../ReceiptItWordmark';
 
 interface TopNavProps {
   activeTab: string;
@@ -26,7 +27,7 @@ export function TopNav({ activeTab, onTabChange }: TopNavProps) {
     <motion.nav
       initial={{ y: -100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
       className="fixed top-0 left-0 right-0 z-50 backdrop-blur-xl bg-black/50 border-b border-white/10"
     >
       <div className="max-w-7xl mx-auto px-6 py-4">
@@ -37,8 +38,7 @@ export function TopNav({ activeTab, onTabChange }: TopNavProps) {
             className="text-2xl font-bold font-mono tracking-tight cursor-pointer"
             onClick={() => onTabChange('wallet')}
           >
-            <span className="text-white">receipt</span>
-            <span className="text-teal-400">It</span>
+            <ReceiptItWordmark className="text-2xl" />
           </motion.div>
 
           {/* Desktop Navigation Links - Right Side */}

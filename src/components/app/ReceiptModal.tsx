@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Download, Undo2, ChevronDown } from 'lucide-react';
+import { X, Shield, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Download, Undo2, ChevronDown } from 'lucide-react';
 import { Receipt } from './WalletTab';
 import { ReportProblemDialog } from './ReportProblemDialog';
 import { useState, useEffect } from 'react';
@@ -18,7 +18,6 @@ import {
   supabase,
 } from '../../lib/supabase';
 import type { ReceiptCurrencyConfirmationOption } from '../../lib/supabase';
-import { formatReceiptDate } from '../../lib/receiptDateUtils';
 import { hasReceiptOriginal, openReceiptOriginal } from '../../lib/receiptOriginalUtils';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { getReceiptFailureDetails, getReceiptPurchaseDateDisplay } from '../../lib/receiptUiUtils';
@@ -395,7 +394,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
       ? { ...item, unitPrice: 0, lineTotal: 0 }
       : item
   ));
-  const formattedPurchaseDate = formatReceiptDate(receipt.date, 'long');
   const purchaseDateDisplay = getReceiptPurchaseDateDisplay({
     status: receipt.status,
     date: receipt.date,
@@ -409,7 +407,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     processingAttemptStartedAt,
   });
   const isCompactFailedReceipt = Boolean(receiptFailureDetails) && !requiresCurrencyConfirmation && !isFreshProcessing;
-  const importedOnDisplay = !formattedPurchaseDate ? formatReceiptDate(receipt.createdAt, 'long') : null;
   const hasReceiptItems = displayReceiptItems.length > 0;
   const showItemsLoadingState = !isCurrentReceiptDetails || itemsLoading || !itemsLoaded;
   const receiptItemSections = [
@@ -463,7 +460,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     receipt.invoiceNumber ? { label: 'Invoice number', value: receipt.invoiceNumber, icon: FileText } : null,
     receipt.customerNumber ? { label: 'Customer number', value: receipt.customerNumber, icon: FileText } : null,
     receipt.paymentMethod ? { label: 'Payment method', value: receipt.paymentMethod, icon: CreditCard } : null,
-    importedOnDisplay ? { label: 'Imported on', value: importedOnDisplay, icon: Calendar } : null,
   ]
     .filter((detail): detail is { label: string; value: string; icon: typeof FileText } => detail !== null)
     .filter((detail, index, allDetails) => {
@@ -477,7 +473,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     ? receipt.merchant
     : null;
   const primaryMerchantDetails = [
-    merchantCompanyName ? { label: 'Company', value: merchantCompanyName } : null,
+    merchantCompanyName ? { label: 'Store', value: merchantCompanyName } : null,
     receipt.merchantPhone ? { label: 'Phone', value: receipt.merchantPhone, href: `tel:${receipt.merchantPhone}` } : null,
     receipt.merchantEmail ? { label: 'Email', value: receipt.merchantEmail, href: `mailto:${receipt.merchantEmail}` } : null,
     receipt.merchantWebsite ? { label: 'Website', value: receipt.merchantWebsite, href: getWebsiteHref(receipt.merchantWebsite) } : null,
@@ -737,7 +733,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                       aria-expanded={showCompanyDetails}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md text-gray-400 bg-white/5 border-white/10 hover:bg-white/10 hover:text-white hover:border-white/20 transition-colors"
                     >
-                      <span>Company</span>
+                      <span>Store details</span>
                       <motion.div
                         animate={{ rotate: showCompanyDetails ? 180 : 0 }}
                         transition={{ duration: 0.2 }}
@@ -769,7 +765,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                 {receipt.status === 'needs_review' && (
                   <div className="mt-4 rounded-xl border border-sky-400/25 bg-sky-400/10 px-4 py-3 text-sm text-sky-100">
                     <p className="font-semibold">Document review</p>
-                    <p className="mt-1 text-xs text-sky-100/75">This looks like purchase evidence rather than a standard receipt. Keep it as evidence or delete it when you no longer need it.</p>
+                    <p className="mt-1 text-xs text-sky-100/75">This looks like a purchase document rather than a standard receipt. Keep it if it is useful to you.</p>
                   </div>
                 )}
 

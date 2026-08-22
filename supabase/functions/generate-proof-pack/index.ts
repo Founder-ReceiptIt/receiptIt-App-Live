@@ -172,7 +172,7 @@ Deno.serve(async (request) => {
   const paymentLines = ((paymentsResult.data || []) as PaymentRow[]).map((payment) => ({ text: `${asText(payment.payment_method) || asText(payment.method) || "Card"} · ${money(payment.currency || receipt.currency, payment.amount)}` }));
   const lines: Array<{ text: string; strong?: boolean }> = [
     { text: "PROOF OF PURCHASE", strong: true },
-    { text: `Merchant: ${asText(receipt.merchant) || "Seller unknown"}` },
+    { text: `Store: ${asText(receipt.merchant) || "Store unknown"}` },
     { text: `Date: ${britishDate(asText(receipt.transaction_date))}` },
     { text: `Amount: ${money(receipt.currency, receipt.amount)}` },
     ...(referenceLines.length ? [{ text: "" }, { text: "REFERENCES", strong: true }, ...referenceLines] : []),
@@ -182,7 +182,7 @@ Deno.serve(async (request) => {
     ...(asText(receipt.return_date) ? [{ text: `Return by: ${britishDate(receipt.return_date)}` }] : []),
     ...(asText(receipt.warranty_date) ? [{ text: `Warranty until: ${britishDate(receipt.warranty_date)}` }] : []),
     { text: "" },
-    { text: "Prepared as proof of purchase." },
+    { text: "Created for returns, warranties or insurance." },
   ];
 
   const { data: originalBlob, error: originalError } = await admin.storage.from("receipts").download(receipt.storage_path);

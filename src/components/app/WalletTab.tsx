@@ -576,7 +576,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
               const merchantDescription = newRow.merchant && newRow.merchant.trim()
                 ? newRow.merchant
                 : 'This receipt was already in your wallet';
-              showToast('Duplicate receipt rejected', merchantDescription);
+              showToast('Already saved', merchantDescription);
               fetchReceipts();
               return;
             }
@@ -588,7 +588,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
               const amount = parseFloat(String(newRow.amount ?? '')) || parseFloat(String((newRow as any).total ?? '')) || 0;
               const currencyCode = newRow.currency || 'GBP';
               const formattedAmount = amount > 0 ? formatCurrencyAmount(currencyCode, amount) : 'Processing...';
-              showToast('New Receipt Processed', `${merchantName} - ${formattedAmount}`);
+              showToast('New receipt saved', `${merchantName} - ${formattedAmount}`);
             }
 
             fetchReceipts();
@@ -603,7 +603,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                 ? updatedRow.merchant
                 : 'This receipt was already in your wallet';
               setReceipts((currentReceipts) => currentReceipts.filter((receipt) => receipt.id !== updatedRow.id));
-              showToast('Duplicate receipt rejected', merchantDescription);
+              showToast('Already saved', merchantDescription);
               fetchReceipts();
               return;
             }
@@ -617,7 +617,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
             if (isFinalizedReceiptStatus(updatedRow.status) && ((oldAmount === 0 && newAmount > 0) || !isFinalizedReceiptStatus(oldRow.status))) {
               const merchantName = updatedRow.merchant && updatedRow.merchant.trim() ? updatedRow.merchant : 'Receipt (Seller Unknown)';
               const currencyCode = updatedRow.currency || 'GBP';
-              showToast('Receipt processed', `${merchantName} - ${formatCurrencyAmount(currencyCode, newAmount)}`);
+              showToast('Receipt saved', `${merchantName} - ${formatCurrencyAmount(currencyCode, newAmount)}`);
             }
 
             fetchReceipts();
@@ -654,7 +654,6 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
 
   const visibleReceipts = filterVisibleWalletReceipts(dedupeWalletReceipts(effectiveReceipts));
   const finalizedReceipts = visibleReceipts.filter((receipt) => isFinalizedReceiptStatus(receipt.status));
-  const totalRecorded = finalizedReceipts.reduce((sum, receipt) => sum + getReceiptGbpDisplayAmount(receipt), 0);
   const currentMonthKey = new Date().toISOString().slice(0, 7);
   const receiptsThisMonth = finalizedReceipts.filter((receipt) => (
     (receipt.date || receipt.createdAt || '').slice(0, 7) === currentMonthKey
@@ -977,15 +976,6 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
           </div>
         </div>
 
-        <section className="mb-6">
-          <h2 className="text-base font-bold text-white">At a glance</h2>
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-white/10 bg-white/[0.045] px-4 py-3.5"><p className="text-xs font-semibold uppercase tracking-[0.13em] text-gray-500">All purchases</p><p className="mt-1 text-xl font-bold text-white">{finalizedReceipts.length}</p></div>
-            <div className="rounded-xl border border-white/10 bg-white/[0.045] px-4 py-3.5"><p className="text-xs font-semibold uppercase tracking-[0.13em] text-gray-500">Total recorded</p><p className="mt-1 text-xl font-bold text-white">£{totalRecorded.toFixed(2)}</p></div>
-            <div className="rounded-xl border border-white/10 bg-white/[0.045] px-4 py-3.5"><p className="text-xs font-semibold uppercase tracking-[0.13em] text-gray-500">Active warranties</p><p className="mt-1 text-xl font-bold text-white">{warrantyReceipts.length}</p></div>
-          </div>
-        </section>
-
         <div className="mb-6">
           <div className="inline-flex w-full backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-1">
             {[
@@ -1200,7 +1190,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
             >
               <Loader2 className="w-12 h-12 text-teal-400 animate-spin mx-auto mb-4" />
               <h3 className="text-lg font-bold text-white mb-2">Loading receipts...</h3>
-              <p className="text-gray-400">Pulling in your wallet</p>
+              <p className="text-gray-400">Getting your receipts ready</p>
             </motion.div>
           ) : filteredReceipts.length === 0 ? (
             <motion.div
@@ -1213,7 +1203,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                 <>
                   <Search className="w-12 h-12 text-gray-500 mx-auto mb-4" />
                   <h3 className="text-lg font-bold text-white mb-2">No receipts found</h3>
-                  <p className="text-gray-400">Try searching by merchant, item, or order number</p>
+                  <p className="text-gray-400">Try searching by store, item, or order number</p>
                 </>
               ) : selectedCategory || warrantyFilterActive ? (
                 <>
@@ -1225,7 +1215,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                 <>
                   <ReceiptIcon className="w-12 h-12 text-gray-500 mx-auto mb-4" />
                   <h3 className="text-lg font-bold text-white mb-2">No receipts here yet</h3>
-                  <p className="text-gray-400">Capture purchases or move receipts into this folder</p>
+                  <p className="text-gray-400">Add a receipt or move saved receipts into this folder</p>
                 </>
               )}
             </motion.div>

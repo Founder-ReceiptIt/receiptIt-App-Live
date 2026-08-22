@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Mail, Lock, Shield } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { ReceiptItWordmark } from '../ReceiptItWordmark';
 
 export function AuthForm() {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -59,20 +60,11 @@ export function AuthForm() {
         className="w-full max-w-md"
       >
         <div className="text-center mb-8">
-          <motion.div
-            animate={{
-              rotate: [0, 5, -5, 0],
-            }}
-            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-            className="inline-block"
-          >
+          <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }} className="inline-block">
             <Shield className="w-16 h-16 text-teal-400 mx-auto mb-4" strokeWidth={1.5} />
           </motion.div>
-          <h1 className="text-4xl font-bold font-mono text-white mb-2">
-            <span className="text-white">receipt</span>
-            <span className="text-teal-400">It</span>
-          </h1>
-          <p className="text-sm text-gray-400 italic">Your system for every purchase, tracked, organised and private</p>
+          <h1 className="mb-2"><ReceiptItWordmark className="text-4xl" /></h1>
+          <p className="text-sm text-gray-400">Your receipts, in one private place.</p>
         </div>
 
         <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8">
@@ -135,7 +127,7 @@ export function AuthForm() {
               </div>
             </div>
 
-            {isSignUp && <p className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-gray-400">We’ll create a private, unguessable receiptIt address for your purchase emails.</p>}
+            {isSignUp && <p className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-gray-400">We’ll create a private address for receipt emails.</p>}
 
             {error && (
               <motion.div
@@ -160,7 +152,7 @@ export function AuthForm() {
 
           <div className="mt-6 pt-6 border-t border-white/10">
             <p className="text-center text-sm text-gray-400">
-              Beta: Add purchases using your private alias or scan receipts instantly
+              Add receipts by email, photo or PDF.
             </p>
           </div>
         </div>

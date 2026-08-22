@@ -452,9 +452,9 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                   updatedStatus === 'needs_input'
                     ? 'This receipt needs one quick confirmation. Check your Wallet for the next step.'
                     : updatedStatus === 'needs_review'
-                      ? 'This may be useful purchase evidence, but it needs a quick review in your Wallet.'
+                      ? 'This looks like a purchase document and needs a quick review in your receipts.'
                       : updatedStatus === 'rejected'
-                        ? 'This file does not appear to be purchase evidence. You can review it in your Wallet.'
+                        ? 'This file does not appear to be a receipt or purchase document. You can review it in your receipts.'
                         : 'We couldn’t process this file. Retry it or upload a clearer copy from your Wallet.'
                 );
                 setScanState('error');
@@ -541,7 +541,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
         className="mb-8"
       >
-        <h1 className="text-3xl font-bold text-white">Scan Receipt</h1>
+        <h1 className="text-3xl font-bold text-white">Add receipt</h1>
       </motion.div>
 
       <div className="flex-1 flex items-center justify-center">
@@ -558,8 +558,8 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
               >
                 <div className="text-center mb-8">
                   <Camera className="w-20 h-20 text-teal-400 mx-auto mb-4" strokeWidth={1.5} />
-                  <h2 className="text-2xl font-bold text-white mb-2">Scan Your Receipt</h2>
-                  <p className="text-gray-400">Upload a photo or scan to get started</p>
+                  <h2 className="text-2xl font-bold text-white mb-2">Choose photo or PDF</h2>
+                  <p className="text-gray-400">Add a receipt from your phone or files.</p>
                 </div>
 
                 <input
@@ -591,7 +591,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                   >
                     <div className="flex items-center justify-center gap-3">
                       <Upload className="w-5 h-5 text-teal-400" />
-                      <span className="font-semibold text-white">Upload from Gallery</span>
+                      <span className="font-semibold text-white">Choose photo or PDF</span>
                     </div>
                   </button>
 
@@ -621,7 +621,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                   >
                     <div className="flex items-center justify-center gap-3">
                       <Camera className="w-5 h-5 text-white" />
-                      <span className="font-semibold text-white">Take Photo</span>
+                      <span className="font-semibold text-white">Take photo</span>
                     </div>
                   </button>
                 </div>
