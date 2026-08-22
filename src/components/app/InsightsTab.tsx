@@ -516,7 +516,7 @@ export function InsightsTab() {
 
         </div>}
 
-        <motion.div
+        {totalReceipts >= 2 && <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
@@ -557,7 +557,7 @@ export function InsightsTab() {
               </div>
             ))}
           </div>
-        </motion.div>
+        </motion.div>}
       </motion.div>
     </main>
   );
