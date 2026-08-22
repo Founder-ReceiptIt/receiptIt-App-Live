@@ -441,17 +441,17 @@ export interface Receipt {
 }
 
 export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) {
-  const { user, username, emailAlias, fullName } = useAuth();
+  const { user, username, fullName } = useAuth();
   const { showToast } = useToast();
 
   const getWelcomeName = () => {
-    // Fallback order: alias name (first part before @) > full name > username > email prefix as last fallback
-    if (emailAlias) {
-      // Extract just the first part of the email alias (before @)
-      return emailAlias.split('@')[0];
-    }
-    if (fullName) return fullName;
-    if (username) return username;
+    // Email aliases are deliberately unguessable and should never be presented
+    // as a person's name. Avoid exposing system-like usernames in the greeting.
+    const isSystemLikeName = (value: string) => (
+      /^ri-[a-f0-9]{16,}$/i.test(value) || /^[a-f0-9]{24,}$/i.test(value)
+    );
+    if (fullName && !isSystemLikeName(fullName.trim())) return fullName.trim();
+    if (username && !isSystemLikeName(username.trim())) return username.trim();
     return '';
   };
 
