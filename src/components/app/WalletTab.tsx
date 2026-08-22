@@ -101,6 +101,7 @@ const getNormalizedAmountKey = (amount: string | number | null | undefined): str
 };
 
 const getReceiptGroupingKey = ({
+  fileHash,
   storagePath,
   imageUrl,
   referenceNumber,
@@ -109,6 +110,7 @@ const getReceiptGroupingKey = ({
   amount,
   currency,
 }: {
+  fileHash?: string | null;
   storagePath?: string | null;
   imageUrl?: string | null;
   referenceNumber?: string | null;
@@ -117,6 +119,13 @@ const getReceiptGroupingKey = ({
   amount?: string | number | null;
   currency?: string | null;
 }): string => {
+  // A SHA-256 fingerprint is the only safe cross-upload identity. Storage
+  // paths are intentionally unique, so using one first allowed an exact
+  // inbound attachment to appear twice when a historical/failed retry had
+  // produced a second row.
+  const normalizedFileHash = fileHash?.trim().toLowerCase();
+  if (normalizedFileHash) return `file:${normalizedFileHash}`;
+
   const normalizedStoragePath = storagePath?.trim();
   if (normalizedStoragePath) return `storage:${normalizedStoragePath}`;
 
@@ -136,6 +145,7 @@ const getReceiptGroupingKey = ({
 
 const getReceiptGroupingKeyFromRow = (row: SupabaseReceiptRow): string =>
   getReceiptGroupingKey({
+    fileHash: row.file_hash,
     storagePath: row.storage_path,
     imageUrl: row.image_url,
     referenceNumber: row.reference_number,
@@ -355,6 +365,7 @@ const mapReceiptRowToWalletReceipt = (
     imageUrl: row.image_url || '',
     storagePath: row.storage_path || '',
     createdAt: row.created_at || undefined,
+    fileHash: row.file_hash || undefined,
     groupingKey: getReceiptGroupingKeyFromRow(row),
   };
 };
@@ -427,6 +438,7 @@ export interface Receipt {
   imageUrl?: string;
   storagePath?: string;
   createdAt?: string;
+  fileHash?: string;
   groupingKey: string;
 }
 
@@ -645,6 +657,12 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
 
   const visibleReceipts = filterVisibleWalletReceipts(dedupeWalletReceipts(effectiveReceipts));
   const finalizedReceipts = visibleReceipts.filter((receipt) => isFinalizedReceiptStatus(receipt.status));
+  const startOfCurrentMonth = new Date();
+  startOfCurrentMonth.setDate(1);
+  startOfCurrentMonth.setHours(0, 0, 0, 0);
+  const thisMonthTotal = finalizedReceipts
+    .filter((receipt) => receipt.date && new Date(receipt.date) >= startOfCurrentMonth)
+    .reduce((total, receipt) => total + (receipt.currency.toUpperCase() === 'GBP' ? receipt.amount : (receipt.amount_gbp ?? 0)), 0);
 
   const uniqueCategories = Array.from(new Set(finalizedReceipts.map(r => r.category)));
   const categories = ['All', ...uniqueCategories];
@@ -940,7 +958,21 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
           <h1 className="ri-page-heading text-3xl font-bold text-white sm:text-4xl">
             Receipts
           </h1>
+          <p className="mt-2 text-sm text-gray-400">Everything you’ve saved, in one place.</p>
         </div>
+
+        <section className="ri-surface mb-6 grid overflow-hidden sm:grid-cols-2" aria-label="Wallet summary">
+          <div className="border-b border-white/10 px-5 py-5 sm:border-b-0 sm:border-r sm:px-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-teal-300">This month</p>
+            <p className="mt-2 text-3xl font-bold text-white">£{thisMonthTotal.toFixed(2)}</p>
+            <p className="mt-1 text-sm text-gray-400">from saved receipts</p>
+          </div>
+          <div className="px-5 py-5 sm:px-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-teal-300">Saved</p>
+            <p className="mt-2 text-3xl font-bold text-white">{finalizedReceipts.length}</p>
+            <p className="mt-1 text-sm text-gray-400">{finalizedReceipts.length === 1 ? 'receipt ready when you need it' : 'receipts ready when you need them'}</p>
+          </div>
+        </section>
 
         <div className="mb-6">
           <div className="inline-flex w-full bg-white/[0.035] border border-white/10 rounded-xl p-1" role="tablist" aria-label="Wallet folders">
