@@ -77,6 +77,7 @@ export function TopNav({ activeTab, onTabChange }: TopNavProps) {
             {/* Settings/Profile */}
             <button
               onClick={() => onTabChange('settings')}
+              aria-label="Settings"
               className={`p-2 rounded-lg transition-colors ${
                 activeTab === 'settings'
                   ? 'bg-teal-400/10 text-teal-400'
