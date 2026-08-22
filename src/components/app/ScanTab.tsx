@@ -534,15 +534,14 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
   };
 
   return (
-    <main className="ri-page min-h-screen flex flex-col" aria-label="Capture a purchase">
+    <div className="pb-32 px-6 pt-8 min-h-screen flex flex-col max-w-7xl mx-auto">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
         className="mb-8"
       >
-        <h1 className="ri-page-heading text-3xl font-bold text-white sm:text-4xl">Add receipt</h1>
-        <p className="mt-3 max-w-xl text-sm text-gray-400">Add a receipt and we’ll take care of the rest.</p>
+        <h1 className="text-3xl font-bold text-white">Scan Receipt</h1>
       </motion.div>
 
       <div className="flex-1 flex items-center justify-center">
@@ -555,12 +554,12 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.3 }}
-                className="ri-surface p-6 sm:p-8"
+                className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8"
               >
                 <div className="text-center mb-8">
                   <Camera className="w-20 h-20 text-teal-400 mx-auto mb-4" strokeWidth={1.5} />
-                  <h2 className="text-2xl font-bold text-white mb-2">Choose a photo or PDF</h2>
-                  <p className="text-gray-400">JPG, PNG or PDF · up to 10 MB</p>
+                  <h2 className="text-2xl font-bold text-white mb-2">Scan Your Receipt</h2>
+                  <p className="text-gray-400">Upload a photo or scan to get started</p>
                 </div>
 
                 <input
@@ -588,11 +587,11 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                       clearScanningStorage();
                       fileInputRef.current?.click();
                     }}
-                    className="w-full bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/30 rounded-xl p-4 transition-colors active:scale-[0.99]"
+                    className="w-full backdrop-blur-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/30 rounded-xl p-4 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
                   >
                     <div className="flex items-center justify-center gap-3">
                       <Upload className="w-5 h-5 text-teal-400" />
-                      <span className="font-semibold text-white">Choose photo or PDF</span>
+                      <span className="font-semibold text-white">Upload from Gallery</span>
                     </div>
                   </button>
 
@@ -618,7 +617,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                         }
                       }, 100);
                     }}
-                    className="w-full bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl p-4 transition-colors active:scale-[0.99]"
+                    className="w-full backdrop-blur-xl bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl p-4 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
                   >
                     <div className="flex items-center justify-center gap-3">
                       <Camera className="w-5 h-5 text-white" />
@@ -627,6 +626,18 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                   </button>
                 </div>
 
+                <div className="mt-5 space-y-1 text-center">
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    For best results, keep the receipt flat, well-lit, and close enough that the text is clear.
+                  </p>
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    Long receipts may scan better if photographed closer or in sections.
+                  </p>
+                </div>
+
+                <p className="text-xs text-gray-500 text-center mt-6">
+                  Supports JPG, PNG, PDF up to 10MB
+                </p>
               </motion.div>
             )}
 
@@ -637,9 +648,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.3 }}
-                className="ri-surface p-6 sm:p-8"
-                role="status"
-                aria-live="polite"
+                className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8"
               >
                 <div className="text-center mb-6">
                   {previewUrl && selectedFile && (
@@ -686,12 +695,12 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                   </div>
 
                   <h2 className="text-2xl font-bold text-white mb-2">
-                    {scanState === 'uploading' ? 'Securing your upload' : 'Preparing your purchase'}
+                    {scanState === 'uploading' ? 'Uploading Receipt...' : 'Preparing your receipt...'}
                   </h2>
                   <p className="text-gray-400 mb-6">
                     {scanState === 'uploading'
-                      ? 'Saving the original to your private storage'
-                      : 'Getting your purchase ready for processing'
+                      ? 'Uploading your receipt to secure storage'
+                      : 'Getting everything ready for scanning'
                     }
                   </p>
 
@@ -734,9 +743,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.3 }}
-                className="ri-surface p-6 sm:p-8"
-                role="status"
-                aria-live="polite"
+                className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8"
               >
                 <div className="text-center">
                   <motion.div
@@ -747,8 +754,8 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                     <CheckCircle className="w-20 h-20 text-green-400 mx-auto mb-4" strokeWidth={1.5} />
                   </motion.div>
 
-                  <h2 className="text-2xl font-bold text-white mb-2">Upload secured</h2>
-                  <p className="text-gray-400 mb-6">We’re now processing your purchase.</p>
+                  <h2 className="text-2xl font-bold text-white mb-2">Receipt uploaded</h2>
+                  <p className="text-gray-400 mb-6">We’re now scanning your receipt</p>
 
                   <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4 mb-6">
                     <p className="text-sm text-gray-400">
@@ -820,6 +827,6 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
           </AnimatePresence>
         </div>
       </div>
-    </main>
+    </div>
   );
 }

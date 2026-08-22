@@ -23,6 +23,7 @@ import { hasReceiptOriginal, openReceiptOriginal } from '../../lib/receiptOrigin
 import { useAuth } from '../../contexts/AuthContext';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { getReceiptFailureDetails, getReceiptPurchaseDateDisplay } from '../../lib/receiptUiUtils';
+import { getProtectionClasses, getPurchaseProtection, isProtectedValueEligible } from '../../lib/purchaseProtection';
 import { useToast } from '../../contexts/ToastContext';
 
 interface WalletTabProps {
@@ -101,7 +102,6 @@ const getNormalizedAmountKey = (amount: string | number | null | undefined): str
 };
 
 const getReceiptGroupingKey = ({
-  fileHash,
   storagePath,
   imageUrl,
   referenceNumber,
@@ -110,7 +110,6 @@ const getReceiptGroupingKey = ({
   amount,
   currency,
 }: {
-  fileHash?: string | null;
   storagePath?: string | null;
   imageUrl?: string | null;
   referenceNumber?: string | null;
@@ -119,13 +118,6 @@ const getReceiptGroupingKey = ({
   amount?: string | number | null;
   currency?: string | null;
 }): string => {
-  // A SHA-256 fingerprint is the only safe cross-upload identity. Storage
-  // paths are intentionally unique, so using one first allowed an exact
-  // inbound attachment to appear twice when a historical/failed retry had
-  // produced a second row.
-  const normalizedFileHash = fileHash?.trim().toLowerCase();
-  if (normalizedFileHash) return `file:${normalizedFileHash}`;
-
   const normalizedStoragePath = storagePath?.trim();
   if (normalizedStoragePath) return `storage:${normalizedStoragePath}`;
 
@@ -145,7 +137,6 @@ const getReceiptGroupingKey = ({
 
 const getReceiptGroupingKeyFromRow = (row: SupabaseReceiptRow): string =>
   getReceiptGroupingKey({
-    fileHash: row.file_hash,
     storagePath: row.storage_path,
     imageUrl: row.image_url,
     referenceNumber: row.reference_number,
@@ -205,6 +196,15 @@ const filterVisibleWalletReceipts = (receipts: Receipt[]): Receipt[] =>
     if (isHiddenWalletReceiptStatus(receipt.status)) return false;
     return false;
   });
+
+const getReceiptGbpDisplayAmount = (receipt: Receipt): number => {
+  const receiptCurrencyCode = receipt.currency?.toUpperCase() || 'GBP';
+  if (receiptCurrencyCode === 'GBP') {
+    return receipt.amount;
+  }
+
+  return receipt.amount_gbp ?? receipt.amount;
+};
 
 const getNullableNumber = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -365,7 +365,6 @@ const mapReceiptRowToWalletReceipt = (
     imageUrl: row.image_url || '',
     storagePath: row.storage_path || '',
     createdAt: row.created_at || undefined,
-    fileHash: row.file_hash || undefined,
     groupingKey: getReceiptGroupingKeyFromRow(row),
   };
 };
@@ -438,13 +437,23 @@ export interface Receipt {
   imageUrl?: string;
   storagePath?: string;
   createdAt?: string;
-  fileHash?: string;
   groupingKey: string;
 }
 
 export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) {
-  const { user } = useAuth();
+  const { user, username, emailAlias, fullName } = useAuth();
   const { showToast } = useToast();
+
+  const getWelcomeName = () => {
+    // Fallback order: alias name (first part before @) > full name > username > email prefix as last fallback
+    if (emailAlias) {
+      // Extract just the first part of the email alias (before @)
+      return emailAlias.split('@')[0];
+    }
+    if (fullName) return fullName;
+    if (username) return username;
+    return '';
+  };
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -657,12 +666,18 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
 
   const visibleReceipts = filterVisibleWalletReceipts(dedupeWalletReceipts(effectiveReceipts));
   const finalizedReceipts = visibleReceipts.filter((receipt) => isFinalizedReceiptStatus(receipt.status));
-  const startOfCurrentMonth = new Date();
-  startOfCurrentMonth.setDate(1);
-  startOfCurrentMonth.setHours(0, 0, 0, 0);
-  const thisMonthTotal = finalizedReceipts
-    .filter((receipt) => receipt.date && new Date(receipt.date) >= startOfCurrentMonth)
-    .reduce((total, receipt) => total + (receipt.currency.toUpperCase() === 'GBP' ? receipt.amount : (receipt.amount_gbp ?? 0)), 0);
+  const totalSpent = finalizedReceipts.reduce((sum, receipt) => sum + getReceiptGbpDisplayAmount(receipt), 0);
+  const budget = {
+    currency: '£',
+    spent: Number(totalSpent.toFixed(2)),
+    limit: 2500,
+  };
+  const protectedValue = finalizedReceipts
+    .filter((receipt) => isProtectedValueEligible(receipt))
+    .reduce((sum, receipt) => sum + (receipt.amount_gbp || 0), 0);
+  const protectedPurchaseCount = finalizedReceipts.filter((receipt) => isProtectedValueEligible(receipt)).length;
+
+  const percentage = (budget.spent / budget.limit) * 100;
 
   const uniqueCategories = Array.from(new Set(finalizedReceipts.map(r => r.category)));
   const categories = ['All', ...uniqueCategories];
@@ -948,34 +963,72 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
   };
 
   return (
-    <main className="ri-page" aria-label="Wallet">
+    <div className="pb-32 px-6 pt-8 max-w-7xl mx-auto">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
         <div className="mb-8">
-          <h1 className="ri-page-heading text-3xl font-bold text-white sm:text-4xl">
-            Receipts
+          <h1 className="text-3xl font-bold text-white">
+            Welcome back{getWelcomeName() && ` ${getWelcomeName()}`}
           </h1>
-          <p className="mt-2 text-sm text-gray-400">Everything you’ve saved, in one place.</p>
         </div>
 
-        <section className="ri-surface mb-6 grid overflow-hidden sm:grid-cols-2" aria-label="Wallet summary">
-          <div className="border-b border-white/10 px-5 py-5 sm:border-b-0 sm:border-r sm:px-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-teal-300">This month</p>
-            <p className="mt-2 text-3xl font-bold text-white">£{thisMonthTotal.toFixed(2)}</p>
-            <p className="mt-1 text-sm text-gray-400">from saved receipts</p>
+        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
+          <div className="flex items-baseline justify-between mb-4">
+            <div>
+              <span className="text-4xl font-bold text-white">
+                {budget.currency}{budget.spent.toFixed(2)}
+              </span>
+              <span className="text-gray-400 ml-2">
+                / {budget.currency}{budget.limit.toFixed(2)}
+              </span>
+            </div>
+            <span className={`text-lg font-semibold ${
+              percentage > 90 ? 'text-red-400' : percentage > 70 ? 'text-orange-400' : 'text-teal-400'
+            }`}>
+              {percentage.toFixed(1)}%
+            </span>
           </div>
-          <div className="px-5 py-5 sm:px-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-teal-300">Saved</p>
-            <p className="mt-2 text-3xl font-bold text-white">{finalizedReceipts.length}</p>
-            <p className="mt-1 text-sm text-gray-400">{finalizedReceipts.length === 1 ? 'receipt ready when you need it' : 'receipts ready when you need them'}</p>
+
+          <div className="relative h-3 bg-white/5 rounded-full overflow-hidden">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${percentage}%` }}
+              transition={{ duration: 1, ease: [0.22, 1, 0.36, 1], delay: 0.3 }}
+              className={`absolute inset-y-0 left-0 rounded-full ${
+                percentage > 90
+                  ? 'bg-gradient-to-r from-red-500 to-red-400'
+                  : percentage > 70
+                  ? 'bg-gradient-to-r from-orange-500 to-orange-400'
+                  : 'bg-gradient-to-r from-teal-500 to-teal-400'
+              }`}
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse" />
+            </motion.div>
           </div>
-        </section>
+
+          <p className="text-sm text-gray-400 mt-3">
+            {budget.currency}{(budget.limit - budget.spent).toFixed(2)} remaining this month
+          </p>
+        </div>
+
+        <div className="mb-6 rounded-2xl border border-emerald-400/25 bg-gradient-to-br from-emerald-400/15 to-teal-400/5 p-5 shadow-[0_0_28px_rgba(16,185,129,0.12)]">
+          <div className="flex items-start gap-3">
+            <div className="rounded-xl border border-emerald-300/25 bg-emerald-400/10 p-2.5">
+              <Shield className="h-5 w-5 text-emerald-300" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-300">Protected value</p>
+              <p className="mt-1 text-3xl font-bold text-white">£{protectedValue.toFixed(2)}</p>
+              <p className="mt-1 text-sm text-emerald-50/70">{protectedPurchaseCount} {protectedPurchaseCount === 1 ? 'purchase has' : 'purchases have'} usable proof securely stored.</p>
+            </div>
+          </div>
+        </div>
 
         <div className="mb-6">
-          <div className="inline-flex w-full bg-white/[0.035] border border-white/10 rounded-xl p-1" role="tablist" aria-label="Wallet folders">
+          <div className="inline-flex w-full backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-1">
             {[
               { value: 'all', label: 'All', count: receipts.length },
               { value: 'work', label: 'Work', count: workReceipts.length },
@@ -989,8 +1042,6 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                   key={option.value}
                   onClick={() => setSelectedFolder(option.value as 'all' | 'work' | 'personal')}
                   layout
-                  role="tab"
-                  aria-selected={isSelected}
                   className={`${tabWidth} rounded-lg p-3 text-center font-semibold transition-all ${
                     isSelected
                       ? 'bg-teal-400/30 text-teal-100 shadow-[0_0_20px_rgba(94,234,212,0.3)]'
@@ -1042,7 +1093,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
           </motion.button>
         )}
 
-        <section className="ri-surface p-4 mb-6" aria-label="Search and filter purchases">
+        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4 mb-6">
           <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
@@ -1077,7 +1128,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
               </button>
             ))}
           </div>
-        </section>
+        </div>
 
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-white">
@@ -1237,6 +1288,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                 const hasActiveWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) > new Date();
                 const hasExpiredWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) <= new Date();
                 const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
+                const protection = getPurchaseProtection(receipt);
                 const receiptFailureDetails = getReceiptFailureDetails({
                   status: receipt.status,
                   errorReason: receipt.errorReason,
@@ -1260,7 +1312,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: index * 0.1, ease: [0.22, 1, 0.36, 1] }}
                     whileHover={{ scale: isFreshProcessing ? 1 : 1.02 }}
-                    className={`ri-card-interactive w-full border rounded-[16px] p-5 transition-all text-left relative ${
+                    className={`w-full backdrop-blur-xl border rounded-xl p-5 transition-all text-left relative ${
                       selectMode && selectedReceipts.has(receipt.id)
                         ? 'bg-teal-400/20 border-teal-400/60'
                         : isFreshProcessing
@@ -1424,7 +1476,16 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                             {receipt.category}
                           </div>
                         )}
+                        {!isFreshProcessing && (
+                          <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${getProtectionClasses(protection.state)}`}>
+                            <Shield className="w-3 h-3" />
+                            {protection.label}
+                          </div>
+                        )}
                       </div>
+                      {!isFreshProcessing && protection.state !== 'protected' && (
+                        <p className="mt-2 text-xs text-gray-400">{protection.detail}</p>
+                      )}
                     </button>
 
                     {showOpenOriginalReceiptAction && (
@@ -1561,14 +1622,14 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
               onClick={() => !isDeleting && setDeleteConfirmOpen(false)}
             >
               <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="w-full max-w-sm bg-[#0b0f0f] border border-white/10 rounded-2xl p-6 shadow-[0_26px_80px_rgba(0,0,0,.52)]"
+                className="backdrop-blur-xl bg-black/90 border border-white/10 rounded-2xl p-6 max-w-sm mx-4"
                 onClick={(e) => e.stopPropagation()}
               >
                 <h3 className="text-xl font-bold text-white mb-2">Delete Receipts?</h3>
@@ -1600,6 +1661,6 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
           )}
         </AnimatePresence>
       </motion.div>
-    </main>
+    </div>
   );
 }

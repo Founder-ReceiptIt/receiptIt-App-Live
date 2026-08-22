@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Lock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { ReceiptItWordmark } from '../ReceiptItWordmark';
 
 const signupAuthorizationKey = 'receiptit_signup_authorization';
 
@@ -69,20 +68,28 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
   }
 
   return (
-    <main className="fixed inset-0 bg-[#050505] flex items-center justify-center z-[9999] p-4" aria-label="receiptIt beta access">
-      <div className="ri-surface max-w-md w-full space-y-7 p-6 sm:p-8">
+    <div className="fixed inset-0 bg-[#050505] flex items-center justify-center z-[9999] p-4">
+      <div className="max-w-md w-full space-y-8">
         <div className="text-center space-y-4">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl border border-[#2DD4BF]/20 bg-[#2DD4BF]/10 mb-2">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[#2DD4BF]/10 mb-4">
             <Lock className="w-8 h-8 text-[#2DD4BF]" />
           </div>
 
-          <div className="flex justify-center mb-4 text-3xl"><ReceiptItWordmark /></div>
+          <div className="flex justify-center mb-4">
+            <img
+              src="/logo.png"
+              alt="receiptIt"
+              className="h-12 w-auto"
+            />
+          </div>
 
-          <p className="ri-eyebrow">Invitation access</p>
-          <h1 className="mt-2 text-2xl font-bold text-white tracking-tight"><ReceiptItWordmark /> beta</h1>
+          <h1 className="text-2xl font-bold text-white tracking-tight">
+            TECHNICAL ALPHA
+          </h1>
 
           <p className="text-gray-400 text-sm leading-relaxed">
-            This private beta is for invited testers. Enter your access key to continue.
+            Access restricted to verified partners.<br />
+            Please enter your Access Key below.
           </p>
         </div>
 
@@ -96,14 +103,13 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
                 setError('');
               }}
               placeholder="Enter Access Key"
-              aria-label="Access Key"
               className="w-full px-4 py-3 bg-black/50 border border-gray-800 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:border-[#2DD4BF] focus:ring-1 focus:ring-[#2DD4BF] transition-all font-mono text-sm"
               disabled={isLoading}
             />
           </div>
 
           {error && (
-            <div className="text-red-400 text-xs text-center py-2 px-3 bg-red-950/20 border border-red-900/30 rounded-lg" role="alert">
+            <div className="text-red-400 text-xs text-center py-2 px-3 bg-red-950/20 border border-red-900/30 rounded-lg">
               {error}
             </div>
           )}
@@ -117,7 +123,7 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
           </button>
         </form>
 
-        <div className="text-center pt-1">
+        <div className="text-center pt-4">
           <p className="text-gray-600 text-xs">
             Need an access key?<br />
             <a
@@ -129,6 +135,6 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
           </p>
         </div>
       </div>
-    </main>
+    </div>
   );
 }

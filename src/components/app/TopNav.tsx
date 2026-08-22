@@ -1,7 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Wallet, AtSign, ScanLine, TrendingUp, Settings, Menu, X } from 'lucide-react';
 import { useState } from 'react';
-import { ReceiptItWordmark } from '../ReceiptItWordmark';
 
 interface TopNavProps {
   activeTab: string;
@@ -28,23 +27,18 @@ export function TopNav({ activeTab, onTabChange }: TopNavProps) {
       initial={{ y: -100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-      className="ri-top-nav fixed top-0 left-0 right-0 z-50 border-b"
+      className="fixed top-0 left-0 right-0 z-50 backdrop-blur-xl bg-black/50 border-b border-white/10"
     >
       <div className="max-w-7xl mx-auto px-6 py-4">
         <div className="flex items-center justify-between">
           {/* Logo - Left Side */}
           <motion.div
             whileHover={{ scale: 1.05 }}
-            className="text-2xl font-bold font-mono tracking-tight cursor-pointer select-none"
+            className="text-2xl font-bold font-mono tracking-tight cursor-pointer"
             onClick={() => onTabChange('wallet')}
-            role="button"
-            tabIndex={0}
-            aria-label="Go to Wallet"
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') onTabChange('wallet');
-            }}
           >
-            <ReceiptItWordmark />
+            <span className="text-white">receipt</span>
+            <span className="text-teal-400">It</span>
           </motion.div>
 
           {/* Desktop Navigation Links - Right Side */}
@@ -54,7 +48,6 @@ export function TopNav({ activeTab, onTabChange }: TopNavProps) {
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}
                 className="relative group"
-                aria-current={activeTab === tab.id ? 'page' : undefined}
               >
                 <div className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors">
                   <tab.icon
@@ -89,8 +82,6 @@ export function TopNav({ activeTab, onTabChange }: TopNavProps) {
                   ? 'bg-teal-400/10 text-teal-400'
                   : 'text-gray-400 hover:bg-white/5 hover:text-white'
               }`}
-              aria-label="Open Settings"
-              aria-current={activeTab === 'settings' ? 'page' : undefined}
             >
               <Settings className="w-5 h-5" strokeWidth={1.5} />
             </button>
@@ -100,8 +91,6 @@ export function TopNav({ activeTab, onTabChange }: TopNavProps) {
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             className="md:hidden p-2 rounded-lg text-gray-400 hover:bg-white/5 hover:text-white transition-colors"
-            aria-expanded={isMobileMenuOpen}
-            aria-label={isMobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
           >
             {isMobileMenuOpen ? (
               <X className="w-6 h-6" strokeWidth={1.5} />
@@ -131,7 +120,6 @@ export function TopNav({ activeTab, onTabChange }: TopNavProps) {
                         ? 'bg-teal-400/10 text-teal-400 border border-teal-400/30'
                         : 'text-gray-400 hover:bg-white/5 hover:text-white'
                     }`}
-                    aria-current={activeTab === tab.id ? 'page' : undefined}
                   >
                     <tab.icon className="w-5 h-5" strokeWidth={1.5} />
                     <span className="text-sm font-semibold">{tab.label}</span>
@@ -144,7 +132,6 @@ export function TopNav({ activeTab, onTabChange }: TopNavProps) {
                       ? 'bg-teal-400/10 text-teal-400 border border-teal-400/30'
                       : 'text-gray-400 hover:bg-white/5 hover:text-white'
                   }`}
-                  aria-current={activeTab === 'settings' ? 'page' : undefined}
                 >
                   <Settings className="w-5 h-5" strokeWidth={1.5} />
                   <span className="text-sm font-semibold">Settings</span>
