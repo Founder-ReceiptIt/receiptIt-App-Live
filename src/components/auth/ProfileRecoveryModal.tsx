@@ -6,15 +6,9 @@ import { useAuth } from '../../contexts/AuthContext';
 export function ProfileRecoveryModal() {
   const [username, setUsername] = useState('');
   const [fullName, setFullName] = useState('');
-  const [aliasUsername, setAliasUsername] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { recoverProfile, signOut } = useAuth();
-
-  const handleAliasChange = (value: string) => {
-    const sanitized = value.toLowerCase().replace(/[^a-z0-9-]/g, '');
-    setAliasUsername(sanitized);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,8 +20,7 @@ export function ProfileRecoveryModal() {
         throw new Error('Please enter a username');
       }
 
-      const finalAlias = aliasUsername ? `${aliasUsername}@in.receiptit.app` : null;
-      const { error } = await recoverProfile(username, fullName, finalAlias);
+      const { error } = await recoverProfile(username, fullName, null);
 
       if (error) {
         throw error;
@@ -94,28 +87,6 @@ export function ProfileRecoveryModal() {
                 placeholder="John Doe"
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-teal-400/50 transition-colors"
               />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-300 mb-2">
-                Email Alias
-              </label>
-              <div className="relative flex items-center bg-white/5 border border-white/10 rounded-lg overflow-hidden focus-within:border-teal-400/50 transition-colors">
-                <input
-                  type="text"
-                  value={aliasUsername}
-                  onChange={(e) => handleAliasChange(e.target.value)}
-                  placeholder="john"
-                  pattern="[a-z0-9-]*"
-                  className="flex-1 pl-4 pr-2 py-3 bg-transparent text-white placeholder-gray-500 focus:outline-none"
-                />
-                <div className="px-4 py-3 text-gray-400 bg-white/5 border-l border-white/10 font-mono text-sm">
-                  @in.receiptit.app
-                </div>
-              </div>
-              <p className="text-xs text-gray-400 mt-2">
-                Use lowercase letters, numbers, and hyphens only. Leave blank to skip.
-              </p>
             </div>
 
             {error && (
