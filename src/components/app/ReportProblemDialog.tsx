@@ -100,7 +100,7 @@ export function ReportProblemDialog({
         return;
       }
 
-      showToast('Problem reported', 'Thanks for helping us improve receiptIt beta');
+      showToast('Problem reported', 'Thanks for helping us improve the beta');
       onClose();
     } catch (error) {
       if (import.meta.env.DEV) {
