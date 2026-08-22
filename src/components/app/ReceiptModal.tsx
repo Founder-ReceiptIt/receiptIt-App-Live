@@ -22,7 +22,6 @@ import { formatReceiptDate } from '../../lib/receiptDateUtils';
 import { hasReceiptOriginal, openReceiptOriginal } from '../../lib/receiptOriginalUtils';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { getReceiptFailureDetails, getReceiptPurchaseDateDisplay } from '../../lib/receiptUiUtils';
-import { getProtectionClasses, getPurchaseProtection } from '../../lib/purchaseProtection';
 import { useToast } from '../../contexts/ToastContext';
 
 const getCurrencySymbol = (currencyCode: string): string => {
@@ -142,31 +141,12 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const [showOtherCurrencyOptions, setShowOtherCurrencyOptions] = useState(false);
   const [showReportProblemDialog, setShowReportProblemDialog] = useState(false);
   const [isGeneratingProofPack, setIsGeneratingProofPack] = useState(false);
-  const [activity, setActivity] = useState<Array<{ event_type: string; created_at: string }>>([]);
 
   useEffect(() => {
     setShowMoreDetails(false);
     setShowCompanyDetails(false);
     setShowOtherCurrencyOptions(false);
     setShowReportProblemDialog(false);
-  }, [receipt?.id]);
-
-  useEffect(() => {
-    if (!receipt?.id) {
-      setActivity([]);
-      return;
-    }
-    let cancelled = false;
-    void supabase
-      .from('purchase_activity')
-      .select('event_type,created_at')
-      .eq('receipt_id', receipt.id)
-      .order('created_at', { ascending: false })
-      .limit(8)
-      .then(({ data }) => {
-        if (!cancelled) setActivity((data || []) as Array<{ event_type: string; created_at: string }>);
-      });
-    return () => { cancelled = true; };
   }, [receipt?.id]);
 
   useEffect(() => {
@@ -512,14 +492,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const today = new Date();
   const isWarrantyActive = warrantyEndDate && warrantyEndDate > today;
 
-  // Calculate specific remaining time for the display
-  const daysRemaining = warrantyEndDate ? Math.floor((warrantyEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : 0;
-  const yearsRemaining = Math.floor(daysRemaining / 365);
-  const monthsRemaining = Math.floor((daysRemaining % 365) / 30);
-
-  // Return window status
   const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
-  const protection = getPurchaseProtection(receipt);
 
   const hasOriginalReceipt = hasReceiptOriginal(receipt);
   const shouldHideBreakdownSection = isCompactFailedReceipt || (
@@ -554,19 +527,12 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     setIsGeneratingProofPack(true);
     try {
       const { data, error } = await generateProofPack(receipt.id);
-      if (error || !data?.downloadUrl) throw error || new Error('Proof Pack could not be generated');
+      if (error || !data?.downloadUrl) throw error || new Error('Proof of purchase could not be generated');
       window.open(data.downloadUrl, '_blank', 'noopener,noreferrer');
-      showToast('Proof Pack ready', 'Your private evidence summary opened in a new tab.');
-      const { data: refreshed } = await supabase
-        .from('purchase_activity')
-        .select('event_type,created_at')
-        .eq('receipt_id', receipt.id)
-        .order('created_at', { ascending: false })
-        .limit(8);
-      setActivity((refreshed || []) as Array<{ event_type: string; created_at: string }>);
+      showToast('Proof of purchase ready', 'Opened in a new tab.');
     } catch (error) {
-      console.error('[ReceiptModal] Proof Pack error:', error);
-      showToast('Proof Pack unavailable', 'Please try again in a moment.');
+      console.error('[ReceiptModal] Proof of purchase error:', error);
+      showToast('Proof of purchase unavailable', 'Please try again in a moment.');
     } finally {
       setIsGeneratingProofPack(false);
     }
@@ -592,7 +558,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
           initial={{ y: "100%", opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: "100%", opacity: 0 }}
-          transition={{ type: "spring", damping: 30, stiffness: 300 }}
+          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
           className="relative w-full max-w-2xl mx-4 mb-4 md:mb-0"
           onClick={(e) => e.stopPropagation()}
         >
@@ -600,32 +566,30 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
             
             {/* --- HEADER --- */}
             <div className="p-6 border-b border-white/10 flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-white">Purchase Passport</h2>
+              <h2 className="text-2xl font-bold text-white">Receipt</h2>
               <div className="flex items-center gap-2">
                 {hasOriginalReceipt && isFinalizedReceiptStatus(receipt.status) && (
                   <motion.button
                     type="button"
                     onClick={() => void handleProofPack()}
                     disabled={isGeneratingProofPack}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
+                    whileTap={{ scale: 0.985 }}
                     className="inline-flex h-10 items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-4 text-sm font-semibold text-emerald-100 transition-colors hover:border-emerald-300/45 hover:text-white disabled:opacity-50"
                   >
                     <FileText className="w-4 h-4" />
-                    <span>{isGeneratingProofPack ? 'Preparing...' : 'Proof Pack'}</span>
+                    <span>{isGeneratingProofPack ? 'Preparing...' : 'Create proof of purchase'}</span>
                   </motion.button>
                 )}
                 {hasOriginalReceipt && (
                   <motion.button
                     type="button"
                     onClick={(event) => void handleDownloadClick(event)}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
+                    whileTap={{ scale: 0.985 }}
                     className="inline-flex h-10 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 text-sm font-semibold text-gray-300 transition-colors hover:border-teal-400/30 hover:text-teal-300"
-                    title="View Original Receipt"
+                    title="View receipt"
                   >
                     <Download className="w-4 h-4" />
-                    <span>View original</span>
+                    <span>View receipt</span>
                   </motion.button>
                 )}
                 <motion.button
@@ -754,10 +718,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                     <Tag className="w-4 h-4" />
                     {receipt.category || 'Receipt'}
                   </div>
-                  <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border ${getProtectionClasses(protection.state)}`}>
-                    <Shield className="w-4 h-4" />
-                    {protection.label}
-                  </div>
                   {heroMetadataChips.map((chip) => {
                     const Icon = chip.icon;
 
@@ -806,35 +766,12 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   )}
                 </div>
 
-                <div className={`mt-4 rounded-xl border px-4 py-3 ${getProtectionClasses(protection.state)}`}>
-                  <div className="flex items-start gap-3">
-                    <Shield className="mt-0.5 h-5 w-5 shrink-0" />
-                    <div>
-                      <p className="text-sm font-semibold">{protection.label}</p>
-                      <p className="mt-0.5 text-xs opacity-80">{protection.detail}</p>
-                    </div>
-                  </div>
-                </div>
-
                 {receipt.status === 'needs_review' && (
                   <div className="mt-4 rounded-xl border border-sky-400/25 bg-sky-400/10 px-4 py-3 text-sm text-sky-100">
                     <p className="font-semibold">Document review</p>
                     <p className="mt-1 text-xs text-sky-100/75">This looks like purchase evidence rather than a standard receipt. Keep it as evidence or delete it when you no longer need it.</p>
                   </div>
                 )}
-
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-xl border border-white/10 bg-black/10 px-4 py-3">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500">Proof</p>
-                    <p className="mt-1 text-sm font-semibold text-gray-100">{hasOriginalReceipt ? 'Original secured privately' : 'Original unavailable'}</p>
-                    <p className="mt-1 text-xs text-gray-500">{hasOriginalReceipt ? 'Opened only with a short-lived signed link.' : 'This purchase needs its original evidence.'}</p>
-                  </div>
-                  <div className="rounded-xl border border-white/10 bg-black/10 px-4 py-3">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500">Captured via</p>
-                    <p className="mt-1 text-sm font-semibold capitalize text-gray-100">{receipt.source || 'Scan'}</p>
-                    <p className="mt-1 text-xs text-gray-500">{receipt.documentType ? receipt.documentType.replace(/_/g, ' ') : 'Purchase document'}</p>
-                  </div>
-                </div>
 
                 <AnimatePresence>
                   {showCompanyDetails && hasCompanyDetails && (
@@ -980,172 +917,11 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                 </div>
               )}
 
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-                <h4 className="flex items-center gap-2 text-base font-bold text-white">
-                  <Clock className="h-4 w-4 text-teal-300" />
-                  Purchase timeline
-                </h4>
-                <div className="mt-4 space-y-3 text-sm">
-                  <div className="flex items-start gap-3">
-                    <span className="mt-1.5 h-2 w-2 rounded-full bg-teal-300" />
-                    <div><p className="font-medium text-gray-100">Purchase captured</p><p className="text-xs text-gray-500">{formatReceiptDate(receipt.createdAt, 'long') || 'Captured by ReceiptIt'}</p></div>
-                  </div>
-                  {isFinalizedReceiptStatus(receipt.status) && (
-                    <div className="flex items-start gap-3"><span className="mt-1.5 h-2 w-2 rounded-full bg-emerald-300" /><div><p className="font-medium text-gray-100">Original secured</p><p className="text-xs text-gray-500">Private proof is available through a signed link.</p></div></div>
-                  )}
-                  {receipt.status === 'needs_review' && (
-                    <div className="flex items-start gap-3"><span className="mt-1.5 h-2 w-2 rounded-full bg-sky-300" /><div><p className="font-medium text-gray-100">Document review requested</p><p className="text-xs text-gray-500">ReceiptIt kept this evidence out of spending totals.</p></div></div>
-                  )}
-                  {activity.map((event) => (
-                    <div key={`${event.event_type}-${event.created_at}`} className="flex items-start gap-3">
-                      <span className="mt-1.5 h-2 w-2 rounded-full bg-white/40" />
-                      <div><p className="font-medium text-gray-100">{event.event_type === 'proof_pack_generated' ? 'Proof Pack generated' : 'Original viewed'}</p><p className="text-xs text-gray-500">{formatReceiptDate(event.created_at, 'long') || 'Recorded privately'}</p></div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* --- WARRANTY SECTION (Animated & Glowing) --- */}
-              {isWarrantyActive && (
-                <motion.div
-                  initial={{ scale: 0.95, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ delay: 0.1 }}
-                  className="relative"
-                >
-                  <div className="absolute -inset-4 bg-gradient-to-r from-teal-400/20 to-cyan-400/20 blur-3xl" />
-                  <div className="relative backdrop-blur-xl bg-gradient-to-br from-teal-400/10 to-cyan-400/10 border-2 border-teal-400/30 rounded-2xl p-6">
-                    <div className="flex items-center gap-4">
-                      <motion.div
-                        animate={{ rotate: [0, 5, -5, 0], scale: [1, 1.05, 1] }}
-                        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                        className="relative"
-                      >
-                         <Shield className="w-12 h-12 text-teal-400 relative z-10" strokeWidth={1.5} />
-                      </motion.div>
-
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="w-2 h-2 bg-teal-400 rounded-full animate-pulse" />
-                          <span className="text-teal-400 font-bold text-xs uppercase tracking-widest">Warranty Active</span>
-                        </div>
-                        <div className="text-3xl font-bold text-white mb-2">
-                          {yearsRemaining > 0 && <span>{yearsRemaining} {yearsRemaining === 1 ? 'Year' : 'Years'}{monthsRemaining > 0 ? ', ' : ''}</span>}
-                          {monthsRemaining > 0 && <span>{monthsRemaining} {monthsRemaining === 1 ? 'Month' : 'Months'}</span>}
-                          {yearsRemaining === 0 && monthsRemaining === 0 && <span>{daysRemaining} {daysRemaining === 1 ? 'Day' : 'Days'}</span>}
-                        </div>
-                        <div className="flex items-center gap-4 text-sm text-gray-400">
-                           <div className="flex items-center gap-1.5">
-                              <Calendar className="w-4 h-4" />
-                              <span>{warrantyEndDate?.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                           </div>
-                           <div className="flex items-center gap-1.5">
-                              <Clock className="w-4 h-4" />
-                              <span>{daysRemaining} days remaining</span>
-                           </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* --- EXPIRED WARRANTY SECTION --- */}
-              {!isWarrantyActive && warrantyEndDate && (
-                <motion.div
-                  initial={{ scale: 0.95, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ delay: 0.1 }}
-                  className="backdrop-blur-xl bg-gradient-to-br from-red-400/10 to-red-900/10 border-2 border-red-400/30 rounded-2xl p-6"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 flex-shrink-0 rounded-xl bg-red-400/10 border border-red-400/30 flex items-center justify-center">
-                      <Shield className="w-8 h-8 text-red-400" strokeWidth={1.5} />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-red-400 font-bold text-xs uppercase tracking-widest">Warranty Expired</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-gray-400">
-                        <Calendar className="w-4 h-4" />
-                        <span>Expired on {warrantyEndDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* --- RETURN WINDOW SECTION --- */}
-              {returnWindowStatus.status === 'active' && (
-                <motion.div
-                  initial={{ scale: 0.95, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ delay: 0.15 }}
-                  className="backdrop-blur-xl bg-gradient-to-br from-red-400/10 to-orange-900/10 border-2 border-red-400/30 rounded-2xl p-6"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 flex-shrink-0 rounded-xl bg-red-400/10 border border-red-400/30 flex items-center justify-center">
-                      <Undo2 className="w-7 h-7 text-red-400" strokeWidth={1.5} />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-red-400 font-bold text-xs uppercase tracking-widest">Return Window Active</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-gray-400">
-                        <Clock className="w-4 h-4" />
-                        <span>{returnWindowStatus.daysLeft} days remaining</span>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {returnWindowStatus.status === 'urgent' && (
-                <motion.div
-                  initial={{ scale: 0.95, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ delay: 0.15 }}
-                  className="backdrop-blur-xl bg-gradient-to-br from-red-500/20 to-orange-900/20 border-2 border-red-500/50 rounded-2xl p-6 animate-pulse"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 flex-shrink-0 rounded-xl bg-red-500/20 border border-red-500/40 flex items-center justify-center">
-                      <Undo2 className="w-7 h-7 text-red-400" strokeWidth={1.5} />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-red-400 font-bold text-xs uppercase tracking-widest">⚠️ Return Window Ending Soon</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-red-300">
-                        <Clock className="w-4 h-4" />
-                        <span className="font-bold">{returnWindowStatus.message}</span>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {returnWindowStatus.status === 'expired' && receipt.returnDate && (
-                <motion.div
-                  initial={{ scale: 0.95, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ delay: 0.15 }}
-                  className="backdrop-blur-xl bg-gradient-to-br from-gray-400/10 to-gray-900/10 border-2 border-gray-400/30 rounded-2xl p-6"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 flex-shrink-0 rounded-xl bg-gray-400/10 border border-gray-400/30 flex items-center justify-center">
-                      <Undo2 className="w-7 h-7 text-gray-500" strokeWidth={1.5} />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-gray-500 font-bold text-xs uppercase tracking-widest">Return Window Expired</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-gray-400">
-                        <Calendar className="w-4 h-4" />
-                        <span>Expired on {new Date(receipt.returnDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
+              {(warrantyEndDate || receipt.returnDate) && (
+                <section className="grid gap-3 sm:grid-cols-2">
+                  {warrantyEndDate && <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-4"><div className="flex items-center gap-2 text-sm font-semibold text-white"><Shield className="h-4 w-4 text-teal-300" />Warranty</div><p className="mt-2 text-sm text-gray-400">{isWarrantyActive ? `Ends ${warrantyEndDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : `Ended ${warrantyEndDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`}</p></div>}
+                  {receipt.returnDate && <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-4"><div className="flex items-center gap-2 text-sm font-semibold text-white"><Undo2 className="h-4 w-4 text-teal-300" />Returns</div><p className="mt-2 text-sm text-gray-400">{returnWindowStatus.status === 'expired' ? `Ended ${new Date(receipt.returnDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : returnWindowStatus.message}</p></div>}
+                </section>
               )}
 
               {/* --- BREAKDOWN SECTION --- */}
@@ -1158,7 +934,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                 >
                   <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                     <FileText className="w-5 h-5 text-teal-400" />
-                    Receipt Breakdown
+                    Items & payment
                   </h4>
 
                   {showItemsLoadingState ? (

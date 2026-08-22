@@ -128,7 +128,7 @@ Deno.serve(async (request) => {
     console.error("[generate-proof-pack] missing authorization");
     return json(request, { error: "Authentication is required" }, 401);
   }
-  if (!supabaseUrl || !serviceRoleKey) return json(request, { error: "Proof Pack is temporarily unavailable" }, 503);
+  if (!supabaseUrl || !serviceRoleKey) return json(request, { error: "Proof of purchase is temporarily unavailable" }, 503);
 
   let receiptId = "";
   try {
@@ -149,7 +149,7 @@ Deno.serve(async (request) => {
     console.error("[generate-proof-pack] purchase lookup failed", { message: receiptError?.message });
     return json(request, { error: "Purchase not found" }, 404);
   }
-  if (!['parsed', 'completed'].includes(receipt.status || '')) return json(request, { error: "Proof pack is available once a receipt is ready" }, 409);
+  if (!['parsed', 'completed'].includes(receipt.status || '')) return json(request, { error: "Proof of purchase is available once a receipt is ready" }, 409);
   if (!receipt.storage_path) return json(request, { error: "No original receipt is available for this receipt" }, 409);
 
   const [itemsResult, paymentsResult] = await Promise.all([
@@ -161,29 +161,28 @@ Deno.serve(async (request) => {
     return json(request, { error: "Purchase details are temporarily unavailable" }, 503);
   }
 
+  const referenceLines: Array<{ text: string }> = [
+    ...(asText(receipt.order_number) ? [{ text: `Order number: ${receipt.order_number}` }] : []),
+    ...(asText(receipt.invoice_number) ? [{ text: `Invoice number: ${receipt.invoice_number}` }] : []),
+    ...(asText(receipt.reference_number) && !/^EMAIL-/i.test(asText(receipt.reference_number)) ? [{ text: `Reference: ${receipt.reference_number}` }] : []),
+    ...(asText(receipt.customer_number) ? [{ text: `Customer number: ${receipt.customer_number}` }] : []),
+    ...(asText(receipt.loyalty_member_id) ? [{ text: `Loyalty number: ${receipt.loyalty_member_id}` }] : []),
+  ];
+  const itemLines = ((itemsResult.data || []) as ItemRow[]).map((item) => ({ text: `${asText(item.description) || "Item"}${toNumber(item.quantity) !== null ? ` · ${item.quantity}${asText(item.quantity_unit) ? ` ${item.quantity_unit}` : ""}` : ""}${toNumber(item.line_total) !== null ? ` · ${money(receipt.currency, item.line_total)}` : toNumber(item.unit_price) !== null ? ` · ${money(receipt.currency, item.unit_price)}` : ""}` }));
+  const paymentLines = ((paymentsResult.data || []) as PaymentRow[]).map((payment) => ({ text: `${asText(payment.payment_method) || asText(payment.method) || "Card"} · ${money(payment.currency || receipt.currency, payment.amount)}` }));
   const lines: Array<{ text: string; strong?: boolean }> = [
     { text: "PROOF OF PURCHASE", strong: true },
     { text: `Merchant: ${asText(receipt.merchant) || "Seller unknown"}` },
     { text: `Date: ${britishDate(asText(receipt.transaction_date))}` },
     { text: `Amount: ${money(receipt.currency, receipt.amount)}` },
-    { text: "" },
-    { text: "REFERENCES", strong: true },
-    ...(asText(receipt.order_number) ? [{ text: `Order number: ${receipt.order_number}` }] : []),
-    ...(asText(receipt.invoice_number) ? [{ text: `Invoice number: ${receipt.invoice_number}` }] : []),
-    ...(asText(receipt.reference_number) ? [{ text: `Reference: ${receipt.reference_number}` }] : []),
-    ...(asText(receipt.customer_number) ? [{ text: `Customer number: ${receipt.customer_number}` }] : []),
-    ...(asText(receipt.loyalty_member_id) ? [{ text: `Loyalty number: ${receipt.loyalty_member_id}` }] : []),
-    { text: "" },
-    { text: "ITEMS", strong: true },
-    ...((itemsResult.data || []) as ItemRow[]).map((item) => ({ text: `${asText(item.description) || "Item"}${toNumber(item.quantity) !== null ? ` · ${item.quantity}${asText(item.quantity_unit) ? ` ${item.quantity_unit}` : ""}` : ""}${toNumber(item.line_total) !== null ? ` · ${money(receipt.currency, item.line_total)}` : toNumber(item.unit_price) !== null ? ` · ${money(receipt.currency, item.unit_price)}` : ""}` })),
-    { text: "" },
-    { text: "PAYMENT", strong: true },
-    ...((paymentsResult.data || []) as PaymentRow[]).map((payment) => ({ text: `${asText(payment.payment_method) || asText(payment.method) || "Card"} · ${money(payment.currency || receipt.currency, payment.amount)}` })),
+    ...(referenceLines.length ? [{ text: "" }, { text: "REFERENCES", strong: true }, ...referenceLines] : []),
+    ...(itemLines.length ? [{ text: "" }, { text: "ITEMS", strong: true }, ...itemLines] : []),
+    ...(paymentLines.length ? [{ text: "" }, { text: "PAYMENT", strong: true }, ...paymentLines] : []),
     ...(asText(receipt.return_date) || asText(receipt.warranty_date) ? [{ text: "" }, { text: "AFTERCARE", strong: true }] : []),
     ...(asText(receipt.return_date) ? [{ text: `Return by: ${britishDate(receipt.return_date)}` }] : []),
     ...(asText(receipt.warranty_date) ? [{ text: `Warranty until: ${britishDate(receipt.warranty_date)}` }] : []),
     { text: "" },
-    { text: "This pack summarises the receipt details supplied to receiptIt." },
+    { text: "Prepared as proof of purchase." },
   ];
 
   const { data: originalBlob, error: originalError } = await admin.storage.from("receipts").download(receipt.storage_path);
@@ -198,20 +197,20 @@ Deno.serve(async (request) => {
   const { error: uploadError } = await admin.storage.from("proof-packs").upload(storagePath, pdf, { contentType: "application/pdf", upsert: false });
   if (uploadError) {
     console.error("[generate-proof-pack] storage upload failed", { message: uploadError.message });
-    return json(request, { error: "We could not secure the Proof Pack. Please try again." }, 503);
+    return json(request, { error: "We could not prepare proof of purchase. Please try again." }, 503);
   }
 
   const { error: recordError } = await admin.from("proof_packs").insert({ id: packId, user_id: verified.user.id, receipt_id: receipt.id, storage_path: storagePath, status: "ready" });
   if (recordError) {
     console.error("[generate-proof-pack] record insert failed", { message: recordError.message });
     await admin.storage.from("proof-packs").remove([storagePath]);
-    return json(request, { error: "We could not save the Proof Pack. Please try again." }, 503);
+    return json(request, { error: "We could not save proof of purchase. Please try again." }, 503);
   }
   await admin.from("purchase_activity").insert({ user_id: verified.user.id, receipt_id: receipt.id, event_type: "proof_pack_generated" });
   const { data: signed, error: signedError } = await admin.storage.from("proof-packs").createSignedUrl(storagePath, 60);
   if (signedError || !signed?.signedUrl) {
     console.error("[generate-proof-pack] signed URL failed", { message: signedError?.message });
-    return json(request, { error: "Proof Pack created but could not be opened. Please try again." }, 503);
+    return json(request, { error: "Proof of purchase was created but could not be opened. Please try again." }, 503);
   }
 
   return json(request, { packId, downloadUrl: signed.signedUrl, expiresInSeconds: 60 });

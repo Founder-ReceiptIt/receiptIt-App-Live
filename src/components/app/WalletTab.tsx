@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Receipt as ReceiptIcon, Tag, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Shield, Loader2, Car, Home, Plane, Zap, Utensils, Undo2, Trash2, CheckSquare, Square, ChevronDown, Download } from 'lucide-react';
+import { Receipt as ReceiptIcon, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Loader2, Car, Home, Plane, Zap, Utensils, Undo2, Trash2, CheckSquare, Square, ChevronDown, Download, AlertCircle } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { ReportProblemDialog } from './ReportProblemDialog';
@@ -23,7 +23,6 @@ import { hasReceiptOriginal, openReceiptOriginal } from '../../lib/receiptOrigin
 import { useAuth } from '../../contexts/AuthContext';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { getReceiptFailureDetails, getReceiptPurchaseDateDisplay } from '../../lib/receiptUiUtils';
-import { getProtectionClasses, getPurchaseProtection, isProtectedValueEligible } from '../../lib/purchaseProtection';
 import { useToast } from '../../contexts/ToastContext';
 
 interface WalletTabProps {
@@ -441,19 +440,8 @@ export interface Receipt {
 }
 
 export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) {
-  const { user, username, emailAlias, fullName } = useAuth();
+  const { user } = useAuth();
   const { showToast } = useToast();
-
-  const getWelcomeName = () => {
-    // Fallback order: alias name (first part before @) > full name > username > email prefix as last fallback
-    if (emailAlias) {
-      // Extract just the first part of the email alias (before @)
-      return emailAlias.split('@')[0];
-    }
-    if (fullName) return fullName;
-    if (username) return username;
-    return '';
-  };
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -666,18 +654,19 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
 
   const visibleReceipts = filterVisibleWalletReceipts(dedupeWalletReceipts(effectiveReceipts));
   const finalizedReceipts = visibleReceipts.filter((receipt) => isFinalizedReceiptStatus(receipt.status));
-  const totalSpent = finalizedReceipts.reduce((sum, receipt) => sum + getReceiptGbpDisplayAmount(receipt), 0);
-  const budget = {
-    currency: '£',
-    spent: Number(totalSpent.toFixed(2)),
-    limit: 2500,
-  };
-  const protectedValue = finalizedReceipts
-    .filter((receipt) => isProtectedValueEligible(receipt))
-    .reduce((sum, receipt) => sum + (receipt.amount_gbp || 0), 0);
-  const protectedPurchaseCount = finalizedReceipts.filter((receipt) => isProtectedValueEligible(receipt)).length;
-
-  const percentage = (budget.spent / budget.limit) * 100;
+  const currentMonthKey = new Date().toISOString().slice(0, 7);
+  const receiptsThisMonth = finalizedReceipts.filter((receipt) => (
+    (receipt.date || receipt.createdAt || '').slice(0, 7) === currentMonthKey
+  ));
+  const spentThisMonth = receiptsThisMonth.reduce((sum, receipt) => sum + getReceiptGbpDisplayAmount(receipt), 0);
+  const actionReceipts = visibleReceipts.flatMap((receipt) => {
+    if (receipt.status === 'needs_review') return [{ receipt, label: 'Review needed', detail: `Review ${receipt.merchant || 'this document'}` }];
+    if (receipt.status === 'failed') return [{ receipt, label: 'Try again', detail: `We could not finish ${receipt.merchant || 'this receipt'}` }];
+    const returnStatus = getReturnWindowStatus(receipt.returnDate);
+    if (returnStatus.status === 'urgent') return [{ receipt, label: '1 thing needs you', detail: returnStatus.message }];
+    return [];
+  });
+  const primaryAction = actionReceipts[0];
 
   const uniqueCategories = Array.from(new Set(finalizedReceipts.map(r => r.category)));
   const categories = ['All', ...uniqueCategories];
@@ -969,60 +958,14 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white">
-            Welcome back{getWelcomeName() && ` ${getWelcomeName()}`}
-          </h1>
-        </div>
+        <div className="mb-8"><h1 className="text-3xl font-bold text-white">Receipts</h1></div>
 
-        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
-          <div className="flex items-baseline justify-between mb-4">
-            <div>
-              <span className="text-4xl font-bold text-white">
-                {budget.currency}{budget.spent.toFixed(2)}
-              </span>
-              <span className="text-gray-400 ml-2">
-                / {budget.currency}{budget.limit.toFixed(2)}
-              </span>
-            </div>
-            <span className={`text-lg font-semibold ${
-              percentage > 90 ? 'text-red-400' : percentage > 70 ? 'text-orange-400' : 'text-teal-400'
-            }`}>
-              {percentage.toFixed(1)}%
-            </span>
-          </div>
-
-          <div className="relative h-3 bg-white/5 rounded-full overflow-hidden">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${percentage}%` }}
-              transition={{ duration: 1, ease: [0.22, 1, 0.36, 1], delay: 0.3 }}
-              className={`absolute inset-y-0 left-0 rounded-full ${
-                percentage > 90
-                  ? 'bg-gradient-to-r from-red-500 to-red-400'
-                  : percentage > 70
-                  ? 'bg-gradient-to-r from-orange-500 to-orange-400'
-                  : 'bg-gradient-to-r from-teal-500 to-teal-400'
-              }`}
-            >
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse" />
-            </motion.div>
-          </div>
-
-          <p className="text-sm text-gray-400 mt-3">
-            {budget.currency}{(budget.limit - budget.spent).toFixed(2)} remaining this month
-          </p>
-        </div>
-
-        <div className="mb-6 rounded-2xl border border-emerald-400/25 bg-gradient-to-br from-emerald-400/15 to-teal-400/5 p-5 shadow-[0_0_28px_rgba(16,185,129,0.12)]">
+        <div className={`mb-6 rounded-2xl border p-5 ${primaryAction ? 'border-amber-300/25 bg-gradient-to-br from-amber-400/12 to-teal-400/5' : 'border-teal-300/25 bg-gradient-to-br from-teal-400/15 to-cyan-400/5'}`}>
           <div className="flex items-start gap-3">
-            <div className="rounded-xl border border-emerald-300/25 bg-emerald-400/10 p-2.5">
-              <Shield className="h-5 w-5 text-emerald-300" />
-            </div>
+            <div className={`rounded-xl border p-2.5 ${primaryAction ? 'border-amber-300/25 bg-amber-400/10' : 'border-teal-300/25 bg-teal-400/10'}`}><AlertCircle className={`h-5 w-5 ${primaryAction ? 'text-amber-200' : 'text-teal-200'}`} /></div>
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-300">Protected value</p>
-              <p className="mt-1 text-3xl font-bold text-white">£{protectedValue.toFixed(2)}</p>
-              <p className="mt-1 text-sm text-emerald-50/70">{protectedPurchaseCount} {protectedPurchaseCount === 1 ? 'purchase has' : 'purchases have'} usable proof securely stored.</p>
+              <p className={`text-xs font-bold uppercase tracking-[0.16em] ${primaryAction ? 'text-amber-200' : 'text-teal-200'}`}>{primaryAction ? primaryAction.label : 'This month'}</p>
+              <p className="mt-1 text-2xl font-bold text-white">{primaryAction ? primaryAction.detail : `£${spentThisMonth.toFixed(2)} · ${receiptsThisMonth.length} ${receiptsThisMonth.length === 1 ? 'receipt' : 'receipts'}`}</p>
             </div>
           </div>
         </div>
@@ -1073,7 +1016,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
             }`}
           >
             <div className="flex items-center gap-3">
-              <Shield className={`w-6 h-6 ${warrantyFilterActive ? 'text-emerald-400' : 'text-emerald-400'}`} />
+              <ReceiptIcon className="w-6 h-6 text-emerald-400" />
               <div className="flex-1 text-left">
                 <h3 className="text-white font-bold">{warrantyReceipts.length} Active {warrantyReceipts.length === 1 ? 'Warranty' : 'Warranties'}</h3>
                 <p className="text-sm text-gray-400">
@@ -1285,10 +1228,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                 const isNonFinalReceipt = isProcessing || isNeedsInput || receipt.status === 'needs_review' || receipt.status === 'rejected' || receipt.status === 'failed';
                 const requiresCurrencyConfirmation = needsCurrencyConfirmation(receipt.status, receipt.errorReason);
                 const isConfirmingCurrency = currencyConfirmationState?.receiptId === receipt.id;
-                const hasActiveWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) > new Date();
-                const hasExpiredWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) <= new Date();
                 const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
-                const protection = getPurchaseProtection(receipt);
                 const receiptFailureDetails = getReceiptFailureDetails({
                   status: receipt.status,
                   errorReason: receipt.errorReason,
@@ -1310,8 +1250,8 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                     key={receipt.id}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: index * 0.1, ease: [0.22, 1, 0.36, 1] }}
-                    whileHover={{ scale: isFreshProcessing ? 1 : 1.02 }}
+                    transition={{ duration: 0.2, delay: Math.min(index * 0.03, 0.18), ease: [0.22, 1, 0.36, 1] }}
+                    whileHover={isFreshProcessing ? undefined : { y: -2 }}
                     className={`w-full backdrop-blur-xl border rounded-xl p-5 transition-all text-left relative ${
                       selectMode && selectedReceipts.has(receipt.id)
                         ? 'bg-teal-400/20 border-teal-400/60'
@@ -1323,8 +1263,6 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                         ? 'bg-amber-400/5 border-amber-400/30'
                         : showIssueHeading
                         ? 'bg-red-500/5 border-red-500/20 hover:bg-red-500/10 hover:border-red-500/30'
-                        : hasActiveWarranty
-                        ? 'bg-gradient-to-br from-emerald-900/10 to-teal-900/5 border-emerald-500/50 hover:bg-gradient-to-br hover:from-emerald-900/15 hover:to-teal-900/10 hover:border-emerald-400/60 shadow-[0_0_20px_rgba(16,185,129,0.2)]'
                         : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-teal-400/30'
                     }`}
                   >
@@ -1412,34 +1350,10 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                                 {purchaseDateDisplay}
                               </p>
                             )}
-                            {hasActiveWarranty && !isFreshProcessing && (
-                              <div className="flex items-center gap-1 px-2 py-0.5 bg-emerald-400/10 border border-emerald-400/30 rounded-full">
-                                <Shield className="w-3 h-3 text-emerald-400" strokeWidth={2} />
-                                <span className="text-emerald-400 text-xs font-bold">Active</span>
-                              </div>
-                            )}
-                            {hasExpiredWarranty && !isFreshProcessing && (
-                              <div className="flex items-center gap-1 px-2 py-0.5 bg-red-400/10 border border-red-400/30 rounded-full">
-                                <Shield className="w-3 h-3 text-red-400" strokeWidth={2} />
-                                <span className="text-red-400 text-xs font-bold">Expired</span>
-                              </div>
-                            )}
-                            {returnWindowStatus.status === 'active' && !isFreshProcessing && (
-                              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-red-400/10 border border-red-400/20 rounded-full">
-                                <Undo2 className="w-2.5 h-2.5 text-red-400" strokeWidth={2.5} />
-                                <span className="text-red-400 text-[10px] font-bold">{returnWindowStatus.message}</span>
-                              </div>
-                            )}
                             {returnWindowStatus.status === 'urgent' && !isFreshProcessing && (
-                              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-red-500/20 border border-red-500/40 rounded-full animate-pulse">
+                              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-red-500/20 border border-red-500/40 rounded-full">
                                 <Undo2 className="w-2.5 h-2.5 text-red-400" strokeWidth={2.5} />
                                 <span className="text-red-400 text-[10px] font-bold">{returnWindowStatus.message}</span>
-                              </div>
-                            )}
-                            {returnWindowStatus.status === 'expired' && !isFreshProcessing && (
-                              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-400/10 border border-gray-400/20 rounded-full">
-                                <Undo2 className="w-2.5 h-2.5 text-gray-500" strokeWidth={2.5} />
-                                <span className="text-gray-500 text-[10px] font-bold">{returnWindowStatus.message}</span>
                               </div>
                             )}
                           </div>
@@ -1464,27 +1378,13 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                         )}
                       </div>
 
+                      {isFreshProcessing && (
                       <div className="flex items-center gap-2 flex-wrap">
-                        {isFreshProcessing ? (
                           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md text-teal-400 bg-teal-400/10 border-teal-400/30">
                             <Loader2 className="w-3 h-3 animate-spin" />
                             Processing...
                           </div>
-                        ) : (
-                          <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md ${getTagColor(receipt.category)}`}>
-                            <Tag className="w-3 h-3" />
-                            {receipt.category}
-                          </div>
-                        )}
-                        {!isFreshProcessing && (
-                          <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${getProtectionClasses(protection.state)}`}>
-                            <Shield className="w-3 h-3" />
-                            {protection.label}
-                          </div>
-                        )}
                       </div>
-                      {!isFreshProcessing && protection.state !== 'protected' && (
-                        <p className="mt-2 text-xs text-gray-400">{protection.detail}</p>
                       )}
                     </button>
 
