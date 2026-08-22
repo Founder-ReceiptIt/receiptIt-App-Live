@@ -2,70 +2,67 @@
 @tailwind components;
 @tailwind utilities;
 
-* {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* ReceiptIt's established charcoal, teal and terminal foundations—centralised
+   so every screen carries the same calm, private-vault hierarchy. */
+:root {
+  color-scheme: dark;
+  --ri-bg: #050707;
+  --ri-bg-raised: #0a0d0d;
+  --ri-surface: rgba(255, 255, 255, 0.045);
+  --ri-surface-hover: rgba(255, 255, 255, 0.075);
+  --ri-border: rgba(255, 255, 255, 0.105);
+  --ri-border-strong: rgba(255, 255, 255, 0.17);
+  --ri-text: #f4f8f7;
+  --ri-text-secondary: #b4c0bd;
+  --ri-text-muted: #75817f;
+  --ri-teal: #2dd4bf;
+  --ri-teal-strong: #5eead4;
+  --ri-teal-subtle: rgba(45, 212, 191, 0.12);
+  --ri-success: #6ee7b7;
+  --ri-warning: #fcd34d;
+  --ri-review: #fbbf24;
+  --ri-error: #fca5a5;
+  --ri-radius-card: 18px;
+  --ri-radius-control: 12px;
+  --ri-radius-pill: 999px;
+  --ri-shadow-raised: 0 18px 48px rgba(0, 0, 0, 0.28);
+  --ri-shadow-overlay: 0 26px 80px rgba(0, 0, 0, 0.52);
+  --ri-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ri-fast: 120ms;
+  --ri-motion: 220ms;
 }
 
-html {
-  scroll-behavior: smooth;
-  font-family: 'JetBrains Mono', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace, sans-serif;
-}
+* { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+html { background: var(--ri-bg); scroll-behavior: smooth; font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+body { min-width: 320px; background: var(--ri-bg); color: var(--ri-text); font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; text-rendering: optimizeLegibility; }
+body::before { content: ''; position: fixed; inset: 0; opacity: 0.018; z-index: 1; pointer-events: none; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E"); }
+#root { position: relative; z-index: 2; }
 
-body {
-  background: #000000;
-  position: relative;
-  font-family: 'JetBrains Mono', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace, sans-serif;
-}
+button, input, select, textarea, a { -webkit-tap-highlight-color: transparent; }
+button:not(:disabled), [role='button']:not([aria-disabled='true']) { touch-action: manipulation; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--ri-teal-strong); outline-offset: 3px; box-shadow: 0 0 0 5px rgba(45, 212, 191, 0.14); }
+::selection { background: rgba(45, 212, 191, 0.32); color: white; }
 
-body::before {
-  content: "";
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0.03;
-  z-index: 1;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(148, 163, 160, 0.32); border-radius: var(--ri-radius-pill); }
+::-webkit-scrollbar-thumb:hover { background: rgba(45, 212, 191, 0.5); }
 
-#root {
-  position: relative;
-  z-index: 2;
-}
+.ri-page { width: min(100%, 1280px); margin-inline: auto; padding: clamp(1.5rem, 3vw, 2.5rem) clamp(1rem, 4vw, 2rem) calc(7rem + env(safe-area-inset-bottom)); }
+.ri-page-heading { letter-spacing: -0.045em; line-height: 1.05; }
+.ri-eyebrow { color: var(--ri-teal-strong); font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; }
+.ri-surface { background: var(--ri-surface); border: 1px solid var(--ri-border); border-radius: var(--ri-radius-card); box-shadow: var(--ri-shadow-raised); }
+.ri-surface:hover { border-color: var(--ri-border-strong); }
+.ri-surface-muted { background: rgba(255, 255, 255, 0.028); border: 1px solid rgba(255, 255, 255, 0.075); border-radius: var(--ri-radius-control); }
+.ri-terminal { font-variant-numeric: tabular-nums; letter-spacing: -0.035em; }
+.ri-top-nav { background: rgba(5, 7, 7, 0.88); border-color: rgba(255, 255, 255, 0.085); backdrop-filter: blur(16px); }
+.ri-bottom-dock { background: rgba(12, 16, 16, 0.9); border-color: rgba(255, 255, 255, 0.12); box-shadow: 0 14px 48px rgba(0, 0, 0, 0.42); }
+.ri-status-live::before { content: ''; display: inline-block; width: 0.45rem; height: 0.45rem; margin-right: 0.5rem; border-radius: 50%; background: var(--ri-teal); box-shadow: 0 0 0 4px rgba(45, 212, 191, 0.1); }
+.ri-card-interactive { transition: transform var(--ri-fast) var(--ri-ease), background-color var(--ri-fast) ease, border-color var(--ri-fast) ease, box-shadow var(--ri-fast) ease; }
+.ri-card-interactive:hover { transform: translateY(-1px); }
+.ri-card-interactive:active { transform: translateY(0); }
+.ri-skeleton { background: linear-gradient(100deg, rgba(255,255,255,.04) 35%, rgba(255,255,255,.1) 50%, rgba(255,255,255,.04) 65%); background-size: 220% 100%; animation: ri-shimmer 1.5s linear infinite; }
+@keyframes ri-shimmer { to { background-position-x: -220%; } }
 
-::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(45, 212, 191, 0.3);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(45, 212, 191, 0.5);
-}
-
-@keyframes processingDots {
-  0%, 20% {
-    content: '.';
-  }
-  40% {
-    content: '..';
-  }
-  60%, 100% {
-    content: '...';
-  }
-}
-
-.processing-dots::after {
-  content: '.';
-  animation: processingDots 1.5s steps(4, end) infinite;
-}
+@media (max-width: 374px) { .ri-page { padding-inline: 0.875rem; } }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; } }

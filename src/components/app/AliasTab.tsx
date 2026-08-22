@@ -26,41 +26,32 @@ export function AliasTab() {
   };
 
   return (
-    <div className="pb-32 px-6 pt-8 max-w-7xl mx-auto">
+    <main className="ri-page" aria-label="ReceiptIt address">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white">Your ReceiptIt address</h1>
+          <p className="ri-eyebrow mb-2">Private inbox</p>
+          <h1 className="ri-page-heading text-3xl font-bold text-white sm:text-4xl">Your ReceiptIt address</h1>
+          <p className="mt-3 max-w-xl text-sm text-gray-400">Give it to retailers instead of your personal inbox. Purchase documents arrive in your private Wallet.</p>
         </div>
 
-        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8 mb-6 relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-teal-400/10 to-transparent" />
+        <section className="ri-surface p-6 sm:p-8 mb-6 relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-teal-400/[0.07] to-transparent" />
 
           <div className="relative">
             <div className="flex items-center justify-center mb-6">
-              <motion.div
-                animate={{
-                  rotate: [0, 5, -5, 0],
-                }}
-                transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-              >
+              <motion.div>
                 <Shield className="w-20 h-20 text-teal-400" strokeWidth={1.5} />
               </motion.div>
             </div>
 
             <div className="text-center mb-6">
-              <motion.div
-                animate={{
-                  scale: [1, 1.02, 1],
-                }}
-                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                className="text-3xl font-bold font-mono text-teal-400 mb-2"
-              >
+              <div className="ri-terminal break-all rounded-xl border border-teal-400/20 bg-black/20 px-4 py-3 text-xl font-bold text-teal-300 sm:text-2xl mb-3">
                 {emailAlias || 'No alias set'}
-              </motion.div>
+              </div>
               <p className="text-gray-400 text-sm">
                 Give this address to shops instead of your personal email.
               </p>
@@ -95,7 +86,7 @@ export function AliasTab() {
               </div>
             </motion.button>
           </div>
-        </div>
+        </section>
 
         <div className={`grid gap-3 mb-6 ${stats.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
           {stats.map((stat, index) => (
@@ -137,6 +128,6 @@ export function AliasTab() {
           </div>
         </div>
       </motion.div>
-    </div>
+    </main>
   );
 }

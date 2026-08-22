@@ -195,21 +195,22 @@ export function SettingsTab() {
   ];
 
   return (
-    <div className="pb-32 px-6 pt-8 max-w-7xl mx-auto">
+    <main className="ri-page" aria-label="Settings and Security Centre">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white">Settings</h1>
+          <p className="ri-eyebrow mb-2">Account and privacy</p>
+          <h1 className="ri-page-heading text-3xl font-bold text-white sm:text-4xl">Settings</h1>
         </div>
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.1 }}
-          className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 mb-6"
+          className="ri-surface p-6 mb-6"
         >
           <div className="flex items-start gap-4">
             <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-teal-400/20 to-cyan-400/20 border border-teal-400/30 flex items-center justify-center">
@@ -245,7 +246,7 @@ export function SettingsTab() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.2 + sectionIndex * 0.1 }}
-              className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl overflow-hidden"
+              className="ri-surface overflow-hidden"
             >
               <div className="p-4 border-b border-white/10 flex items-center gap-2">
                 <section.icon className="w-5 h-5 text-teal-400" strokeWidth={1.5} />
@@ -305,7 +306,7 @@ export function SettingsTab() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.6 }}
-          className="mt-6 backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl overflow-hidden"
+          className="ri-surface mt-6 overflow-hidden"
         >
           <div className="p-4 border-b border-white/10 flex items-center gap-2">
             <Globe className="w-5 h-5 text-teal-400" strokeWidth={1.5} />
@@ -405,6 +406,6 @@ export function SettingsTab() {
           </motion.div>
         )}
       </motion.div>
-    </div>
+    </main>
   );
 }

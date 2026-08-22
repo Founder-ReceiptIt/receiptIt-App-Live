@@ -963,19 +963,20 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
   };
 
   return (
-    <div className="pb-32 px-6 pt-8 max-w-7xl mx-auto">
+    <main className="ri-page" aria-label="Wallet">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white">
+          <p className="ri-eyebrow mb-2">Private purchase vault</p>
+          <h1 className="ri-page-heading text-3xl font-bold text-white sm:text-4xl">
             Welcome back{getWelcomeName() && ` ${getWelcomeName()}`}
           </h1>
         </div>
 
-        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
+        <div className="ri-surface p-5 sm:p-6 mb-6">
           <div className="flex items-baseline justify-between mb-4">
             <div>
               <span className="text-4xl font-bold text-white">
@@ -1014,7 +1015,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
           </p>
         </div>
 
-        <div className="mb-6 rounded-2xl border border-emerald-400/25 bg-gradient-to-br from-emerald-400/15 to-teal-400/5 p-5 shadow-[0_0_28px_rgba(16,185,129,0.12)]">
+        <section className="mb-6 rounded-[18px] border border-emerald-400/25 bg-gradient-to-br from-emerald-400/15 to-teal-400/5 p-5 shadow-[0_16px_42px_rgba(16,185,129,0.1)]" aria-label="Protected value">
           <div className="flex items-start gap-3">
             <div className="rounded-xl border border-emerald-300/25 bg-emerald-400/10 p-2.5">
               <Shield className="h-5 w-5 text-emerald-300" />
@@ -1025,10 +1026,10 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
               <p className="mt-1 text-sm text-emerald-50/70">{protectedPurchaseCount} {protectedPurchaseCount === 1 ? 'purchase has' : 'purchases have'} usable proof securely stored.</p>
             </div>
           </div>
-        </div>
+        </section>
 
         <div className="mb-6">
-          <div className="inline-flex w-full backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-1">
+          <div className="inline-flex w-full bg-white/[0.035] border border-white/10 rounded-xl p-1" role="tablist" aria-label="Wallet folders">
             {[
               { value: 'all', label: 'All', count: receipts.length },
               { value: 'work', label: 'Work', count: workReceipts.length },
@@ -1042,6 +1043,8 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                   key={option.value}
                   onClick={() => setSelectedFolder(option.value as 'all' | 'work' | 'personal')}
                   layout
+                  role="tab"
+                  aria-selected={isSelected}
                   className={`${tabWidth} rounded-lg p-3 text-center font-semibold transition-all ${
                     isSelected
                       ? 'bg-teal-400/30 text-teal-100 shadow-[0_0_20px_rgba(94,234,212,0.3)]'
@@ -1093,7 +1096,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
           </motion.button>
         )}
 
-        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4 mb-6">
+        <section className="ri-surface p-4 mb-6" aria-label="Search and filter purchases">
           <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
@@ -1128,7 +1131,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
               </button>
             ))}
           </div>
-        </div>
+        </section>
 
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-white">
@@ -1312,7 +1315,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: index * 0.1, ease: [0.22, 1, 0.36, 1] }}
                     whileHover={{ scale: isFreshProcessing ? 1 : 1.02 }}
-                    className={`w-full backdrop-blur-xl border rounded-xl p-5 transition-all text-left relative ${
+                    className={`ri-card-interactive w-full border rounded-[16px] p-5 transition-all text-left relative ${
                       selectMode && selectedReceipts.has(receipt.id)
                         ? 'bg-teal-400/20 border-teal-400/60'
                         : isFreshProcessing
@@ -1622,14 +1625,14 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
               onClick={() => !isDeleting && setDeleteConfirmOpen(false)}
             >
               <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="backdrop-blur-xl bg-black/90 border border-white/10 rounded-2xl p-6 max-w-sm mx-4"
+                className="w-full max-w-sm bg-[#0b0f0f] border border-white/10 rounded-2xl p-6 shadow-[0_26px_80px_rgba(0,0,0,.52)]"
                 onClick={(e) => e.stopPropagation()}
               >
                 <h3 className="text-xl font-bold text-white mb-2">Delete Receipts?</h3>
@@ -1661,6 +1664,6 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
           )}
         </AnimatePresence>
       </motion.div>
-    </div>
+    </main>
   );
 }

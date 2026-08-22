@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Shield, Calendar, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Download, Undo2, ChevronDown } from 'lucide-react';
 import { Receipt } from './WalletTab';
 import { ReportProblemDialog } from './ReportProblemDialog';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   confirmReceiptCurrency,
   deleteReceiptRecord,
@@ -143,6 +143,21 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const [showReportProblemDialog, setShowReportProblemDialog] = useState(false);
   const [isGeneratingProofPack, setIsGeneratingProofPack] = useState(false);
   const [activity, setActivity] = useState<Array<{ event_type: string; created_at: string }>>([]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!receipt) return;
+    const lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialogRef.current?.focus();
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      window.removeEventListener('keydown', handleEscape);
+      lastFocused?.focus();
+    };
+  }, [receipt, onClose]);
 
   useEffect(() => {
     setShowMoreDetails(false);
@@ -595,12 +610,17 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
           transition={{ type: "spring", damping: 30, stiffness: 300 }}
           className="relative w-full max-w-2xl mx-4 mb-4 md:mb-0"
           onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="purchase-passport-title"
+          tabIndex={-1}
+          ref={dialogRef}
         >
-          <div className="backdrop-blur-xl bg-black/90 border border-white/10 rounded-3xl overflow-hidden shadow-[0_0_60px_rgba(45,212,191,0.3)]">
+          <div className="bg-[#0b0f0f]/95 border border-white/10 rounded-3xl overflow-hidden shadow-[0_26px_80px_rgba(0,0,0,.52)]">
             
             {/* --- HEADER --- */}
             <div className="p-6 border-b border-white/10 flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-white">Purchase Passport</h2>
+              <h2 id="purchase-passport-title" className="text-2xl font-bold text-white">Purchase Passport</h2>
               <div className="flex items-center gap-2">
                 {hasOriginalReceipt && isFinalizedReceiptStatus(receipt.status) && (
                   <motion.button
@@ -646,6 +666,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                   whileTap={{ scale: 0.9 }}
                   onClick={onClose}
                   className="w-10 h-10 rounded-full backdrop-blur-md bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:border-white/20 transition-colors"
+                  aria-label="Close Purchase Passport"
                 >
                   <X className="w-5 h-5" />
                 </motion.button>

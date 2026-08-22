@@ -51,7 +51,7 @@ export function AuthForm() {
   };
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center px-6 py-12">
+    <main className="min-h-screen bg-black flex items-center justify-center px-4 py-10 sm:px-6 sm:py-12" aria-label="ReceiptIt authentication">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -59,23 +59,17 @@ export function AuthForm() {
         className="w-full max-w-md"
       >
         <div className="text-center mb-8">
-          <motion.div
-            animate={{
-              rotate: [0, 5, -5, 0],
-            }}
-            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-            className="inline-block"
-          >
+          <motion.div className="inline-block">
             <Shield className="w-16 h-16 text-teal-400 mx-auto mb-4" strokeWidth={1.5} />
           </motion.div>
           <h1 className="text-4xl font-bold font-mono text-white mb-2">
             <span className="text-white">receipt</span>
             <span className="text-teal-400">It</span>
           </h1>
-          <p className="text-sm text-gray-400 italic">Your system for every purchase, tracked, organised and private</p>
+          <p className="text-sm text-gray-400">Every purchase, privately protected.</p>
         </div>
 
-        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8">
+        <div className="ri-surface p-6 sm:p-8">
           <div className="flex gap-2 mb-6">
             <button
               onClick={() => setIsSignUp(false)}
@@ -84,6 +78,7 @@ export function AuthForm() {
                   ? 'bg-teal-400/20 text-teal-400 border border-teal-400/40'
                   : 'text-gray-400 hover:bg-white/5'
               }`}
+              aria-pressed={!isSignUp}
             >
               Sign In
             </button>
@@ -94,6 +89,7 @@ export function AuthForm() {
                   ? 'bg-teal-400/20 text-teal-400 border border-teal-400/40'
                   : 'text-gray-400 hover:bg-white/5'
               }`}
+              aria-pressed={isSignUp}
             >
               Sign Up
             </button>
@@ -142,6 +138,7 @@ export function AuthForm() {
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="p-3 bg-red-400/10 border border-red-400/30 rounded-lg text-red-400 text-sm"
+                role="alert"
               >
                 {error}
               </motion.div>
@@ -165,6 +162,6 @@ export function AuthForm() {
           </div>
         </div>
       </motion.div>
-    </div>
+    </main>
   );
 }

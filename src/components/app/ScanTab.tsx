@@ -534,14 +534,16 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
   };
 
   return (
-    <div className="pb-32 px-6 pt-8 min-h-screen flex flex-col max-w-7xl mx-auto">
+    <main className="ri-page min-h-screen flex flex-col" aria-label="Capture a purchase">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
         className="mb-8"
       >
-        <h1 className="text-3xl font-bold text-white">Scan Receipt</h1>
+        <p className="ri-eyebrow mb-2">Private capture</p>
+        <h1 className="ri-page-heading text-3xl font-bold text-white sm:text-4xl">Add a purchase</h1>
+        <p className="mt-3 max-w-xl text-sm text-gray-400">A photo or PDF is stored privately first, then processed in the background.</p>
       </motion.div>
 
       <div className="flex-1 flex items-center justify-center">
@@ -554,12 +556,12 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.3 }}
-                className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8"
+                className="ri-surface p-6 sm:p-8"
               >
                 <div className="text-center mb-8">
                   <Camera className="w-20 h-20 text-teal-400 mx-auto mb-4" strokeWidth={1.5} />
-                  <h2 className="text-2xl font-bold text-white mb-2">Scan Your Receipt</h2>
-                  <p className="text-gray-400">Upload a photo or scan to get started</p>
+                  <h2 className="text-2xl font-bold text-white mb-2">Capture purchase proof</h2>
+                  <p className="text-gray-400">Choose a receipt photo, scan, or PDF to begin.</p>
                 </div>
 
                 <input
@@ -587,11 +589,11 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                       clearScanningStorage();
                       fileInputRef.current?.click();
                     }}
-                    className="w-full backdrop-blur-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/30 rounded-xl p-4 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                    className="w-full bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/30 rounded-xl p-4 transition-colors active:scale-[0.99]"
                   >
                     <div className="flex items-center justify-center gap-3">
                       <Upload className="w-5 h-5 text-teal-400" />
-                      <span className="font-semibold text-white">Upload from Gallery</span>
+                      <span className="font-semibold text-white">Choose photo or PDF</span>
                     </div>
                   </button>
 
@@ -617,7 +619,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                         }
                       }, 100);
                     }}
-                    className="w-full backdrop-blur-xl bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl p-4 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                    className="w-full bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl p-4 transition-colors active:scale-[0.99]"
                   >
                     <div className="flex items-center justify-center gap-3">
                       <Camera className="w-5 h-5 text-white" />
@@ -648,7 +650,9 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.3 }}
-                className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8"
+                className="ri-surface p-6 sm:p-8"
+                role="status"
+                aria-live="polite"
               >
                 <div className="text-center mb-6">
                   {previewUrl && selectedFile && (
@@ -695,12 +699,12 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                   </div>
 
                   <h2 className="text-2xl font-bold text-white mb-2">
-                    {scanState === 'uploading' ? 'Uploading Receipt...' : 'Preparing your receipt...'}
+                    {scanState === 'uploading' ? 'Securing your upload' : 'Preparing your purchase'}
                   </h2>
                   <p className="text-gray-400 mb-6">
                     {scanState === 'uploading'
-                      ? 'Uploading your receipt to secure storage'
-                      : 'Getting everything ready for scanning'
+                      ? 'Saving the original to your private storage'
+                      : 'Getting your purchase ready for processing'
                     }
                   </p>
 
@@ -743,7 +747,9 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.3 }}
-                className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8"
+                className="ri-surface p-6 sm:p-8"
+                role="status"
+                aria-live="polite"
               >
                 <div className="text-center">
                   <motion.div
@@ -754,8 +760,8 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                     <CheckCircle className="w-20 h-20 text-green-400 mx-auto mb-4" strokeWidth={1.5} />
                   </motion.div>
 
-                  <h2 className="text-2xl font-bold text-white mb-2">Receipt uploaded</h2>
-                  <p className="text-gray-400 mb-6">We’re now scanning your receipt</p>
+                  <h2 className="text-2xl font-bold text-white mb-2">Upload secured</h2>
+                  <p className="text-gray-400 mb-6">We’re now processing your purchase.</p>
 
                   <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4 mb-6">
                     <p className="text-sm text-gray-400">
@@ -827,6 +833,6 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
           </AnimatePresence>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

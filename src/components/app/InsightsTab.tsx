@@ -71,12 +71,12 @@ const getMonthKey = (value: Date): string => (
 );
 
 const LoadingCard = ({ className = '' }: { className?: string }) => (
-  <div className={`backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 ${className}`}>
-    <div className="space-y-3 animate-pulse">
-      <div className="h-4 w-28 rounded bg-white/10" />
-      <div className="h-10 w-36 rounded bg-white/10" />
-      <div className="h-3 w-40 rounded bg-white/10" />
-      <div className="h-3 w-24 rounded bg-white/10" />
+  <div className={`ri-surface p-6 ${className}`}>
+    <div className="space-y-3">
+      <div className="ri-skeleton h-4 w-28 rounded" />
+      <div className="ri-skeleton h-10 w-36 rounded" />
+      <div className="ri-skeleton h-3 w-40 rounded" />
+      <div className="ri-skeleton h-3 w-24 rounded" />
     </div>
   </div>
 );
@@ -238,14 +238,15 @@ export function InsightsTab() {
 
   if (loading) {
     return (
-      <div className="pb-32 px-6 pt-8 max-w-7xl mx-auto">
+      <main className="ri-page" aria-label="Spending Insights">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
         >
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-white">Spending Insights</h1>
+            <p className="ri-eyebrow mb-2">Finalised purchases only</p>
+            <h1 className="ri-page-heading text-3xl font-bold text-white sm:text-4xl">Spending Insights</h1>
             <p className="mt-2 text-sm text-gray-400">Preparing your GBP-normalised overview</p>
           </div>
 
@@ -270,20 +271,21 @@ export function InsightsTab() {
             <LoadingCard className="min-h-[320px]" />
           </div>
         </motion.div>
-      </div>
+      </main>
     );
   }
 
   if (errorMessage) {
     return (
-      <div className="pb-32 px-6 pt-8 max-w-7xl mx-auto">
+      <main className="ri-page" aria-label="Spending Insights">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
         >
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-white">Spending Insights</h1>
+            <p className="ri-eyebrow mb-2">Finalised purchases only</p>
+            <h1 className="ri-page-heading text-3xl font-bold text-white sm:text-4xl">Spending Insights</h1>
             <p className="mt-2 text-sm text-gray-400">Monitor finalised spend while you are away</p>
           </div>
 
@@ -301,20 +303,21 @@ export function InsightsTab() {
             </button>
           </div>
         </motion.div>
-      </div>
+      </main>
     );
   }
 
   if (receipts.length === 0) {
     return (
-      <div className="pb-32 px-6 pt-8 max-w-7xl mx-auto">
+      <main className="ri-page" aria-label="Spending Insights">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
         >
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-white">Spending Insights</h1>
+            <p className="ri-eyebrow mb-2">Finalised purchases only</p>
+            <h1 className="ri-page-heading text-3xl font-bold text-white sm:text-4xl">Spending Insights</h1>
             <p className="mt-2 text-sm text-gray-400">Monitor finalised spend while you are away</p>
           </div>
 
@@ -326,19 +329,20 @@ export function InsightsTab() {
             </p>
           </div>
         </motion.div>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="pb-32 px-6 pt-8 max-w-7xl mx-auto">
+    <main className="ri-page" aria-label="Spending Insights">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white">Spending Insights</h1>
+          <p className="ri-eyebrow mb-2">Finalised purchases only</p>
+          <h1 className="ri-page-heading text-3xl font-bold text-white sm:text-4xl">Spending Insights</h1>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-gray-400">
             <span className="inline-flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse" />
@@ -653,6 +657,6 @@ export function InsightsTab() {
           </div>
         </motion.div>
       </motion.div>
-    </div>
+    </main>
   );
 }

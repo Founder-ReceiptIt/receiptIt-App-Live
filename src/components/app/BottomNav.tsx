@@ -22,19 +22,20 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
       transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       className="fixed bottom-0 left-0 right-0 z-50 md:hidden"
     >
-      <div className="max-w-2xl mx-auto px-6 pb-6">
-        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-4 shadow-[0_0_40px_rgba(0,0,0,0.5)]">
+      <div className="max-w-2xl mx-auto px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="ri-bottom-dock border rounded-2xl px-1.5 py-2">
           <div className="flex items-center justify-between">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}
-                className="relative flex flex-col items-center gap-1 px-4 py-2 group"
+                className="relative flex min-w-0 flex-1 flex-col items-center gap-1 px-1 py-2.5 group"
+                aria-current={activeTab === tab.id ? 'page' : undefined}
               >
                 {activeTab === tab.id && (
                   <motion.div
                     layoutId="activeTab"
-                    className="absolute inset-0 backdrop-blur-md bg-teal-400/10 border border-teal-400/30 rounded-xl"
+                    className="absolute inset-0 bg-teal-400/10 border border-teal-400/30 rounded-xl"
                     transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
                   />
                 )}
@@ -47,7 +48,7 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
                 />
 
                 <span
-                  className={`text-xs relative z-10 transition-colors font-semibold ${
+                  className={`text-[10px] sm:text-xs relative z-10 transition-colors font-semibold ${
                     activeTab === tab.id ? 'text-teal-400' : 'text-gray-500 group-hover:text-gray-400'
                   }`}
                 >
