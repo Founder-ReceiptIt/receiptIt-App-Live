@@ -33,7 +33,7 @@ export function TopNav({ activeTab, onTabChange }: TopNavProps) {
         <div className="flex items-center justify-between">
           {/* Logo - Left Side */}
           <motion.div
-            whileHover={{ scale: 1.05 }}
+            whileHover={{ y: -1 }}
             className="text-2xl font-bold font-mono tracking-tight cursor-pointer"
             onClick={() => onTabChange('wallet')}
           >
@@ -68,7 +68,7 @@ export function TopNav({ activeTab, onTabChange }: TopNavProps) {
                   <motion.div
                     layoutId="activeIndicator"
                     className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-400"
-                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                    transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                   />
                 )}
               </button>

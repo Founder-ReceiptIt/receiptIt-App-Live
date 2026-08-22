@@ -35,7 +35,7 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
                   <motion.div
                     layoutId="activeTab"
                     className="absolute inset-0 backdrop-blur-md bg-teal-400/10 border border-teal-400/30 rounded-xl"
-                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                    transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                   />
                 )}
 

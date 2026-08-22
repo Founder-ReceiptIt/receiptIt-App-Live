@@ -14,7 +14,7 @@ export function Toast() {
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            transition={{ duration: 0.3, type: "spring" }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
             className="pointer-events-auto mb-4"
           >
             <div className="flex items-center gap-3 px-5 py-4 rounded-xl bg-[#121212] border-2 border-[#2DD4BF]/40 shadow-[0_0_30px_rgba(45,212,191,0.3)] backdrop-blur-xl">
