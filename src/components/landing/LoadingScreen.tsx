@@ -21,7 +21,7 @@ export function LoadingScreen() {
           transition={{ duration: 0.22, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
           className="text-xl text-gray-400 font-light tracking-wide"
         >
-          Your receipts, ready when you are.
+          Your purchases, kept private.
         </motion.p>
 
         <motion.div
