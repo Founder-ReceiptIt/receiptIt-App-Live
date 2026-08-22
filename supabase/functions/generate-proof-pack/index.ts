@@ -59,10 +59,6 @@ const britishDate = (value: string | null) => {
   return Number.isNaN(date.getTime()) ? "Not recorded" : new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(date);
 };
 
-const pdfText = (value: string) => value
-  .replace(/[\\()]/g, "\\$&")
-  .replace(/[^\x20-\x7e]/g, " ");
-
 const wrap = (value: string, width = 86) => {
   const words = value.trim().split(/\s+/).filter(Boolean);
   const lines: string[] = [];
@@ -78,66 +74,16 @@ const wrap = (value: string, width = 86) => {
   return lines.length ? lines : [""];
 };
 
-const createPdf = (inputLines: Array<{ text: string; strong?: boolean }>) => {
-  const lines = inputLines.flatMap(({ text, strong }) => wrap(text).map((line) => ({ text: line, strong })));
-  const perPage = 47;
-  const pages = Array.from({ length: Math.max(1, Math.ceil(lines.length / perPage)) }, (_, index) => lines.slice(index * perPage, (index + 1) * perPage));
-  const objects: string[] = ["", "", "", ""];
-  const pageObjectIds: number[] = [];
-
-  for (const pageLines of pages) {
-    const content = [
-      "BT",
-      "/F1 17 Tf",
-      "50 790 Td",
-      "21 TL",
-      `(ReceiptIt) Tj`,
-      "0 -10 Td",
-      "/F1 9 Tf",
-      "14 TL",
-      "(Proof of purchase) Tj",
-      "0 -22 Td",
-    ];
-    for (const line of pageLines) {
-      if (line.strong) content.push("/F1 11 Tf");
-      else content.push("/F1 9.5 Tf");
-      content.push(`(${pdfText(line.text)}) Tj`, "T*");
-    }
-    content.push("ET");
-    const contentText = content.join("\n");
-    const contentId = objects.length;
-    objects.push(`<< /Length ${new TextEncoder().encode(contentText).length} >>\nstream\n${contentText}\nendstream`);
-    const pageId = objects.length;
-    pageObjectIds.push(pageId);
-    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentId} 0 R >>`);
-  }
-
-  objects[1] = "<< /Type /Catalog /Pages 2 0 R >>";
-  objects[2] = `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pageObjectIds.length} >>`;
-  objects[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
-
-  let output = "%PDF-1.4\n%\xE2\xE3\xCF\xD3\n";
-  const offsets = [0];
-  for (let index = 1; index < objects.length; index += 1) {
-    offsets[index] = new TextEncoder().encode(output).length;
-    output += `${index} 0 obj\n${objects[index]}\nendobj\n`;
-  }
-  const xrefOffset = new TextEncoder().encode(output).length;
-  output += `xref\n0 ${objects.length}\n0000000000 65535 f \n`;
-  for (let index = 1; index < objects.length; index += 1) output += `${String(offsets[index]).padStart(10, "0")} 00000 n \n`;
-  output += `trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
-  return new TextEncoder().encode(output);
-};
-
 const createProofPdf = async (inputLines: Array<{ text: string; strong?: boolean }>, original: Uint8Array | null) => {
   const document = await PDFDocument.create();
-  const regular = await document.embedFont(StandardFonts.Helvetica);
-  const bold = await document.embedFont(StandardFonts.HelveticaBold);
+  const regular = await document.embedFont(StandardFonts.Courier);
+  const bold = await document.embedFont(StandardFonts.CourierBold);
   const lines = inputLines.flatMap(({ text, strong }) => wrap(text, 80).map((line) => ({ text: line, strong })));
   const perPage = 42;
   for (let start = 0; start < lines.length; start += perPage) {
     const page = document.addPage([595, 842]);
-    page.drawText("ReceiptIt", { x: 48, y: 790, size: 18, font: bold, color: rgb(0.12, 0.72, 0.68) });
+    page.drawText("receipt", { x: 48, y: 790, size: 18, font: bold, color: rgb(0.08, 0.1, 0.1) });
+    page.drawText("It", { x: 123, y: 790, size: 18, font: bold, color: rgb(0.176, 0.831, 0.749) });
     page.drawText("Proof of purchase", { x: 48, y: 766, size: 11, font: regular, color: rgb(0.36, 0.4, 0.45) });
     let y = 730;
     for (const line of lines.slice(start, start + perPage)) {
@@ -237,7 +183,7 @@ Deno.serve(async (request) => {
     ...(asText(receipt.return_date) ? [{ text: `Return by: ${britishDate(receipt.return_date)}` }] : []),
     ...(asText(receipt.warranty_date) ? [{ text: `Warranty until: ${britishDate(receipt.warranty_date)}` }] : []),
     { text: "" },
-    { text: "This pack summarises the receipt details supplied to ReceiptIt." },
+    { text: "This pack summarises the receipt details supplied to receiptIt." },
   ];
 
   const { data: originalBlob, error: originalError } = await admin.storage.from("receipts").download(receipt.storage_path);

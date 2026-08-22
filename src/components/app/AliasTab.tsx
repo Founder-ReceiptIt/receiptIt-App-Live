@@ -15,14 +15,14 @@ export function AliasTab() {
   };
 
   return (
-    <main className="ri-page" aria-label="ReceiptIt address">
+    <main className="ri-page" aria-label="receiptIt address">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
         <div className="mb-8">
-          <h1 className="ri-page-heading text-3xl font-bold text-white sm:text-4xl">Your ReceiptIt address</h1>
+          <h1 className="ri-page-heading text-3xl font-bold text-white sm:text-4xl">Your receiptIt address</h1>
           <p className="mt-3 max-w-xl text-sm text-gray-400">Use this instead of your personal email for receipts.</p>
         </div>
         <section className="ri-surface max-w-2xl p-6 sm:p-8">

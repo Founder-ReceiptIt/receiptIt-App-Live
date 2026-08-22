@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Lock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { ReceiptItWordmark } from '../ReceiptItWordmark';
 
 const signupAuthorizationKey = 'receiptit_signup_authorization';
 
@@ -68,23 +69,17 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
   }
 
   return (
-    <main className="fixed inset-0 bg-[#050505] flex items-center justify-center z-[9999] p-4" aria-label="ReceiptIt beta access">
+    <main className="fixed inset-0 bg-[#050505] flex items-center justify-center z-[9999] p-4" aria-label="receiptIt beta access">
       <div className="ri-surface max-w-md w-full space-y-7 p-6 sm:p-8">
         <div className="text-center space-y-4">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl border border-[#2DD4BF]/20 bg-[#2DD4BF]/10 mb-2">
             <Lock className="w-8 h-8 text-[#2DD4BF]" />
           </div>
 
-          <div className="flex justify-center mb-4">
-            <img
-              src="/logo.png"
-              alt="receiptIt"
-              className="h-12 w-auto"
-            />
-          </div>
+          <div className="flex justify-center mb-4 text-3xl"><ReceiptItWordmark /></div>
 
           <p className="ri-eyebrow">Invitation access</p>
-          <h1 className="mt-2 text-2xl font-bold text-white tracking-tight">ReceiptIt beta</h1>
+          <h1 className="mt-2 text-2xl font-bold text-white tracking-tight"><ReceiptItWordmark /> beta</h1>
 
           <p className="text-gray-400 text-sm leading-relaxed">
             This private beta is for invited testers. Enter your access key to continue.

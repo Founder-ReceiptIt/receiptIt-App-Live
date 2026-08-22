@@ -75,7 +75,7 @@ Deno.serve(async (request: Request) => {
     return jsonResponse(request, { error: "Too many signup attempts. Please try again later." }, 429);
   }
 
-  const username = fullName || email.split("@")[0] || "user";
+  const username = email.split("@")[0] || "user";
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
@@ -131,6 +131,16 @@ Deno.serve(async (request: Request) => {
     await supabaseAdmin.from("profiles").delete().eq("id", userId);
     await supabaseAdmin.auth.admin.deleteUser(userId, false);
     return jsonResponse(request, { error: "Could not finish private inbox setup." }, 500);
+  }
+
+  const { error: friendlyAliasError } = await supabaseAdmin.rpc("provision_friendly_email_alias_for_user", {
+    p_user_id: userId,
+  });
+  if (friendlyAliasError) {
+    console.error("[create-account] Friendly alias provisioning failed", { code: friendlyAliasError.code });
+    await supabaseAdmin.from("profiles").delete().eq("id", userId);
+    await supabaseAdmin.auth.admin.deleteUser(userId, false);
+    return jsonResponse(request, { error: "Could not finish receipt address setup." }, 500);
   }
 
   return jsonResponse(request, { success: true, userId, email }, 200);

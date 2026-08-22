@@ -153,9 +153,14 @@ Deno.serve(async (request) => {
     return json({ accepted: true });
   }
 
-  const { data: alias } = await admin.from("email_aliases")
-    .select("id,user_id,email_address")
+  const { data: friendlyAlias } = await admin.from("friendly_email_aliases")
+    .select("user_id")
     .eq("email_address", recipient).eq("state", "active").maybeSingle();
+  const { data: alias } = friendlyAlias
+    ? await admin.from("email_aliases").select("id,user_id,email_address")
+      .eq("user_id", friendlyAlias.user_id).eq("state", "active").maybeSingle()
+    : await admin.from("email_aliases").select("id,user_id,email_address")
+      .eq("email_address", recipient).eq("state", "active").maybeSingle();
   if (!alias) {
     await admin.from("inbound_webhook_rejections").upsert({ provider_event_id: providerEventId, recipient_hash: recipientHash, reason: "unknown_or_disabled_alias" }, { onConflict: "provider,provider_event_id", ignoreDuplicates: true });
     // A generic success prevents alias enumeration and provider retry storms.

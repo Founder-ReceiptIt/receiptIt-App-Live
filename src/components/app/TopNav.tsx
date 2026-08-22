@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Wallet, AtSign, ScanLine, TrendingUp, Settings, Menu, X } from 'lucide-react';
 import { useState } from 'react';
+import { ReceiptItWordmark } from '../ReceiptItWordmark';
 
 interface TopNavProps {
   activeTab: string;
@@ -43,8 +44,7 @@ export function TopNav({ activeTab, onTabChange }: TopNavProps) {
               if (event.key === 'Enter' || event.key === ' ') onTabChange('wallet');
             }}
           >
-            <span className="text-white">receipt</span>
-            <span className="text-teal-400">It</span>
+            <ReceiptItWordmark />
           </motion.div>
 
           {/* Desktop Navigation Links - Right Side */}

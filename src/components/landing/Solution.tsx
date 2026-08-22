@@ -50,7 +50,7 @@ export function Solution() {
                 className="absolute -inset-4 blur-xl bg-teal-400/30 rounded-lg"
               />
               <div className="relative text-5xl md:text-6xl font-bold text-teal-400 tracking-tight bg-gradient-to-r from-teal-300 to-cyan-400 bg-clip-text text-transparent">
-                steve@receiptIt.app
+                steve@in.receiptit.app
               </div>
             </div>
 

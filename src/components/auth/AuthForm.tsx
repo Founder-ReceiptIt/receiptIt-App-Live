@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Mail, Lock, Shield } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { ReceiptItWordmark } from '../ReceiptItWordmark';
 
 export function AuthForm() {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -51,7 +52,7 @@ export function AuthForm() {
   };
 
   return (
-    <main className="min-h-screen bg-black flex items-center justify-center px-4 py-10 sm:px-6 sm:py-12" aria-label="ReceiptIt authentication">
+    <main className="min-h-screen bg-black flex items-center justify-center px-4 py-10 sm:px-6 sm:py-12" aria-label="receiptIt authentication">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -62,10 +63,7 @@ export function AuthForm() {
           <motion.div className="inline-block">
             <Shield className="w-16 h-16 text-teal-400 mx-auto mb-4" strokeWidth={1.5} />
           </motion.div>
-          <h1 className="text-4xl font-bold font-mono text-white mb-2">
-            <span className="text-white">receipt</span>
-            <span className="text-teal-400">It</span>
-          </h1>
+          <h1 className="text-4xl mb-2"><ReceiptItWordmark /></h1>
           <p className="text-sm text-gray-400">Every purchase, privately protected.</p>
         </div>
 
@@ -131,7 +129,7 @@ export function AuthForm() {
               </div>
             </div>
 
-            {isSignUp && <p className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-gray-400">We’ll create a private, unguessable ReceiptIt address for your purchase emails.</p>}
+            {isSignUp && <p className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-gray-400">We’ll create a receiptIt address for your purchase emails.</p>}
 
             {error && (
               <motion.div

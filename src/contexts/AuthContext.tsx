@@ -114,19 +114,6 @@ const normalizeProfileSettings = (profileData: any): ProfileSettings => {
   return { notifications, privacy };
 };
 
-const getReceiptItAlias = (profileData: any, authEmail?: string | null): string => {
-  const storedAlias = typeof profileData?.email_alias === 'string' ? profileData.email_alias.trim() : '';
-  if (storedAlias) return storedAlias;
-
-  // Some early accounts stored the alias as the profile/auth email before the
-  // dedicated email_alias column was introduced. Only use that fallback for a
-  // ReceiptIt address so a customer's private sign-in email is never shown.
-  const emailCandidates = [profileData?.email, authEmail];
-  return emailCandidates.find((email): email is string => (
-    typeof email === 'string' && /@receiptit\.app$/i.test(email.trim())
-  ))?.trim() || '';
-};
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -175,18 +162,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { data: null, error: null };
   };
 
-  const applyProfileState = (profileData: any, fallbackFullName = '', authEmail?: string | null) => {
-    const alias = getReceiptItAlias(profileData, authEmail);
+  const applyProfileState = (profileData: any, fallbackFullName = '') => {
     setUsername(profileData?.username || '');
-    setEmailAlias(alias);
+    setEmailAlias('');
     setFullName(profileData?.full_name || fallbackFullName || profileData?.username || '');
     setNeedsProfileRecovery(false);
-    setNeedsAliasSetup(!alias);
+    setNeedsAliasSetup(false);
     setProfileSettings(normalizeProfileSettings(profileData));
   };
 
   const ensureInboxAlias = async () => {
-    const { data, error } = await supabase.rpc('ensure_active_email_alias');
+    const { error: opaqueError } = await supabase.rpc('ensure_active_email_alias');
+    if (opaqueError) {
+      console.warn('[AuthContext] Internal inbox alias is not available yet:', opaqueError.message);
+      return { alias: '', error: opaqueError };
+    }
+    const { data, error } = await supabase.rpc('ensure_friendly_email_alias');
     if (error) {
       console.warn('[AuthContext] Private inbox alias is not available yet:', error.message);
       return { alias: '', error };
@@ -308,7 +299,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfileSettings(defaultProfileSettings);
   };
 
-  const fetchProfile = async (userId: string, authEmail?: string | null) => {
+  const fetchProfile = async (userId: string) => {
     console.log('[fetchProfile] Fetching profile for id:', userId);
 
     if (isSigningUp) {
@@ -350,15 +341,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('[fetchProfile] email_alias value:', data.email_alias, 'type:', typeof data.email_alias);
         console.log('[fetchProfile] username value:', data.username, 'type:', typeof data.username);
 
-        const alias = getReceiptItAlias(data, authEmail);
-        applyProfileState(data, '', authEmail);
-        await ensureInboxAlias();
-
-        if (!alias) {
-          console.log('[fetchProfile] User profile exists but has no alias - needs setup');
-        }
-
-        console.log('[fetchProfile] State set - username:', data.username || '', 'emailAlias:', alias);
+        applyProfileState(data);
+        const { alias } = await ensureInboxAlias();
+        if (!alias) setNeedsAliasSetup(true);
+        console.log('[fetchProfile] State set - username:', data.username || '', 'hasFriendlyAlias:', Boolean(alias));
       } else {
         console.error('[fetchProfile] No profile found for authenticated user:', userId);
         clearProfileState();
@@ -393,7 +379,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setSession(session);
           setUser(authUser);
           console.log('[Auth] Session validated, calling fetchProfile for user:', authUser.id);
-          await fetchProfile(authUser.id, authUser.email);
+          await fetchProfile(authUser.id);
         } catch (err) {
           console.error('[Auth] Error validating session:', err);
           setSession(null);
@@ -422,7 +408,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (session?.user) {
           console.log('[onAuthStateChange] Auth state change - calling fetchProfile for user:', session.user.id);
-          await fetchProfile(session.user.id, session.user.email);
+          await fetchProfile(session.user.id);
         } else {
           console.log('[onAuthStateChange] Auth state change - no user, clearing profile data');
           setUsername('');
@@ -497,7 +483,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: new Error('Failed to verify new account') };
       }
 
-      applyProfileState(profileData, displayName, signInData.user.email);
+      applyProfileState(profileData, displayName);
       await ensureInboxAlias();
 
       console.log('[signUp] Account created successfully');
@@ -551,12 +537,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: null };
       }
 
-      const alias = getReceiptItAlias(profileData, data.user.email);
-      applyProfileState(profileData, '', data.user.email);
-
-      if (!alias) {
-        console.log('[signIn] Profile exists but missing alias - needs setup');
-      }
+      applyProfileState(profileData);
+      const { alias } = await ensureInboxAlias();
+      if (!alias) setNeedsAliasSetup(true);
 
       return { error: null };
     } catch (err: any) {
@@ -583,7 +566,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     console.log('[forceRefresh] Force refresh - fetching profile for user:', authUser.id);
-    await fetchProfile(authUser.id, authUser.email);
+    await fetchProfile(authUser.id);
   };
 
   const recoverProfile = async (username: string, fullName: string, alias: string | null) => {
@@ -618,7 +601,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: new Error('Failed to verify recovered profile') };
       }
 
-      applyProfileState(profileData, fullName, user.email);
+      applyProfileState(profileData, fullName);
+      await ensureInboxAlias();
 
       console.log('[recoverProfile] Profile recovered successfully');
       return { error: null };
