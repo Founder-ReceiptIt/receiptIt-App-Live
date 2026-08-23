@@ -1063,7 +1063,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Search stores, items, or order numbers..."
+              placeholder="Search store, item, amount, date or reference..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-10 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-teal-400/50 transition-colors"
@@ -1219,7 +1219,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                 <>
                   <Search className="w-12 h-12 text-gray-500 mx-auto mb-4" />
                   <h3 className="text-lg font-bold text-white mb-2">No receipts found</h3>
-                  <p className="text-gray-400">Try searching by store, item, or order number</p>
+                  <p className="text-gray-400">Try a store, item, amount, date or reference</p>
                 </>
               ) : selectedCategory || warrantyFilterActive ? (
                 <>
