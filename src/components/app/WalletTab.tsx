@@ -80,6 +80,10 @@ const formatCurrencyAmount = (currencyCode: string, amount: number): string => (
   `${getCurrencySymbol(currencyCode)}${amount.toFixed(2)}`
 );
 
+const formatBudgetAmount = (amount: number): string => (
+  `£${amount.toLocaleString('en-GB', { maximumFractionDigits: 2 })}`
+);
+
 const WALLET_RECEIPT_STATUSES = ['needs_input', 'processing', 'parsed', 'completed', 'duplicate', 'failed', 'skipped', 'needs_review', 'rejected'] as const;
 const HIDDEN_WALLET_RECEIPT_STATUSES = ['duplicate', 'skipped'] as const;
 
@@ -985,7 +989,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
         {primaryAction ? <div className="mb-4 rounded-2xl border border-amber-300/25 bg-gradient-to-br from-amber-400/12 to-teal-400/5 p-5"><div className="flex items-start gap-3"><div className="rounded-xl border border-amber-300/25 bg-amber-400/10 p-2.5"><AlertCircle className="h-5 w-5 text-amber-200" /></div><div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-200">{actionHeading}</p><p className="mt-1 text-2xl font-bold text-white">{primaryAction.detail}</p></div></div></div> : null}
 
         <div className="mb-6 rounded-2xl border border-teal-300/25 bg-gradient-to-br from-teal-400/15 to-cyan-400/5 p-5">
-          <div className="flex items-start gap-3"><div className="rounded-xl border border-teal-300/20 bg-teal-400/10 p-2.5"><ShieldCheck className="h-5 w-5 text-teal-200" strokeWidth={1.5} /></div><div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-200">This month</p><p className="mt-1 text-2xl font-bold text-white">£{spentThisMonth.toFixed(2)} spent</p><p className="mt-1 text-sm text-gray-300">Average purchase £{averagePurchaseThisMonth.toFixed(2)}</p>{monthlyBudget ? <><p className="mt-4 text-sm text-gray-300">of £{monthlyBudget.toFixed(2)} budget</p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-teal-400 transition-[width] duration-300" style={{ width: `${budgetProgress}%` }} /></div><p className="mt-2 text-xs text-gray-400">{budgetUsed.toFixed(1)}% used</p></> : null}</div></div>
+          <div className="flex items-start gap-3"><div className="rounded-xl border border-teal-300/20 bg-teal-400/10 p-2.5"><ShieldCheck className="h-5 w-5 text-teal-200" strokeWidth={1.5} /></div><div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-200">This month</p><p className="mt-1 text-2xl font-bold text-white">£{spentThisMonth.toFixed(2)} spent</p><p className="mt-1 text-sm text-gray-300">Average purchase £{averagePurchaseThisMonth.toFixed(2)}</p>{monthlyBudget ? <><p className="mt-4 text-sm text-gray-300">of {formatBudgetAmount(monthlyBudget)} budget</p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-teal-400 transition-[width] duration-300" style={{ width: `${budgetProgress}%` }} /></div><p className="mt-2 text-xs text-gray-400">{budgetUsed.toFixed(1)}% used</p></> : null}</div></div>
         </div>
 
         <div className="mb-6">
