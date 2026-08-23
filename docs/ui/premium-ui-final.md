@@ -23,4 +23,3 @@ Frontend visual code only. No Supabase policy, Storage behaviour, Make scenario,
 2. Add a lightweight visual screenshot harness using seeded local UI states only if it can be maintained without production data.
 3. Add field Web Vitals only with explicit privacy/analytics approval.
 4. Consider focus trapping for nested dialog scenarios if nested modal functionality is added.
-5. Consider a pre-processing page-combining flow for multiple receipt images or pages. This could support long supermarket receipts, invoices and hotel folios; it is not part of the current beta upload flow.
