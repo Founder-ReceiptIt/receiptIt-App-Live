@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Receipt as ReceiptIcon, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Loader2, Car, Home, Plane, Zap, Utensils, Undo2, Trash2, CheckSquare, Square, ChevronDown, Download, AlertCircle } from 'lucide-react';
+import { Receipt as ReceiptIcon, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Loader2, Car, Home, Plane, Zap, Utensils, Undo2, Trash2, CheckSquare, Square, ChevronDown, Download, AlertCircle, ShieldCheck } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { ReportProblemDialog } from './ReportProblemDialog';
@@ -672,6 +672,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
     (receipt.date || receipt.createdAt || '').slice(0, 7) === currentMonthKey
   ));
   const spentThisMonth = receiptsThisMonth.reduce((sum, receipt) => sum + getReceiptGbpDisplayAmount(receipt), 0);
+  const averagePurchaseThisMonth = receiptsThisMonth.length ? spentThisMonth / receiptsThisMonth.length : 0;
   const budgetUsed = monthlyBudget ? (spentThisMonth / monthlyBudget) * 100 : 0;
   const budgetProgress = Math.min(budgetUsed, 100);
   const actionReceipts = visibleReceipts.flatMap((receipt) => {
@@ -984,7 +985,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
         {primaryAction ? <div className="mb-4 rounded-2xl border border-amber-300/25 bg-gradient-to-br from-amber-400/12 to-teal-400/5 p-5"><div className="flex items-start gap-3"><div className="rounded-xl border border-amber-300/25 bg-amber-400/10 p-2.5"><AlertCircle className="h-5 w-5 text-amber-200" /></div><div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-200">{actionHeading}</p><p className="mt-1 text-2xl font-bold text-white">{primaryAction.detail}</p></div></div></div> : null}
 
         <div className="mb-6 rounded-2xl border border-teal-300/25 bg-gradient-to-br from-teal-400/15 to-cyan-400/5 p-5">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-200">This month</p><p className="mt-1 text-2xl font-bold text-white">£{spentThisMonth.toFixed(2)} spent</p>{monthlyBudget ? <><p className="mt-1 text-sm text-gray-300">of £{monthlyBudget.toFixed(2)} budget</p><div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-teal-400 transition-[width] duration-300" style={{ width: `${budgetProgress}%` }} /></div><p className="mt-2 text-xs text-gray-400">{budgetUsed.toFixed(1)}% used</p></> : <p className="mt-1 text-sm text-gray-400">{receiptsThisMonth.length} {receiptsThisMonth.length === 1 ? 'receipt' : 'receipts'} saved</p>}
+          <div className="flex items-start gap-3"><div className="rounded-xl border border-teal-300/20 bg-teal-400/10 p-2.5"><ShieldCheck className="h-5 w-5 text-teal-200" strokeWidth={1.5} /></div><div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-200">This month</p><p className="mt-1 text-2xl font-bold text-white">£{spentThisMonth.toFixed(2)} spent</p><p className="mt-1 text-sm text-gray-300">Average purchase £{averagePurchaseThisMonth.toFixed(2)}</p>{monthlyBudget ? <><p className="mt-4 text-sm text-gray-300">of £{monthlyBudget.toFixed(2)} budget</p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-teal-400 transition-[width] duration-300" style={{ width: `${budgetProgress}%` }} /></div><p className="mt-2 text-xs text-gray-400">{budgetUsed.toFixed(1)}% used</p></> : null}</div></div>
         </div>
 
         <div className="mb-6">

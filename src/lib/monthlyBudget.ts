@@ -1,13 +1,14 @@
 const MONTHLY_BUDGET_KEY = 'receiptit_monthly_budget_gbp';
+export const DEFAULT_MONTHLY_BUDGET = 2500;
 
 export const MONTHLY_BUDGET_EVENT = 'receiptit:monthly-budget-updated';
 
 export const getMonthlyBudget = (): number | null => {
   const rawValue = window.localStorage.getItem(MONTHLY_BUDGET_KEY);
-  if (!rawValue) return null;
+  if (!rawValue) return DEFAULT_MONTHLY_BUDGET;
 
   const value = Number(rawValue);
-  return Number.isFinite(value) && value > 0 ? value : null;
+  return Number.isFinite(value) && value > 0 ? value : DEFAULT_MONTHLY_BUDGET;
 };
 
 export const saveMonthlyBudget = (value: number | null) => {
