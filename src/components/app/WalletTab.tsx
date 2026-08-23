@@ -645,7 +645,8 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
             setReceipts((currentReceipts) => mergeRealtimeReceiptIntoWallet(currentReceipts, newRow as SupabaseReceiptRow));
 
             if (isFinalizedReceiptStatus(newRow.status)) {
-              const amount = parseFloat(String(newRow.amount ?? '')) || parseFloat(String((newRow as any).total ?? '')) || 0;
+              const legacyTotal = (newRow as { total?: unknown }).total;
+              const amount = parseFloat(String(newRow.amount ?? '')) || parseFloat(String(legacyTotal ?? '')) || 0;
               showSuccessfulReceiptToast(newRow, amount);
             }
 
@@ -669,8 +670,10 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
             setReceipts((currentReceipts) => mergeRealtimeReceiptIntoWallet(currentReceipts, updatedRow as SupabaseReceiptRow));
 
             // Check if amount was just processed (changed from 0 or null to a value)
-            const oldAmount = parseFloat(String(oldRow.amount ?? '')) || parseFloat(String((oldRow as any).total ?? '')) || 0;
-            const newAmount = parseFloat(String(updatedRow.amount ?? '')) || parseFloat(String((updatedRow as any).total ?? '')) || 0;
+            const oldLegacyTotal = (oldRow as { total?: unknown }).total;
+            const newLegacyTotal = (updatedRow as { total?: unknown }).total;
+            const oldAmount = parseFloat(String(oldRow.amount ?? '')) || parseFloat(String(oldLegacyTotal ?? '')) || 0;
+            const newAmount = parseFloat(String(updatedRow.amount ?? '')) || parseFloat(String(newLegacyTotal ?? '')) || 0;
 
             if (isFinalizedReceiptStatus(updatedRow.status) && ((oldAmount === 0 && newAmount > 0) || !isFinalizedReceiptStatus(oldRow.status))) {
               showSuccessfulReceiptToast(updatedRow, newAmount);
