@@ -10,6 +10,7 @@ This is a non-destructive inventory of controlled fixtures and the receipts visi
 | --- | --- | --- |
 | Harbour Market — £30.20 (two records) | Controlled two- and three-image receipt checks. | Keep only in the dedicated test account, or delete manually before using this account as a beta participant. |
 | Not a purchase document — £0.00 | Deliberately unreadable multi-image failure-path check. | Delete manually before using this account as a beta participant. |
+| Disposable fresh-user account: Harbour Market — £30.20 and £5.80 | Fresh signup, direct-upload and private-alias acceptance checks. | Keep solely for repeat onboarding QA; manually delete the disposable account when that testing is complete. |
 
 ## Local-only fixtures
 
