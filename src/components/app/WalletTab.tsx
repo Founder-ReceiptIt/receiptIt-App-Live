@@ -24,6 +24,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { getReceiptFailureDetails, getReceiptPurchaseDateDisplay } from '../../lib/receiptUiUtils';
 import { getMonthlyBudget, MONTHLY_BUDGET_EVENT } from '../../lib/monthlyBudget';
+import { getReceiptMilestone } from '../../lib/receiptMilestones';
 import { useToast } from '../../contexts/ToastContext';
 
 interface WalletTabProps {
@@ -86,6 +87,30 @@ const formatBudgetAmount = (amount: number): string => (
 
 const WALLET_RECEIPT_STATUSES = ['needs_input', 'processing', 'parsed', 'completed', 'duplicate', 'failed', 'skipped', 'needs_review', 'rejected'] as const;
 const HIDDEN_WALLET_RECEIPT_STATUSES = ['duplicate', 'skipped'] as const;
+const RECEIPT_MILESTONE_STORAGE_PREFIX = 'receiptit:shown-receipt-milestones:';
+
+const getShownReceiptMilestones = (userId: string): Set<number> => {
+  try {
+    const saved = window.localStorage.getItem(`${RECEIPT_MILESTONE_STORAGE_PREFIX}${userId}`);
+    const parsed = saved ? JSON.parse(saved) : [];
+    return new Set(Array.isArray(parsed) ? parsed.filter((count): count is number => Number.isInteger(count)) : []);
+  } catch {
+    return new Set();
+  }
+};
+
+const markReceiptMilestoneShown = (userId: string, count: number): void => {
+  try {
+    const shownMilestones = getShownReceiptMilestones(userId);
+    shownMilestones.add(count);
+    window.localStorage.setItem(
+      `${RECEIPT_MILESTONE_STORAGE_PREFIX}${userId}`,
+      JSON.stringify([...shownMilestones].sort((first, second) => first - second)),
+    );
+  } catch {
+    // Milestones remain a quiet enhancement when storage is unavailable.
+  }
+};
 
 const isHiddenWalletReceiptStatus = (status: unknown): status is typeof HIDDEN_WALLET_RECEIPT_STATUSES[number] =>
   typeof status === 'string' && HIDDEN_WALLET_RECEIPT_STATUSES.includes(status as typeof HIDDEN_WALLET_RECEIPT_STATUSES[number]);
@@ -468,9 +493,33 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
   const [moveMenuOpen, setMoveMenuOpen] = useState(false);
   const [monthlyBudget, setMonthlyBudget] = useState<number | null>(() => getMonthlyBudget());
   const previousReceiptIdsRef = useRef<Set<string>>(new Set());
+  const successfulReceiptIdsRef = useRef<Set<string>>(new Set());
+  const isMilestoneTrackingReadyRef = useRef(false);
 
   useEffect(() => {
     if (!user) return;
+
+    successfulReceiptIdsRef.current = new Set();
+    isMilestoneTrackingReadyRef.current = false;
+
+    const showSuccessfulReceiptToast = (row: Partial<SupabaseReceiptRow>, amount: number) => {
+      const merchantName = row.merchant && row.merchant.trim() ? row.merchant : 'Receipt (Seller Unknown)';
+      const currencyCode = row.currency || 'GBP';
+      const receiptId = typeof row.id === 'string' ? row.id : undefined;
+
+      if (receiptId && isMilestoneTrackingReadyRef.current && !successfulReceiptIdsRef.current.has(receiptId)) {
+        successfulReceiptIdsRef.current.add(receiptId);
+        const milestone = getReceiptMilestone(successfulReceiptIdsRef.current.size);
+
+        if (milestone && !getShownReceiptMilestones(user.id).has(milestone.count)) {
+          markReceiptMilestoneShown(user.id, milestone.count);
+          showToast(milestone.title, milestone.supportingText);
+          return;
+        }
+      }
+
+      showToast('Receipt saved', `${merchantName} - ${formatCurrencyAmount(currencyCode, amount)}`);
+    };
 
     const fetchReceipts = async () => {
       try {
@@ -493,6 +542,12 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
         }
 
         const rawRows = ((data || []) as SupabaseReceiptRow[]);
+        successfulReceiptIdsRef.current = new Set(
+          rawRows
+            .filter((row) => isFinalizedReceiptStatus(row.status))
+            .map((row) => row.id),
+        );
+        isMilestoneTrackingReadyRef.current = true;
         const filteredRawRows = filterVisibleReceiptRows(rawRows);
         const dedupedRows = dedupeReceiptRows(filteredRawRows);
         const visibleDedupedRows = filterVisibleReceiptRows(dedupedRows);
@@ -590,11 +645,8 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
             setReceipts((currentReceipts) => mergeRealtimeReceiptIntoWallet(currentReceipts, newRow as SupabaseReceiptRow));
 
             if (isFinalizedReceiptStatus(newRow.status)) {
-              const merchantName = newRow.merchant && newRow.merchant.trim() ? newRow.merchant : 'Receipt (Seller Unknown)';
               const amount = parseFloat(String(newRow.amount ?? '')) || parseFloat(String((newRow as any).total ?? '')) || 0;
-              const currencyCode = newRow.currency || 'GBP';
-              const formattedAmount = amount > 0 ? formatCurrencyAmount(currencyCode, amount) : 'Processing...';
-              showToast('New receipt saved', `${merchantName} - ${formattedAmount}`);
+              showSuccessfulReceiptToast(newRow, amount);
             }
 
             fetchReceipts();
@@ -621,9 +673,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
             const newAmount = parseFloat(String(updatedRow.amount ?? '')) || parseFloat(String((updatedRow as any).total ?? '')) || 0;
 
             if (isFinalizedReceiptStatus(updatedRow.status) && ((oldAmount === 0 && newAmount > 0) || !isFinalizedReceiptStatus(oldRow.status))) {
-              const merchantName = updatedRow.merchant && updatedRow.merchant.trim() ? updatedRow.merchant : 'Receipt (Seller Unknown)';
-              const currencyCode = updatedRow.currency || 'GBP';
-              showToast('Receipt saved', `${merchantName} - ${formatCurrencyAmount(currencyCode, newAmount)}`);
+              showSuccessfulReceiptToast(updatedRow, newAmount);
             }
 
             fetchReceipts();
