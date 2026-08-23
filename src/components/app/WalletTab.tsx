@@ -659,7 +659,6 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
     (receipt.date || receipt.createdAt || '').slice(0, 7) === currentMonthKey
   ));
   const spentThisMonth = receiptsThisMonth.reduce((sum, receipt) => sum + getReceiptGbpDisplayAmount(receipt), 0);
-  const averagePurchaseThisMonth = receiptsThisMonth.length > 0 ? spentThisMonth / receiptsThisMonth.length : 0;
   const actionReceipts = visibleReceipts.flatMap((receipt) => {
     if (receipt.status === 'needs_review') return [{ receipt, label: 'Review needed', detail: `Review ${receipt.merchant || 'this document'}` }];
     if (receipt.status === 'failed') return [{ receipt, label: 'Try again', detail: `We could not finish ${receipt.merchant || 'this receipt'}` }];
@@ -968,13 +967,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
         </div>
 
         <div className={`mb-6 rounded-2xl border p-5 ${primaryAction ? 'border-amber-300/25 bg-gradient-to-br from-amber-400/12 to-teal-400/5' : 'border-teal-300/25 bg-gradient-to-br from-teal-400/15 to-cyan-400/5'}`}>
-          <div className="flex items-start gap-3">
-            <div className={`rounded-xl border p-2.5 ${primaryAction ? 'border-amber-300/25 bg-amber-400/10' : 'border-teal-300/25 bg-teal-400/10'}`}><AlertCircle className={`h-5 w-5 ${primaryAction ? 'text-amber-200' : 'text-teal-200'}`} /></div>
-            <div className="min-w-0 flex-1">
-              <p className={`text-xs font-bold uppercase tracking-[0.16em] ${primaryAction ? 'text-amber-200' : 'text-teal-200'}`}>{primaryAction ? actionHeading : 'This month'}</p>
-              {primaryAction ? <p className="mt-1 text-2xl font-bold text-white">{primaryAction.detail}</p> : <><p className="mt-1 text-2xl font-bold text-white">£{spentThisMonth.toFixed(2)} spent</p><p className="mt-1 text-sm text-gray-400">Average purchase £{averagePurchaseThisMonth.toFixed(2)}</p></>}
-            </div>
-          </div>
+          {primaryAction ? <div className="flex items-start gap-3"><div className="rounded-xl border border-amber-300/25 bg-amber-400/10 p-2.5"><AlertCircle className="h-5 w-5 text-amber-200" /></div><div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-200">{actionHeading}</p><p className="mt-1 text-2xl font-bold text-white">{primaryAction.detail}</p></div></div> : <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-200">This month</p><p className="mt-1 text-2xl font-bold text-white">£{spentThisMonth.toFixed(2)} spent</p><p className="mt-1 text-sm text-gray-400">{receiptsThisMonth.length} {receiptsThisMonth.length === 1 ? 'receipt' : 'receipts'} saved</p></div>}
         </div>
 
         <div className="mb-6">
@@ -1351,7 +1344,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                             </h3>
                           )}
 
-                          <div className="flex items-center gap-2">
+                          <div className="mt-1.5 flex flex-col items-start gap-1.5">
                             {purchaseDateDisplay && (
                               <p className="text-sm text-gray-400">
                                 {purchaseDateDisplay}
