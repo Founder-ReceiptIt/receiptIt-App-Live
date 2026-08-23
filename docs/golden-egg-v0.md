@@ -47,10 +47,11 @@ summary, writes it to the separate private `proof-packs` bucket, records a
 `proof_pack_generated` activity event, and returns a 60-second signed download
 URL. No permanent URL is stored or exposed.
 
-The pack lists the private-original context rather than embedding a durable
-Storage URL. The original remains available through ReceiptIt's normal signed
-Original flow. Each pack states that ReceiptIt organizes user-held evidence and
-does not certify legal validity or guarantee a claim outcome.
+The pack is a clean, shareable purchase record created from the user's saved
+receipt. It appends the original receipt as the source evidence rather than
+embedding a durable Storage URL; the original also remains available through
+ReceiptIt's normal signed Original flow. It does not certify legal validity,
+replace a retailer receipt or guarantee a claim outcome.
 
 ## Activity model
 

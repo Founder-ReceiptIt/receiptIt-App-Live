@@ -177,6 +177,7 @@ Deno.serve(async (request) => {
   const paymentLines = ((paymentsResult.data || []) as PaymentRow[]).map((payment) => ({ text: `${paymentDescription(asText(payment.payment_method) || asText(payment.method))} · ${money(payment.currency || receipt.currency, payment.amount)}` }));
   const lines: Array<{ text: string; strong?: boolean }> = [
     { text: "Proof of purchase", strong: true },
+    { text: "A shareable purchase record created from your saved receipt." },
     { text: `Store: ${asText(receipt.merchant) || "Store unknown"}` },
     { text: `Date: ${britishDate(asText(receipt.transaction_date))}` },
     { text: `Amount: ${money(receipt.currency, receipt.amount)}` },
@@ -187,8 +188,8 @@ Deno.serve(async (request) => {
     ...(asText(receipt.return_date) ? [{ text: `Return by: ${britishDate(receipt.return_date)}` }] : []),
     ...(asText(receipt.warranty_date) ? [{ text: `Warranty until: ${britishDate(receipt.warranty_date)}` }] : []),
     { text: "" },
-    { text: "Created for returns, warranties or insurance." },
-    { text: "Original receipt attached." },
+    { text: "Useful for sharing with returns, warranty or insurance teams." },
+    { text: "The original receipt is included as the source evidence." },
   ];
 
   const { data: originalBlob, error: originalError } = await admin.storage.from("receipts").download(receipt.storage_path);
