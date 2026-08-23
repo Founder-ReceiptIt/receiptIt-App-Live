@@ -3,11 +3,17 @@ import { Upload, X, Camera, CheckCircle, Loader2, FileImage, File, Clock } from 
 import { useState, useRef, useEffect } from 'react';
 import { flushSync } from 'react-dom';
 import { supabase } from '../../lib/supabase';
-import { validateReceiptUpload, type ReceiptUploadKind } from '../../lib/uploadValidation';
+import {
+  MAX_RECEIPT_IMAGE_DIMENSION,
+  MAX_RECEIPT_IMAGE_PIXELS,
+  MAX_RECEIPT_UPLOAD_BYTES,
+  validateReceiptUpload,
+  type ReceiptUploadKind,
+} from '../../lib/uploadValidation';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 
-type ScanState = 'idle' | 'uploading' | 'processing' | 'pending' | 'success' | 'error';
+type ScanState = 'idle' | 'review' | 'uploading' | 'processing' | 'pending' | 'success' | 'error';
 
 interface ScanTabProps {
   onNavigateToWallet: () => void;
@@ -36,11 +42,116 @@ async function computeFileHash(file: File): Promise<string> {
   return hashHex;
 }
 
+const MAX_MULTI_RECEIPT_IMAGES = 10;
+const MAX_MULTI_RECEIPT_TOTAL_BYTES = 30 * 1024 * 1024;
+const MULTI_IMAGE_GAP = 18;
+
+const toHashHex = (hashBuffer: ArrayBuffer): string =>
+  Array.from(new Uint8Array(hashBuffer)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+
+const computeMultiImageHash = async (files: File[]): Promise<string> => {
+  const encoder = new TextEncoder();
+  const headers = [encoder.encode(`receiptit-multi-image-v1:${files.length}\n`)];
+  const imageBytes = await Promise.all(files.map((file, index) => file.arrayBuffer().then((buffer) => ({
+    index,
+    bytes: new Uint8Array(buffer),
+  }))));
+  const totalLength = headers.reduce((total, value) => total + value.byteLength, 0)
+    + imageBytes.reduce((total, { index, bytes }) => total + encoder.encode(`${index}:${bytes.byteLength}\n`).byteLength + bytes.byteLength, 0);
+  const payload = new Uint8Array(totalLength);
+  let offset = 0;
+
+  headers.forEach((header) => {
+    payload.set(header, offset);
+    offset += header.byteLength;
+  });
+  imageBytes.forEach(({ index, bytes }) => {
+    const header = encoder.encode(`${index}:${bytes.byteLength}\n`);
+    payload.set(header, offset);
+    offset += header.byteLength;
+    payload.set(bytes, offset);
+    offset += bytes.byteLength;
+  });
+
+  return toHashHex(await crypto.subtle.digest('SHA-256', payload));
+};
+
+const loadReceiptImage = async (file: File): Promise<HTMLImageElement> => {
+  const imageUrl = URL.createObjectURL(file);
+  const image = new Image();
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error('One of these images could not be opened.'));
+      image.src = imageUrl;
+    });
+    return image;
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
+};
+
+const canvasToJpeg = (images: HTMLImageElement[], scale: number, quality: number): Promise<Blob> => {
+  const sourceWidth = Math.max(...images.map((image) => image.naturalWidth));
+  const sourceHeight = images.reduce((total, image) => total + image.naturalHeight, MULTI_IMAGE_GAP * (images.length - 1));
+  const width = Math.max(1, Math.floor(sourceWidth * scale));
+  const height = Math.max(1, Math.floor(sourceHeight * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+
+  if (!context) throw new Error('Your browser could not prepare these images.');
+
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, width, height);
+  let y = 0;
+  images.forEach((image) => {
+    const imageWidth = Math.floor(image.naturalWidth * scale);
+    const imageHeight = Math.floor(image.naturalHeight * scale);
+    context.drawImage(image, Math.floor((width - imageWidth) / 2), y, imageWidth, imageHeight);
+    y += imageHeight + Math.floor(MULTI_IMAGE_GAP * scale);
+  });
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error('Your browser could not prepare these images.'));
+    }, 'image/jpeg', quality);
+  });
+};
+
+const combineReceiptImages = async (files: File[]): Promise<File> => {
+  const images = await Promise.all(files.map(loadReceiptImage));
+  const sourceWidth = Math.max(...images.map((image) => image.naturalWidth));
+  const sourceHeight = images.reduce((total, image) => total + image.naturalHeight, MULTI_IMAGE_GAP * (images.length - 1));
+  const baseScale = Math.min(
+    1,
+    MAX_RECEIPT_IMAGE_DIMENSION / sourceWidth,
+    MAX_RECEIPT_IMAGE_DIMENSION / sourceHeight,
+    Math.sqrt(MAX_RECEIPT_IMAGE_PIXELS / (sourceWidth * sourceHeight)),
+  );
+
+  for (const sizeScale of [1, 0.86, 0.72, 0.58]) {
+    for (const quality of [0.92, 0.84, 0.76]) {
+      const blob = await canvasToJpeg(images, baseScale * sizeScale, quality);
+      if (blob.size <= MAX_RECEIPT_UPLOAD_BYTES) {
+        return new window.File([blob], `receipt-${Date.now()}.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
+      }
+    }
+  }
+
+  throw new Error('These images are too detailed to combine safely. Choose clearer or smaller images and try again.');
+};
+
 export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
   const { user } = useAuth();
   const { showToast } = useToast();
   const [scanState, setScanState] = useState<ScanState>('idle');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedImageFiles, setSelectedImageFiles] = useState<File[]>([]);
+  const [isCombiningImages, setIsCombiningImages] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -181,7 +292,8 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     e.preventDefault();
     e.stopPropagation();
 
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files || []);
+    const file = files[0];
     if (!file || (isScanningRef.current && !restoredPickerRef.current)) {
       console.log('[ScanTab] File selection blocked - already scanning or no file');
       // Clear localStorage if no file selected (user cancelled)
@@ -189,7 +301,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       return;
     }
 
-    console.log('[ScanTab] File selected:', file.name, file.type, file.size);
+    console.log('[ScanTab] File selected:', file.name, file.type, file.size, 'count:', files.length);
     restoredPickerRef.current = false;
     clearScanningStorage();
 
@@ -198,6 +310,53 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
     // Block a second selection while deterministic file validation is running.
     isScanningRef.current = true;
+
+    if (files.length > 1) {
+      if (files.length > MAX_MULTI_RECEIPT_IMAGES) {
+        setErrorMessage(`Choose up to ${MAX_MULTI_RECEIPT_IMAGES} images for one receipt.`);
+        setScanState('error');
+        isScanningRef.current = false;
+        showToast(`Choose up to ${MAX_MULTI_RECEIPT_IMAGES} images for one receipt.`, undefined);
+        return;
+      }
+
+      if (files.some((selectedFile) => selectedFile.size) && files.reduce((total, selectedFile) => total + selectedFile.size, 0) > MAX_MULTI_RECEIPT_TOTAL_BYTES) {
+        setErrorMessage('These images are too large together. Choose up to 30MB in total.');
+        setScanState('error');
+        isScanningRef.current = false;
+        showToast('These images are too large together. Choose up to 30MB in total.', undefined);
+        return;
+      }
+
+      const validations = await Promise.all(files.map((selectedFile) => validateReceiptUpload(selectedFile)));
+      const invalidValidation = validations.find((validation) => !validation.valid);
+      if (invalidValidation && !invalidValidation.valid) {
+        console.warn('[ScanTab] Multi-image upload rejected before processing:', invalidValidation.errorReason);
+        setErrorMessage(invalidValidation.message);
+        setScanState('error');
+        isScanningRef.current = false;
+        showToast(invalidValidation.message, undefined);
+        return;
+      }
+
+      if (validations.some((validation) => validation.valid && validation.kind !== 'image')) {
+        setErrorMessage('Choose images together. Upload a PDF on its own.');
+        setScanState('error');
+        isScanningRef.current = false;
+        showToast('Choose images together. Upload a PDF on its own.', undefined);
+        return;
+      }
+
+      flushSync(() => {
+        setSelectedImageFiles(files);
+        setSelectedFile(null);
+        setPreviewUrl(null);
+        setErrorMessage('');
+        setScanState('review');
+      });
+      isScanningRef.current = false;
+      return;
+    }
 
     const validation = await validateReceiptUpload(file);
     if (!validation.valid) {
@@ -231,7 +390,51 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     }, 0);
   };
 
-  const startScan = async (file: File, uploadKind: ReceiptUploadKind, scanToken: number) => {
+  const handleContinueMultiImageReceipt = async () => {
+    if (selectedImageFiles.length < 2) {
+      return;
+    }
+
+    const scanToken = activeScanTokenRef.current + 1;
+    activeScanTokenRef.current = scanToken;
+    pendingReceiptIdRef.current = null;
+    isScanningRef.current = true;
+    setIsCombiningImages(true);
+    setErrorMessage('');
+    setScanState('uploading');
+
+    try {
+      const [fileHash, combinedFile] = await Promise.all([
+        computeMultiImageHash(selectedImageFiles),
+        combineReceiptImages(selectedImageFiles),
+      ]);
+
+      if (!isScanActive(scanToken)) {
+        return;
+      }
+
+      const validation = await validateReceiptUpload(combinedFile);
+      if (!validation.valid || validation.kind !== 'image') {
+        throw new Error(!validation.valid ? validation.message : 'These images could not be prepared as a receipt.');
+      }
+
+      const imageUrl = URL.createObjectURL(combinedFile);
+      setSelectedFile(combinedFile);
+      setPreviewUrl(imageUrl);
+      setIsCombiningImages(false);
+      await startScan(combinedFile, 'image', scanToken, fileHash);
+    } catch (error) {
+      console.error('[ScanTab] Could not combine receipt images:', error);
+      if (isScanActive(scanToken)) {
+        setErrorMessage(error instanceof Error ? error.message : 'We couldn’t prepare these images. Please try again.');
+        setScanState('error');
+        setIsCombiningImages(false);
+        isScanningRef.current = false;
+      }
+    }
+  };
+
+  const startScan = async (file: File, uploadKind: ReceiptUploadKind, scanToken: number, precomputedFileHash?: string) => {
     if (!isScanActive(scanToken)) {
       return;
     }
@@ -252,7 +455,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       // Start hashing immediately. The hash gives us an exact, privacy-safe
       // fingerprint of this file, so we can stop an accidental re-upload
       // before it creates another storage object or another processing job.
-      const fileHashPromise = computeFileHash(file);
+      const fileHashPromise = precomputedFileHash ? Promise.resolve(precomputedFileHash) : computeFileHash(file);
 
       let fileHash: string | undefined;
       try {
@@ -502,6 +705,8 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     isScanningRef.current = false;
     setScanState('idle');
     setSelectedFile(null);
+    setSelectedImageFiles([]);
+    setIsCombiningImages(false);
     pendingReceiptIdRef.current = null;
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
@@ -565,6 +770,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                   ref={fileInputRef}
                   type="file"
                   accept="image/jpeg,image/jpg,image/png,application/pdf"
+                  multiple
                   onChange={handleFileSelect}
                   onClick={(e) => {
                     // Ensure we don't have stale values
@@ -587,6 +793,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                       localStorage.setItem('scanningSource', 'camera');
 
                       if (fileInputRef.current) {
+                        fileInputRef.current.removeAttribute('multiple');
                         fileInputRef.current.setAttribute('capture', 'environment');
                       }
                       fileInputRef.current?.click();
@@ -594,6 +801,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                       setTimeout(() => {
                         if (fileInputRef.current) {
                           fileInputRef.current.removeAttribute('capture');
+                          fileInputRef.current.setAttribute('multiple', '');
                         }
                       }, 100);
                     }}
@@ -612,6 +820,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                       // Gallery selection is not a camera capture and should
                       // never trigger Android's camera-recovery path.
                       clearScanningStorage();
+                      fileInputRef.current?.setAttribute('multiple', '');
                       fileInputRef.current?.click();
                     }}
                     className="w-full backdrop-blur-xl bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl p-4 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
@@ -629,6 +838,27 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                   </p>
                 </div>
 
+              </motion.div>
+            )}
+
+            {scanState === 'review' && (
+              <motion.div
+                key="review"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.3 }}
+                className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8"
+              >
+                <div className="text-center">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-teal-400/25 bg-teal-400/10"><FileImage className="h-7 w-7 text-teal-300" strokeWidth={1.5} /></div>
+                  <h2 className="mt-4 text-2xl font-bold text-white">{selectedImageFiles.length} images selected</h2>
+                  <p className="mt-2 text-sm text-gray-300">We’ll read them together as one receipt.</p>
+                  <div className="mt-5 flex justify-center gap-2" aria-label={`${selectedImageFiles.length} images in selection order`}>
+                    {selectedImageFiles.map((file, index) => <span key={`${file.name}-${file.lastModified}-${index}`} className="flex h-8 w-8 items-center justify-center rounded-full border border-teal-300/20 bg-teal-400/10 text-xs font-bold text-teal-100">{index + 1}</span>)}
+                  </div>
+                  <div className="mt-7 space-y-3"><button type="button" onClick={() => void handleContinueMultiImageReceipt()} className="w-full rounded-xl border border-teal-400/30 bg-teal-500/20 p-4 font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:bg-teal-500/30 active:scale-[0.98]">Continue</button><button type="button" onClick={resetScan} className="w-full rounded-xl border border-white/10 bg-white/5 p-4 font-semibold text-gray-300 transition-all duration-300 hover:bg-white/10">Choose again</button></div>
+                </div>
               </motion.div>
             )}
 
@@ -686,10 +916,12 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                   </div>
 
                   <h2 className="text-2xl font-bold text-white mb-2">
-                    {scanState === 'uploading' ? 'Uploading Receipt...' : 'Preparing your receipt...'}
+                    {isCombiningImages ? 'Putting your receipt together...' : scanState === 'uploading' ? 'Uploading Receipt...' : 'Preparing your receipt...'}
                   </h2>
                   <p className="text-gray-400 mb-6">
-                    {scanState === 'uploading'
+                    {isCombiningImages
+                      ? 'Keeping your selected images together in one receipt'
+                      : scanState === 'uploading'
                       ? 'Uploading your receipt to secure storage'
                       : 'Getting everything ready for scanning'
                     }
