@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Receipt as ReceiptIcon, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Loader2, Car, Home, Plane, Zap, Utensils, Undo2, Trash2, CheckSquare, Square, ChevronDown, Download, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Receipt as ReceiptIcon, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Loader2, Car, Home, Plane, Zap, Utensils, Undo2, Trash2, CheckSquare, Square, ChevronDown, Download, AlertCircle, ShieldCheck, AtSign, ScanLine } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { ReportProblemDialog } from './ReportProblemDialog';
@@ -30,6 +30,8 @@ import { useToast } from '../../contexts/ToastContext';
 interface WalletTabProps {
   onReceiptClick: (receipt: Receipt) => void;
   onReceiptsChange?: (receipts: Receipt[]) => void;
+  onNavigateToScan: () => void;
+  onNavigateToAlias: () => void;
 }
 
 const getCategoryIcon = (category: string): LucideIcon => {
@@ -469,7 +471,7 @@ export interface Receipt {
   groupingKey: string;
 }
 
-export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) {
+export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, onNavigateToAlias }: WalletTabProps) {
   const { user } = useAuth();
   const { showToast } = useToast();
 
@@ -1283,8 +1285,12 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
               ) : (
                 <>
                   <ReceiptIcon className="w-12 h-12 text-gray-500 mx-auto mb-4" />
-                  <h3 className="text-lg font-bold text-white mb-2">No receipts here yet</h3>
-                  <p className="text-gray-400">Add a receipt or move saved receipts into this folder</p>
+                  <h3 className="text-lg font-bold text-white mb-2">Your purchases will appear here.</h3>
+                  <p className="mx-auto max-w-sm text-gray-400">Add your first receipt or use your private receiptIt address.</p>
+                  <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+                    <button type="button" onClick={onNavigateToScan} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-teal-400 px-4 py-2.5 text-sm font-bold text-black transition-colors hover:bg-teal-300"><ScanLine className="h-4 w-4" strokeWidth={1.8} />Add receipt</button>
+                    <button type="button" onClick={onNavigateToAlias} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/15 px-4 py-2.5 text-sm font-semibold text-gray-200 transition-colors hover:bg-white/5"><AtSign className="h-4 w-4" strokeWidth={1.8} />View receiptIt address</button>
+                  </div>
                 </>
               )}
             </motion.div>

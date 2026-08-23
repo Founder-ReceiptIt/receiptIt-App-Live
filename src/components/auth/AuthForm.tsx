@@ -44,8 +44,8 @@ export function AuthForm() {
           throw new Error(errorMessage);
         }
       }
-    } catch (err: any) {
-      setError(err.message || 'An error occurred');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
     }
@@ -64,7 +64,7 @@ export function AuthForm() {
             <Shield className="w-16 h-16 text-teal-400 mx-auto mb-4" strokeWidth={1.5} />
           </motion.div>
           <h1 className="mb-2"><ReceiptItWordmark className="text-4xl" /></h1>
-          <p className="text-sm text-gray-400">Your receipts, in one private place.</p>
+          <p className="text-sm text-gray-400">Your purchases, kept private.</p>
         </div>
 
         <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8">
@@ -127,7 +127,7 @@ export function AuthForm() {
               </div>
             </div>
 
-            {isSignUp && <p className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-gray-400">We’ll create a private address for receipt emails.</p>}
+            {isSignUp && <p className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-gray-400">We’ll create a private address for receipts and purchase documents.</p>}
 
             {error && (
               <motion.div
@@ -152,7 +152,7 @@ export function AuthForm() {
 
           <div className="mt-6 pt-6 border-t border-white/10">
             <p className="text-center text-sm text-gray-400">
-              Add receipts by email, photo or PDF.
+              Keep purchase proof together by email, photo or PDF.
             </p>
           </div>
         </div>

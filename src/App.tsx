@@ -155,6 +155,8 @@ function App() {
                       key={refreshKey}
                       onReceiptClick={setSelectedReceipt}
                       onReceiptsChange={handleWalletReceiptsChange}
+                      onNavigateToScan={() => handleTabChange('scan')}
+                      onNavigateToAlias={() => handleTabChange('alias')}
                     />
                   </motion.div>
                 )}
