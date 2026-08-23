@@ -534,7 +534,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
   };
 
   return (
-    <div className="pb-32 px-6 pt-8 min-h-screen flex flex-col max-w-7xl mx-auto">
+    <div className="min-h-screen max-w-7xl px-6 pb-32 pt-8 mx-auto">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -544,8 +544,8 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
         <h1 className="text-3xl font-bold text-white">Add receipt</h1>
       </motion.div>
 
-      <div className="flex-1 flex items-center justify-center">
-        <div className="w-full max-w-md">
+      <div className="w-full max-w-xl">
+        <div className="w-full">
           <AnimatePresence mode="wait">
             {scanState === 'idle' && (
               <motion.div
@@ -556,8 +556,8 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                 transition={{ duration: 0.3 }}
                 className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8"
               >
-                <div className="text-center mb-8">
-                  <Camera className="w-20 h-20 text-teal-400 mx-auto mb-4" strokeWidth={1.5} />
+                <div className="mb-8">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-teal-400/25 bg-teal-400/10"><Camera className="w-7 h-7 text-teal-300" strokeWidth={1.5} /></div>
                   <h2 className="text-2xl font-bold text-white mb-2">Choose photo or PDF</h2>
                   <p className="text-gray-400">Add a receipt from your phone or files.</p>
                 </div>
@@ -626,7 +626,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                   </button>
                 </div>
 
-                <div className="mt-5 space-y-1 text-center">
+                <div className="mt-5 space-y-1">
                   <p className="text-xs text-gray-500 leading-relaxed">
                     For best results, keep the receipt flat, well-lit, and close enough that the text is clear.
                   </p>
@@ -635,7 +635,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                   </p>
                 </div>
 
-                <p className="text-xs text-gray-500 text-center mt-6">
+                <p className="mt-6 text-xs text-gray-500">
                   Supports JPG, PNG, PDF up to 10MB
                 </p>
               </motion.div>

@@ -659,6 +659,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
     (receipt.date || receipt.createdAt || '').slice(0, 7) === currentMonthKey
   ));
   const spentThisMonth = receiptsThisMonth.reduce((sum, receipt) => sum + getReceiptGbpDisplayAmount(receipt), 0);
+  const averagePurchaseThisMonth = receiptsThisMonth.length > 0 ? spentThisMonth / receiptsThisMonth.length : 0;
   const actionReceipts = visibleReceipts.flatMap((receipt) => {
     if (receipt.status === 'needs_review') return [{ receipt, label: 'Review needed', detail: `Review ${receipt.merchant || 'this document'}` }];
     if (receipt.status === 'failed') return [{ receipt, label: 'Try again', detail: `We could not finish ${receipt.merchant || 'this receipt'}` }];
@@ -971,7 +972,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
             <div className={`rounded-xl border p-2.5 ${primaryAction ? 'border-amber-300/25 bg-amber-400/10' : 'border-teal-300/25 bg-teal-400/10'}`}><AlertCircle className={`h-5 w-5 ${primaryAction ? 'text-amber-200' : 'text-teal-200'}`} /></div>
             <div className="min-w-0 flex-1">
               <p className={`text-xs font-bold uppercase tracking-[0.16em] ${primaryAction ? 'text-amber-200' : 'text-teal-200'}`}>{primaryAction ? actionHeading : 'This month'}</p>
-              <p className="mt-1 text-2xl font-bold text-white">{primaryAction ? primaryAction.detail : `£${spentThisMonth.toFixed(2)} · ${receiptsThisMonth.length} ${receiptsThisMonth.length === 1 ? 'receipt' : 'receipts'}`}</p>
+              {primaryAction ? <p className="mt-1 text-2xl font-bold text-white">{primaryAction.detail}</p> : <><p className="mt-1 text-2xl font-bold text-white">£{spentThisMonth.toFixed(2)} spent</p><p className="mt-1 text-sm text-gray-400">Average purchase £{averagePurchaseThisMonth.toFixed(2)}</p></>}
             </div>
           </div>
         </div>
@@ -1245,7 +1246,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                 const purchaseDateDisplay = getReceiptPurchaseDateDisplay({
                   status: receipt.status,
                   date: receipt.date,
-                  format: 'short',
+                  format: 'long',
                 });
                 const showIssueHeading = Boolean(receiptFailureDetails);
                 const showOpenOriginalReceiptAction = (isNonFinalReceipt || showIssueHeading) && hasReceiptOriginal(receipt);
@@ -1357,7 +1358,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
                               </p>
                             )}
                             {!isFreshProcessing && !showIssueHeading && receipt.category && (
-                              <span className="text-xs text-gray-500">{receipt.category}</span>
+                              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${receipt.tagColor}`}>{receipt.category}</span>
                             )}
                             {returnWindowStatus.status === 'urgent' && !isFreshProcessing && (
                               <div className="flex items-center gap-1 px-1.5 py-0.5 bg-red-500/20 border border-red-500/40 rounded-full">

@@ -1,12 +1,37 @@
 import { motion } from 'framer-motion';
 import { Check, Copy, Mail } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { ReceiptItWordmark } from '../ReceiptItWordmark';
 
 export function AliasTab() {
-  const { emailAlias } = useAuth();
+  const { emailAlias, user } = useAuth();
   const [copied, setCopied] = useState(false);
+  const [activity, setActivity] = useState<{ count: number; lastReceivedAt: string | null }>({ count: 0, lastReceivedAt: null });
+
+  useEffect(() => {
+    if (!user) return;
+
+    let active = true;
+    const loadActivity = async () => {
+      const { data, error } = await supabase
+        .from('receipts')
+        .select('created_at')
+        .eq('user_id', user.id)
+        .eq('source', 'email')
+        .order('created_at', { ascending: false });
+
+      if (!active || error) return;
+      setActivity({
+        count: data?.length || 0,
+        lastReceivedAt: data?.[0]?.created_at || null,
+      });
+    };
+
+    void loadActivity();
+    return () => { active = false; };
+  }, [user]);
 
   const handleCopy = async () => {
     if (!emailAlias) return;
@@ -15,8 +40,12 @@ export function AliasTab() {
     window.setTimeout(() => setCopied(false), 1800);
   };
 
+  const receivedDate = activity.lastReceivedAt
+    ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(activity.lastReceivedAt))
+    : null;
+
   return (
-    <div className="mx-auto max-w-2xl px-6 pb-32 pt-8">
+    <div className="mx-auto max-w-7xl px-6 pb-32 pt-8">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
         <h1 className="flex flex-wrap items-baseline gap-x-2 text-3xl font-bold text-white"><span>Your</span><ReceiptItWordmark className="text-3xl" /><span>address</span></h1>
         <section className="mt-8 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.045] p-6 sm:p-8">
@@ -27,7 +56,14 @@ export function AliasTab() {
             {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? 'Copied' : 'Copy address'}
           </motion.button>
         </section>
-        <div className="mt-5 space-y-1 text-sm leading-6 text-gray-400"><p>Use this instead of your personal email for receipts.</p><p>Your personal email stays private.</p></div>
+        <div className="mt-5 space-y-1 text-sm leading-6 text-gray-400"><p>Use this when a store asks where to send your receipt.</p><p>Your personal email stays private.</p></div>
+        <section className="mt-8 rounded-2xl border border-white/10 bg-white/[0.045] p-5 sm:p-6">
+          <h2 className="text-lg font-bold text-white">Receipt activity</h2>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">Received</p><p className="mt-1 text-xl font-bold text-white">{activity.count} {activity.count === 1 ? 'receipt' : 'receipts'}</p></div>
+            <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">Last received</p><p className="mt-1 text-sm font-semibold text-gray-200">{receivedDate || 'No receipts received yet'}</p></div>
+          </div>
+        </section>
       </motion.div>
     </div>
   );
