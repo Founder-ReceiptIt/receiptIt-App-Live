@@ -556,10 +556,9 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                 transition={{ duration: 0.3 }}
                 className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8"
               >
-                <div className="mb-8 text-center">
+                <div className="mb-5 text-center">
                   <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-teal-400/25 bg-teal-400/10"><Camera className="w-7 h-7 text-teal-300" strokeWidth={1.5} /></div>
                   <h2 className="mt-4 text-2xl font-bold text-white mb-2">Add your receipt</h2>
-                  <p className="text-gray-400">On the go? Scan it. Already have it? Upload it.</p>
                 </div>
 
                 <input
@@ -575,26 +574,9 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                   className="hidden"
                 />
 
-                {/* TODO native: guided receipt capture with edge detection, blur checks, lighting checks, and long receipt multi-shot mode. */}
+                {/* TODO native: guided receipt capture with edge detection, blur checks and lighting checks. */}
 
                 <div className="space-y-3">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      // Gallery selection is not a camera capture and should
-                      // never trigger Android's camera-recovery path.
-                      clearScanningStorage();
-                      fileInputRef.current?.click();
-                    }}
-                    className="w-full backdrop-blur-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/30 rounded-xl p-4 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
-                  >
-                    <div className="flex items-center justify-center gap-3">
-                      <Upload className="w-5 h-5 text-teal-400" />
-                      <span className="font-semibold text-white">Choose from files</span>
-                    </div>
-                  </button>
-
                   <button
                     type="button"
                     onClick={(e) => {
@@ -604,34 +586,46 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                       localStorage.setItem('isScanning', 'true');
                       localStorage.setItem('scanningSource', 'camera');
 
-                      // Set capture attribute for camera
                       if (fileInputRef.current) {
                         fileInputRef.current.setAttribute('capture', 'environment');
                       }
                       fileInputRef.current?.click();
 
-                      // Remove capture after click to allow gallery next time
                       setTimeout(() => {
                         if (fileInputRef.current) {
                           fileInputRef.current.removeAttribute('capture');
                         }
                       }, 100);
                     }}
+                    className="w-full backdrop-blur-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/30 rounded-xl p-4 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    <div className="flex items-center justify-center gap-3">
+                      <Camera className="w-5 h-5 text-teal-400" />
+                      <span className="font-semibold text-white">Scan receipt</span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      // Gallery selection is not a camera capture and should
+                      // never trigger Android's camera-recovery path.
+                      clearScanningStorage();
+                      fileInputRef.current?.click();
+                    }}
                     className="w-full backdrop-blur-xl bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl p-4 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
                   >
                     <div className="flex items-center justify-center gap-3">
-                      <Camera className="w-5 h-5 text-white" />
-                      <span className="font-semibold text-white">Take photo</span>
+                      <Upload className="w-5 h-5 text-white" />
+                      <span className="font-semibold text-white">Upload from device</span>
                     </div>
                   </button>
                 </div>
 
-                <div className="mt-5 space-y-1 text-center">
-                  <p className="text-xs text-gray-500 leading-relaxed">
-                    For best results, keep the receipt flat, well-lit, and close enough that the text is clear.
-                  </p>
-                  <p className="text-xs text-gray-600 leading-relaxed">
-                    Long receipts may scan better if photographed closer or in sections.
+                <div className="mt-5 text-center">
+                  <p className="text-sm text-gray-300 leading-relaxed">
+                    For best results, keep the receipt flat, well-lit, and clear.
                   </p>
                 </div>
 
