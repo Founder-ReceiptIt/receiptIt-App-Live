@@ -270,7 +270,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       // ANDROID SAFETY: If no file arrives within 10 seconds, assume Android lost it
       const timeout = setTimeout(() => {
         console.log('[ScanTab] No file received after reload - Android likely lost the file');
-        setErrorMessage('Android closed the camera. Please try uploading again.');
+        setErrorMessage('Your camera closed before a photo was added. Try again when you’re ready.');
         setScanState('error');
         restoredPickerRef.current = false;
         isScanningRef.current = false;
@@ -1047,8 +1047,8 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                 <div className="text-center">
                   <X className="w-20 h-20 text-red-400 mx-auto mb-4" strokeWidth={1.5} />
 
-                  <h2 className="text-2xl font-bold text-white mb-2">Upload Failed</h2>
-                  <p className="text-gray-400 mb-6">{errorMessage || 'An error occurred during upload'}</p>
+                  <h2 className="text-2xl font-bold text-white mb-2">Couldn’t add receipt</h2>
+                  <p className="text-gray-400 mb-6">{errorMessage || 'We couldn’t add this receipt. Try again when you’re ready.'}</p>
 
                   <button
                     type="button"
