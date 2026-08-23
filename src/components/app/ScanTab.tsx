@@ -44,6 +44,7 @@ async function computeFileHash(file: File): Promise<string> {
 
 const MAX_MULTI_RECEIPT_IMAGES = 10;
 const MAX_MULTI_RECEIPT_TOTAL_BYTES = 30 * 1024 * 1024;
+const MAX_MULTI_RECEIPT_SOURCE_PIXELS = 20_000_000;
 const MULTI_IMAGE_GAP = 18;
 
 const toHashHex = (hashBuffer: ArrayBuffer): string =>
@@ -320,7 +321,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
         return;
       }
 
-      if (files.some((selectedFile) => selectedFile.size) && files.reduce((total, selectedFile) => total + selectedFile.size, 0) > MAX_MULTI_RECEIPT_TOTAL_BYTES) {
+      if (files.reduce((total, selectedFile) => total + selectedFile.size, 0) > MAX_MULTI_RECEIPT_TOTAL_BYTES) {
         setErrorMessage('These images are too large together. Choose up to 30MB in total.');
         setScanState('error');
         isScanningRef.current = false;
@@ -344,6 +345,18 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
         setScanState('error');
         isScanningRef.current = false;
         showToast('Choose images together. Upload a PDF on its own.', undefined);
+        return;
+      }
+
+      const sourcePixels = validations.reduce((total, validation) => {
+        if (!validation.valid || !validation.dimensions) return total;
+        return total + validation.dimensions.width * validation.dimensions.height;
+      }, 0);
+      if (sourcePixels > MAX_MULTI_RECEIPT_SOURCE_PIXELS) {
+        setErrorMessage('These images are too high-resolution together. Choose clearer or smaller images and try again.');
+        setScanState('error');
+        isScanningRef.current = false;
+        showToast('These images are too high-resolution together. Choose clearer or smaller images and try again.', undefined);
         return;
       }
 

@@ -6,7 +6,7 @@ export const MAX_RECEIPT_IMAGE_DIMENSION = 16_000;
 export type ReceiptUploadKind = 'image' | 'pdf';
 
 export type ReceiptUploadValidationResult =
-  | { valid: true; kind: ReceiptUploadKind }
+  | { valid: true; kind: ReceiptUploadKind; dimensions?: { width: number; height: number } }
   | { valid: false; errorReason: string; message: string };
 
 const JPEG_MAGIC = [0xff, 0xd8, 0xff];
@@ -149,6 +149,8 @@ export const validateReceiptUpload = async (file: File): Promise<ReceiptUploadVa
     if (!isSafeImageDimensions(dimensions)) {
       return invalid('image_dimension_limit', 'This image is too large to process safely. Use a smaller receipt image and try again.');
     }
+
+    return { valid: true, kind: extensionKind, dimensions: dimensions || undefined };
   }
 
   if (extensionKind === 'pdf' && !isPdf) {
