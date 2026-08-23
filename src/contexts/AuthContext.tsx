@@ -32,6 +32,7 @@ interface AuthContextType {
   profileSettings: ProfileSettings;
   refreshProfileSettings: () => Promise<void>;
   updateProfileSettings: (nextSettings: Partial<ProfileSettings>) => Promise<{ error: any }>;
+  refreshSignupAuthorization: (accessCode: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
@@ -496,6 +497,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const refreshSignupAuthorization = async (accessCode: string): Promise<{ error: Error | null }> => {
+    const normalizedAccessCode = accessCode.trim().toUpperCase();
+    if (!normalizedAccessCode) {
+      return { error: new Error('Enter your beta access code.') };
+    }
+
+    const { data, error } = await supabase.functions.invoke('verify-access-code', {
+      body: { accessCode: normalizedAccessCode },
+    });
+
+    if (error || !data?.valid || typeof data.signupAuthorization !== 'string') {
+      return { error: new Error('That access code didn’t work. Please request access from the team.') };
+    }
+
+    sessionStorage.setItem(signupAuthorizationKey, data.signupAuthorization);
+    return { error: null };
+  };
+
   const signIn = async (email: string, password: string) => {
     try {
       console.log('[signIn] Attempting sign-in for email:', email);
@@ -720,6 +739,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profileSettings,
     refreshProfileSettings,
     updateProfileSettings,
+    refreshSignupAuthorization,
     signUp,
     signIn,
     signOut,

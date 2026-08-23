@@ -8,10 +8,12 @@ export function AuthForm() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [accessCode, setAccessCode] = useState('');
+  const [needsAccessRefresh, setNeedsAccessRefresh] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, refreshSignupAuthorization } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,9 +22,18 @@ export function AuthForm() {
 
     try {
       if (isSignUp) {
+        if (needsAccessRefresh) {
+          const { error: authorizationError } = await refreshSignupAuthorization(accessCode);
+          if (authorizationError) throw authorizationError;
+        }
+
         const { error } = await signUp(email, password, '');
         if (error) {
           const errorMessage = error.message || 'Signup failed';
+          if (errorMessage.includes('access-key verification')) {
+            setNeedsAccessRefresh(true);
+            throw new Error('Your beta access needs refreshing. Enter your access code below and try again.');
+          }
           if (errorMessage.includes('already registered')) {
             throw new Error('This email is already registered. Please sign in instead.');
           }
@@ -70,7 +81,7 @@ export function AuthForm() {
         <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8">
           <div className="flex gap-2 mb-6">
             <button
-              onClick={() => setIsSignUp(false)}
+              onClick={() => { setIsSignUp(false); setNeedsAccessRefresh(false); setError(null); }}
               className={`flex-1 py-3 rounded-lg font-semibold transition-all ${
                 !isSignUp
                   ? 'bg-teal-400/20 text-teal-400 border border-teal-400/40'
@@ -80,7 +91,7 @@ export function AuthForm() {
               Sign In
             </button>
             <button
-              onClick={() => setIsSignUp(true)}
+              onClick={() => { setIsSignUp(true); setError(null); }}
               className={`flex-1 py-3 rounded-lg font-semibold transition-all ${
                 isSignUp
                   ? 'bg-teal-400/20 text-teal-400 border border-teal-400/40'
@@ -129,6 +140,20 @@ export function AuthForm() {
 
             {isSignUp && <p className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-gray-400">We’ll create a private address for receipts and purchase documents.</p>}
 
+            {isSignUp && needsAccessRefresh && (
+              <div>
+                <label className="block text-sm font-semibold text-gray-300 mb-2">Beta access code</label>
+                <input
+                  type="text"
+                  value={accessCode}
+                  onChange={(event) => setAccessCode(event.target.value)}
+                  placeholder="Enter access code"
+                  required
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-teal-400/50 transition-colors"
+                />
+              </div>
+            )}
+
             {error && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
@@ -146,7 +171,7 @@ export function AuthForm() {
               disabled={loading}
               className="w-full py-3 bg-teal-400 text-black font-bold rounded-lg hover:bg-teal-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Please wait...' : isSignUp ? 'Create Account' : 'Sign In'}
+              {loading ? 'Please wait...' : isSignUp ? needsAccessRefresh ? 'Verify access & create account' : 'Create Account' : 'Sign In'}
             </motion.button>
           </form>
 
