@@ -558,8 +558,8 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
               >
                 <div className="mb-8 text-center">
                   <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-teal-400/25 bg-teal-400/10"><Camera className="w-7 h-7 text-teal-300" strokeWidth={1.5} /></div>
-                  <h2 className="mt-4 text-2xl font-bold text-white mb-2">Choose a receipt</h2>
-                  <p className="text-gray-400">Add a receipt from your phone or files.</p>
+                  <h2 className="mt-4 text-2xl font-bold text-white mb-2">Add your receipt</h2>
+                  <p className="text-gray-400">Upload a photo, PDF, or email receipt.</p>
                 </div>
 
                 <input

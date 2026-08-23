@@ -23,6 +23,7 @@ import { hasReceiptOriginal, openReceiptOriginal } from '../../lib/receiptOrigin
 import { useAuth } from '../../contexts/AuthContext';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { getReceiptFailureDetails, getReceiptPurchaseDateDisplay } from '../../lib/receiptUiUtils';
+import { getMonthlyBudget, MONTHLY_BUDGET_EVENT } from '../../lib/monthlyBudget';
 import { useToast } from '../../contexts/ToastContext';
 
 interface WalletTabProps {
@@ -461,6 +462,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
   const [reportProblemReceipt, setReportProblemReceipt] = useState<{ id: string; merchant: string } | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [moveMenuOpen, setMoveMenuOpen] = useState(false);
+  const [monthlyBudget, setMonthlyBudget] = useState<number | null>(() => getMonthlyBudget());
   const previousReceiptIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -647,6 +649,17 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
     };
   }, [user, showToast]);
 
+  useEffect(() => {
+    const refreshMonthlyBudget = () => setMonthlyBudget(getMonthlyBudget());
+    window.addEventListener(MONTHLY_BUDGET_EVENT, refreshMonthlyBudget);
+    window.addEventListener('storage', refreshMonthlyBudget);
+
+    return () => {
+      window.removeEventListener(MONTHLY_BUDGET_EVENT, refreshMonthlyBudget);
+      window.removeEventListener('storage', refreshMonthlyBudget);
+    };
+  }, []);
+
   const effectiveReceipts = receipts.map((receipt) => ({
     ...receipt,
     processingAttemptStartedAt: processingAttemptStartedAtByReceiptId[receipt.id] || receipt.processingAttemptStartedAt,
@@ -659,6 +672,8 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
     (receipt.date || receipt.createdAt || '').slice(0, 7) === currentMonthKey
   ));
   const spentThisMonth = receiptsThisMonth.reduce((sum, receipt) => sum + getReceiptGbpDisplayAmount(receipt), 0);
+  const budgetUsed = monthlyBudget ? (spentThisMonth / monthlyBudget) * 100 : 0;
+  const budgetProgress = Math.min(budgetUsed, 100);
   const actionReceipts = visibleReceipts.flatMap((receipt) => {
     if (receipt.status === 'needs_review') return [{ receipt, label: 'Review needed', detail: `Review ${receipt.merchant || 'this document'}` }];
     if (receipt.status === 'failed') return [{ receipt, label: 'Try again', detail: `We could not finish ${receipt.merchant || 'this receipt'}` }];
@@ -967,7 +982,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange }: WalletTabProps) 
         </div>
 
         <div className={`mb-6 rounded-2xl border p-5 ${primaryAction ? 'border-amber-300/25 bg-gradient-to-br from-amber-400/12 to-teal-400/5' : 'border-teal-300/25 bg-gradient-to-br from-teal-400/15 to-cyan-400/5'}`}>
-          {primaryAction ? <div className="flex items-start gap-3"><div className="rounded-xl border border-amber-300/25 bg-amber-400/10 p-2.5"><AlertCircle className="h-5 w-5 text-amber-200" /></div><div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-200">{actionHeading}</p><p className="mt-1 text-2xl font-bold text-white">{primaryAction.detail}</p></div></div> : <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-200">This month</p><p className="mt-1 text-2xl font-bold text-white">£{spentThisMonth.toFixed(2)} spent</p><p className="mt-1 text-sm text-gray-400">{receiptsThisMonth.length} {receiptsThisMonth.length === 1 ? 'receipt' : 'receipts'} saved</p></div>}
+          {primaryAction ? <div className="flex items-start gap-3"><div className="rounded-xl border border-amber-300/25 bg-amber-400/10 p-2.5"><AlertCircle className="h-5 w-5 text-amber-200" /></div><div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-200">{actionHeading}</p><p className="mt-1 text-2xl font-bold text-white">{primaryAction.detail}</p></div></div> : <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-200">This month</p><p className="mt-1 text-2xl font-bold text-white">£{spentThisMonth.toFixed(2)} spent</p>{monthlyBudget ? <><p className="mt-1 text-sm text-gray-300">of £{monthlyBudget.toFixed(2)} budget</p><div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-teal-400 transition-[width] duration-300" style={{ width: `${budgetProgress}%` }} /></div><p className="mt-2 text-xs text-gray-400">{budgetUsed.toFixed(1)}% used</p></> : <p className="mt-1 text-sm text-gray-400">{receiptsThisMonth.length} {receiptsThisMonth.length === 1 ? 'receipt' : 'receipts'} saved</p>}</div>}
         </div>
 
         <div className="mb-6">

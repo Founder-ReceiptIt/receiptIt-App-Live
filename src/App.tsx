@@ -16,14 +16,32 @@ import { Toast } from './components/app/Toast';
 import { ToastProvider } from './contexts/ToastContext';
 import { useAuth } from './contexts/AuthContext';
 
+const APP_TABS = ['wallet', 'alias', 'scan', 'insights', 'settings'] as const;
+type AppTab = typeof APP_TABS[number];
+
+const getTabFromLocation = (): AppTab => {
+  const tab = window.location.hash.replace(/^#/, '');
+  return APP_TABS.includes(tab as AppTab) ? tab as AppTab : 'wallet';
+};
+
 function App() {
   const { user, session, loading: authLoading, needsAliasSetup, needsProfileRecovery } = useAuth();
   const [showApp, setShowApp] = useState(false);
-  const [activeTab, setActiveTab] = useState('wallet');
+  const [activeTab, setActiveTab] = useState<AppTab>(() => getTabFromLocation());
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const isAuthenticated = Boolean(user && session);
   const shouldShowBootSplash = authLoading || (isAuthenticated && !needsAliasSetup && !showApp);
+
+  const handleTabChange = useCallback((tab: string) => {
+    if (!APP_TABS.includes(tab as AppTab)) return;
+
+    const nextTab = tab as AppTab;
+    if (window.location.hash !== `#${nextTab}`) {
+      window.history.pushState({ tab: nextTab }, '', `#${nextTab}`);
+    }
+    setActiveTab(nextTab);
+  }, []);
 
   const handleWalletReceiptsChange = useCallback((receipts: Receipt[]) => {
     setSelectedReceipt((currentReceipt) => {
@@ -36,9 +54,21 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const syncTabFromLocation = () => setActiveTab(getTabFromLocation());
+    window.addEventListener('popstate', syncTabFromLocation);
+    window.addEventListener('hashchange', syncTabFromLocation);
+
+    return () => {
+      window.removeEventListener('popstate', syncTabFromLocation);
+      window.removeEventListener('hashchange', syncTabFromLocation);
+    };
+  }, []);
+
+  useEffect(() => {
     const isScanning = localStorage.getItem('isScanning');
     if (isScanning === 'true' && user && session) {
       console.log('[App] Detected scanning flag in localStorage, forcing scan tab');
+      window.history.replaceState({ tab: 'scan' }, '', '#scan');
       setActiveTab('scan');
     }
   }, [user, session]);
@@ -50,10 +80,6 @@ function App() {
 
     if (isAuthenticated && !needsAliasSetup) {
       console.log('[App] User authenticated, preparing app shell');
-      const isScanning = localStorage.getItem('isScanning');
-      if (isScanning !== 'true') {
-        setActiveTab('wallet');
-      }
       if (showApp) {
         return;
       }
@@ -113,7 +139,7 @@ function App() {
             transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
             className="min-h-screen"
           >
-            <TopNav activeTab={activeTab} onTabChange={setActiveTab} />
+            <TopNav activeTab={activeTab} onTabChange={handleTabChange} />
 
             <div className="pt-20">
               <AnimatePresence mode="wait">
@@ -153,7 +179,7 @@ function App() {
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.3 }}
                   >
-                    <ScanTab onNavigateToWallet={() => setActiveTab('wallet')} />
+                    <ScanTab onNavigateToWallet={() => handleTabChange('wallet')} />
                   </motion.div>
                 )}
 
@@ -183,7 +209,7 @@ function App() {
               </AnimatePresence>
             </div>
 
-            <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+            <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
             <ReceiptModal
               receipt={selectedReceipt}
               onClose={() => setSelectedReceipt(null)}
