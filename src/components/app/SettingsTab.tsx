@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { AlertTriangle, Coins, Download, FileText, Mail, MessageCircle, Minus, Plus, ShieldCheck, Trash2, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -24,6 +24,7 @@ export function SettingsTab() {
   const [budgetDraft, setBudgetDraft] = useState(String(accountCurrency.monthlyBudgetAmount ?? ''));
   const [currencySaving, setCurrencySaving] = useState(false);
   const [currencyError, setCurrencyError] = useState('');
+  const currencyRequestId = useRef(0);
 
   useEffect(() => {
     setCurrencyDraft(accountCurrency.preferredCurrency);
@@ -31,15 +32,25 @@ export function SettingsTab() {
   }, [accountCurrency]);
 
   const handleCurrencyDraftChange = async (nextCurrency: SupportedCurrencyCode) => {
+    const requestId = currencyRequestId.current + 1;
+    currencyRequestId.current = requestId;
     setCurrencyDraft(nextCurrency);
     setCurrencyError('');
-    if (nextCurrency === accountCurrency.preferredCurrency || !accountCurrency.monthlyBudgetAmount) return;
+    if (nextCurrency === accountCurrency.preferredCurrency) {
+      setBudgetDraft(String(accountCurrency.monthlyBudgetAmount ?? ''));
+      return;
+    }
+    if (!accountCurrency.monthlyBudgetAmount) {
+      setBudgetDraft('');
+      return;
+    }
 
     const converted = await convertCurrencyAmount(
       accountCurrency.monthlyBudgetAmount,
       accountCurrency.preferredCurrency,
       nextCurrency,
     );
+    if (requestId !== currencyRequestId.current) return;
     setBudgetDraft(converted === null ? '' : String(Math.max(BUDGET_INCREMENT, Math.round(converted / BUDGET_INCREMENT) * BUDGET_INCREMENT)));
   };
 
