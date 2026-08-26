@@ -700,6 +700,8 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
   useEffect(() => {
     let active = true;
     const loadConvertedAmounts = async () => {
+      setConvertedAmounts(new Map());
+      setExcludedConversionIds(new Set());
       const receiptsForConversion = filterVisibleWalletReceipts(dedupeWalletReceipts(receipts))
         .filter((receipt) => isFinalizedReceiptStatus(receipt.status));
       const converted = await convertReceiptAmounts(receiptsForConversion.map((receipt) => ({
@@ -1320,6 +1322,13 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
                 const showIssueHeading = Boolean(receiptFailureDetails);
                 const showOpenOriginalReceiptAction = (isNonFinalReceipt || showIssueHeading) && hasReceiptOriginal(receipt);
                 const showFailedReceiptActions = showIssueHeading && !requiresCurrencyConfirmation;
+                const receiptCurrencyCode = receipt.currency?.toUpperCase() || '';
+                const hasPreferredCurrencyConversion = (
+                  isFinalizedReceiptStatus(receipt.status)
+                  && receiptCurrencyCode !== accountCurrency.preferredCurrency
+                  && convertedAmounts.has(receipt.id)
+                );
+                const preferredCurrencyAmount = convertedAmounts.get(receipt.id);
 
                 return (
                   <motion.div
@@ -1438,10 +1447,19 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
                           </div>
                         </div>
                         {!isFreshProcessing && (
-                          <div className="text-right">
-                            <div className="text-2xl font-bold text-white">
-                              {requiresCurrencyConfirmation || isStaleProcessing ? receipt.amount.toFixed(2) : formatCurrencyAmount(receipt.currency, receipt.amount)}
+                          <div className="shrink-0 text-right">
+                            <div className="whitespace-nowrap text-xl font-bold text-white sm:text-2xl">
+                              {requiresCurrencyConfirmation || isStaleProcessing
+                                ? receipt.amount.toFixed(2)
+                                : hasPreferredCurrencyConversion && preferredCurrencyAmount !== undefined
+                                  ? formatCurrency(preferredCurrencyAmount, accountCurrency.preferredCurrency)
+                                  : formatCurrencyAmount(receipt.currency, receipt.amount)}
                             </div>
+                            {hasPreferredCurrencyConversion ? (
+                              <div className="pt-1 text-[11px] text-gray-400 whitespace-nowrap sm:text-xs">
+                                {formatCurrencyAmount(receipt.currency, receipt.amount)} original
+                              </div>
+                            ) : null}
                             {requiresCurrencyConfirmation ? (
                               <div className="text-xs pt-1 text-amber-300">
                                 Awaiting currency

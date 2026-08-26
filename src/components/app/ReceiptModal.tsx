@@ -321,7 +321,10 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
       return '—';
     }
 
-    const formattedValue = value.toFixed(Number.isInteger(value) ? 0 : 2);
+    const formattedValue = new Intl.NumberFormat('en-GB', {
+      maximumFractionDigits: 3,
+      useGrouping: false,
+    }).format(value);
     return quantityUnit ? `${formattedValue} ${quantityUnit}` : formattedValue;
   };
   const receiptCurrencyCode = receipt.currency?.toUpperCase() || 'GBP';
