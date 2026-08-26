@@ -20,7 +20,7 @@ export function AliasSetupModal() {
       if (error) {
         throw error;
       }
-    } catch (err: any) {
+    } catch {
       setError('We couldn’t create your address. Please try again.');
     } finally {
       setLoading(false);

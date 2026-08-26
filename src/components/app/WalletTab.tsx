@@ -23,9 +23,9 @@ import { hasReceiptOriginal, openReceiptOriginal } from '../../lib/receiptOrigin
 import { useAuth } from '../../contexts/AuthContext';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { getReceiptFailureDetails, getReceiptPurchaseDateDisplay } from '../../lib/receiptUiUtils';
-import { getMonthlyBudget, MONTHLY_BUDGET_EVENT } from '../../lib/monthlyBudget';
 import { getReceiptMilestone } from '../../lib/receiptMilestones';
 import { useToast } from '../../contexts/ToastContext';
+import { convertReceiptAmounts, formatCurrency, getCurrencyConfig } from '../../lib/currency';
 
 interface WalletTabProps {
   onReceiptClick: (receipt: Receipt) => void;
@@ -62,29 +62,11 @@ const getTagColor = (tag: string): string => {
 };
 
 const getCurrencySymbol = (currencyCode: string): string => {
-  const code = (currencyCode || 'GBP').toUpperCase();
-  const symbols: { [key: string]: string } = {
-    'GBP': '£',
-    'EUR': '€',
-    'USD': '$',
-    'JPY': '¥',
-    'CNY': '¥',
-    'INR': '₹',
-    'AUD': 'A$',
-    'CAD': 'C$',
-    'CHF': 'CHF',
-    'SEK': 'kr',
-    'NZD': 'NZ$',
-  };
-  return symbols[code] || code;
+  return getCurrencyConfig(currencyCode || 'GBP').symbol;
 };
 
 const formatCurrencyAmount = (currencyCode: string, amount: number): string => (
-  `${getCurrencySymbol(currencyCode)}${amount.toFixed(2)}`
-);
-
-const formatBudgetAmount = (amount: number): string => (
-  `£${amount.toLocaleString('en-GB', { maximumFractionDigits: 2 })}`
+  formatCurrency(amount, currencyCode)
 );
 
 const WALLET_RECEIPT_STATUSES = ['needs_input', 'processing', 'parsed', 'completed', 'duplicate', 'failed', 'skipped', 'needs_review', 'rejected'] as const;
@@ -227,15 +209,6 @@ const filterVisibleWalletReceipts = (receipts: Receipt[]): Receipt[] =>
     if (isHiddenWalletReceiptStatus(receipt.status)) return false;
     return false;
   });
-
-const getReceiptGbpDisplayAmount = (receipt: Receipt): number => {
-  const receiptCurrencyCode = receipt.currency?.toUpperCase() || 'GBP';
-  if (receiptCurrencyCode === 'GBP') {
-    return receipt.amount;
-  }
-
-  return receipt.amount_gbp ?? receipt.amount;
-};
 
 const getNullableNumber = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -472,8 +445,15 @@ export interface Receipt {
 }
 
 export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, onNavigateToAlias }: WalletTabProps) {
-  const { user } = useAuth();
+  const { user, accountCurrency } = useAuth();
   const { showToast } = useToast();
+  const preferredReceiptCurrency: ReceiptCurrencyConfirmationOption = isReceiptCurrencyConfirmationOption(accountCurrency.preferredCurrency)
+    ? accountCurrency.preferredCurrency
+    : RECEIPT_PRIMARY_CURRENCY_CONFIRMATION_OPTION;
+  const orderedCurrencyConfirmationOptions = [
+    preferredReceiptCurrency,
+    ...RECEIPT_CURRENCY_CONFIRMATION_OPTIONS.filter((currency) => currency !== preferredReceiptCurrency),
+  ];
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -493,7 +473,8 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
   const [reportProblemReceipt, setReportProblemReceipt] = useState<{ id: string; merchant: string } | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [moveMenuOpen, setMoveMenuOpen] = useState(false);
-  const [monthlyBudget, setMonthlyBudget] = useState<number | null>(() => getMonthlyBudget());
+  const [convertedAmounts, setConvertedAmounts] = useState<Map<string, number>>(new Map());
+  const [excludedConversionIds, setExcludedConversionIds] = useState<Set<string>>(new Set());
   const previousReceiptIdsRef = useRef<Set<string>>(new Set());
   const successfulReceiptIdsRef = useRef<Set<string>>(new Set());
   const isMilestoneTrackingReadyRef = useRef(false);
@@ -708,17 +689,6 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
     };
   }, [user, showToast]);
 
-  useEffect(() => {
-    const refreshMonthlyBudget = () => setMonthlyBudget(getMonthlyBudget());
-    window.addEventListener(MONTHLY_BUDGET_EVENT, refreshMonthlyBudget);
-    window.addEventListener('storage', refreshMonthlyBudget);
-
-    return () => {
-      window.removeEventListener(MONTHLY_BUDGET_EVENT, refreshMonthlyBudget);
-      window.removeEventListener('storage', refreshMonthlyBudget);
-    };
-  }, []);
-
   const effectiveReceipts = receipts.map((receipt) => ({
     ...receipt,
     processingAttemptStartedAt: processingAttemptStartedAtByReceiptId[receipt.id] || receipt.processingAttemptStartedAt,
@@ -726,12 +696,37 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
 
   const visibleReceipts = filterVisibleWalletReceipts(dedupeWalletReceipts(effectiveReceipts));
   const finalizedReceipts = visibleReceipts.filter((receipt) => isFinalizedReceiptStatus(receipt.status));
+
+  useEffect(() => {
+    let active = true;
+    const loadConvertedAmounts = async () => {
+      const receiptsForConversion = filterVisibleWalletReceipts(dedupeWalletReceipts(receipts))
+        .filter((receipt) => isFinalizedReceiptStatus(receipt.status));
+      const converted = await convertReceiptAmounts(receiptsForConversion.map((receipt) => ({
+        id: receipt.id,
+        amount: receipt.amount,
+        currency: receipt.currency,
+        transactionDate: receipt.date || receipt.createdAt,
+      })), accountCurrency.preferredCurrency);
+      if (!active) return;
+      setConvertedAmounts(converted.amounts);
+      setExcludedConversionIds(new Set(converted.excludedReceiptIds));
+    };
+    void loadConvertedAmounts();
+    return () => { active = false; };
+  }, [receipts, accountCurrency.preferredCurrency]);
+
   const currentMonthKey = new Date().toISOString().slice(0, 7);
   const receiptsThisMonth = finalizedReceipts.filter((receipt) => (
     (receipt.date || receipt.createdAt || '').slice(0, 7) === currentMonthKey
   ));
-  const spentThisMonth = receiptsThisMonth.reduce((sum, receipt) => sum + getReceiptGbpDisplayAmount(receipt), 0);
-  const averagePurchaseThisMonth = receiptsThisMonth.length ? spentThisMonth / receiptsThisMonth.length : 0;
+  const includedReceiptsThisMonth = receiptsThisMonth.filter((receipt) => convertedAmounts.has(receipt.id));
+  const excludedThisMonthCount = receiptsThisMonth.filter((receipt) => excludedConversionIds.has(receipt.id)).length;
+  const spentThisMonth = includedReceiptsThisMonth.reduce((sum, receipt) => sum + (convertedAmounts.get(receipt.id) ?? 0), 0);
+  const averagePurchaseThisMonth = includedReceiptsThisMonth.length ? spentThisMonth / includedReceiptsThisMonth.length : 0;
+  const monthlyBudget = accountCurrency.monthlyBudgetCurrency === accountCurrency.preferredCurrency
+    ? accountCurrency.monthlyBudgetAmount
+    : null;
   const budgetUsed = monthlyBudget ? (spentThisMonth / monthlyBudget) * 100 : 0;
   const budgetProgress = Math.min(budgetUsed, 100);
   const actionReceipts = visibleReceipts.flatMap((receipt) => {
@@ -1044,7 +1039,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
         {primaryAction ? <div className="mb-4 rounded-2xl border border-amber-300/25 bg-gradient-to-br from-amber-400/12 to-teal-400/5 p-5"><div className="flex items-start gap-3"><div className="rounded-xl border border-amber-300/25 bg-amber-400/10 p-2.5"><AlertCircle className="h-5 w-5 text-amber-200" /></div><div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-200">{actionHeading}</p><p className="mt-1 text-2xl font-bold text-white">{primaryAction.detail}</p></div></div></div> : null}
 
         <div className="mb-6 rounded-2xl border border-teal-300/25 bg-gradient-to-br from-teal-400/15 to-cyan-400/5 p-5">
-          <div className="flex items-start gap-3"><div className="rounded-xl border border-teal-300/20 bg-teal-400/10 p-2.5"><ShieldCheck className="h-5 w-5 text-teal-200" strokeWidth={1.5} /></div><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-200">This month</p><p className="mt-1 text-2xl font-bold text-white">£{spentThisMonth.toFixed(2)} spent</p></div><div className="shrink-0 text-right"><p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">Average purchase</p><p className="mt-1 text-lg font-bold text-white">£{averagePurchaseThisMonth.toFixed(2)}</p></div></div>{monthlyBudget ? <><p className="mt-4 text-sm text-gray-300">of {formatBudgetAmount(monthlyBudget)} budget</p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-teal-400 transition-[width] duration-300" style={{ width: `${budgetProgress}%` }} /></div><p className="mt-2 text-xs text-gray-400">{budgetUsed.toFixed(1)}% used</p></> : null}</div></div>
+          <div className="flex items-start gap-3"><div className="rounded-xl border border-teal-300/20 bg-teal-400/10 p-2.5"><ShieldCheck className="h-5 w-5 text-teal-200" strokeWidth={1.5} /></div><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-200">This month</p><p className="mt-1 text-2xl font-bold text-white">{formatCurrency(spentThisMonth, accountCurrency.preferredCurrency)} spent</p></div><div className="shrink-0 text-right"><p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">Average purchase</p><p className="mt-1 text-lg font-bold text-white">{formatCurrency(averagePurchaseThisMonth, accountCurrency.preferredCurrency)}</p></div></div>{monthlyBudget ? <><p className="mt-4 text-sm text-gray-300">of {formatCurrency(monthlyBudget, accountCurrency.preferredCurrency, { maximumFractionDigits: 0, minimumFractionDigits: 0 })} budget</p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-teal-400 transition-[width] duration-300" style={{ width: `${budgetProgress}%` }} /></div><p className="mt-2 text-xs text-gray-400">{budgetUsed.toFixed(1)}% used</p></> : null}{excludedThisMonthCount > 0 ? <p className="mt-3 text-xs text-amber-100">{excludedThisMonthCount === 1 ? 'One purchase couldn’t be included in this total.' : `${excludedThisMonthCount} purchases couldn’t be included in this total.`}</p> : null}</div></div>
         </div>
 
         <div className="mb-6">
@@ -1451,13 +1446,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
                               <div className="text-xs pt-1 text-amber-300">
                                 Awaiting currency
                               </div>
-                            ) : (
-                              receipt.currency && receipt.currency.toUpperCase() !== 'GBP' && receipt.amount_gbp !== null && (
-                                <div className="text-xs pt-1 text-gray-400">
-                                  Approx. £{receipt.amount_gbp.toFixed(2)}
-                                </div>
-                              )
-                            )}
+                            ) : null}
                           </div>
                         )}
                       </div>
@@ -1532,14 +1521,14 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
                             <div className="flex items-center gap-2">
                               <button
                                 type="button"
-                                onClick={() => void handleCurrencyConfirmation(receipt.id, RECEIPT_PRIMARY_CURRENCY_CONFIRMATION_OPTION)}
+                                onClick={() => void handleCurrencyConfirmation(receipt.id, preferredReceiptCurrency)}
                                 disabled={isConfirmingCurrency}
                                 className="px-3 py-1.5 rounded-lg border border-amber-300/30 bg-black/20 text-sm font-semibold text-amber-100 hover:bg-amber-300/10 hover:border-amber-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 {currencyConfirmationState?.receiptId === receipt.id
-                                  && currencyConfirmationState.currency === RECEIPT_PRIMARY_CURRENCY_CONFIRMATION_OPTION
+                                  && currencyConfirmationState.currency === preferredReceiptCurrency
                                   ? 'Saving...'
-                                  : 'GBP'}
+                                  : preferredReceiptCurrency}
                               </button>
                               <button
                                 type="button"
@@ -1571,7 +1560,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
                                 <option value="" disabled className="bg-neutral-950 text-gray-400">
                                   Select currency
                                 </option>
-                                {RECEIPT_CURRENCY_CONFIRMATION_OPTIONS.map((currencyOption) => (
+                                {orderedCurrencyConfirmationOptions.map((currencyOption) => (
                                   <option
                                     key={currencyOption}
                                     value={currencyOption}

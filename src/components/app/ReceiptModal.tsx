@@ -22,23 +22,11 @@ import { hasReceiptOriginal, openReceiptOriginal } from '../../lib/receiptOrigin
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { getReceiptFailureDetails, getReceiptPurchaseDateDisplay } from '../../lib/receiptUiUtils';
 import { useToast } from '../../contexts/ToastContext';
+import { getCurrencyConfig } from '../../lib/currency';
+import { useAuth } from '../../contexts/AuthContext';
 
 const getCurrencySymbol = (currencyCode: string): string => {
-  const code = (currencyCode || 'GBP').toUpperCase();
-  const symbols: { [key: string]: string } = {
-    'GBP': '£',
-    'EUR': '€',
-    'USD': '$',
-    'JPY': '¥',
-    'CNY': '¥',
-    'INR': '₹',
-    'AUD': 'A$',
-    'CAD': 'C$',
-    'CHF': 'CHF',
-    'SEK': 'kr',
-    'NZD': 'NZ$',
-  };
-  return symbols[code] || code;
+  return getCurrencyConfig(currencyCode || 'GBP').symbol;
 };
 
 type ReceiptModalItem = NonNullable<Receipt['items']>[number];
@@ -124,6 +112,14 @@ interface ReceiptModalProps {
 
 export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) {
   const { showToast } = useToast();
+  const { accountCurrency } = useAuth();
+  const preferredReceiptCurrency: ReceiptCurrencyConfirmationOption = isReceiptCurrencyConfirmationOption(accountCurrency.preferredCurrency)
+    ? accountCurrency.preferredCurrency
+    : RECEIPT_PRIMARY_CURRENCY_CONFIRMATION_OPTION;
+  const orderedCurrencyConfirmationOptions = [
+    preferredReceiptCurrency,
+    ...RECEIPT_CURRENCY_CONFIRMATION_OPTIONS.filter((currency) => currency !== preferredReceiptCurrency),
+  ];
   const [isDeleting, setIsDeleting] = useState(false);
   const [showMoreDetails, setShowMoreDetails] = useState(false);
   const [showCompanyDetails, setShowCompanyDetails] = useState(false);
@@ -500,7 +496,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     && !hasMeaningfulOriginalTotal
   );
   const shouldShowReceiptBreakdown = !shouldHideBreakdownSection;
-  const shouldShowApproximateGbpAmount = receiptCurrencyCode !== 'GBP' && gbpAmount !== null && originalTotal !== null;
   const shouldShowHeroAmount = !isCompactFailedReceipt && (!isNonFinalReceipt || hasMeaningfulOriginalTotal);
   const heroAmountDisplay = shouldShowHeroAmount
     ? formatMoney(displayOriginalCurrencySymbol, displayOriginalTotal)
@@ -696,11 +691,6 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                       <div className="text-3xl font-bold text-white">
                       {heroAmountDisplay}
                       </div>
-                    {shouldShowApproximateGbpAmount && (
-                      <div className="text-sm pt-1 text-gray-400">
-                        Approx. {formatMoney('£', gbpAmount)}
-                      </div>
-                    )}
                     {isNonFinalReceipt && !hasMeaningfulOriginalTotal && !isCompactFailedReceipt && (
                       <div className="text-sm pt-1 text-gray-500">
                         Still analyzing
@@ -860,14 +850,14 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => void handleCurrencyConfirmation(RECEIPT_PRIMARY_CURRENCY_CONFIRMATION_OPTION)}
+                          onClick={() => void handleCurrencyConfirmation(preferredReceiptCurrency)}
                           disabled={isConfirmingCurrency}
                           className="px-3 py-1.5 rounded-lg border border-amber-300/30 bg-black/20 text-sm font-semibold text-amber-100 hover:bg-amber-300/10 hover:border-amber-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {currencyConfirmationState?.receiptId === receipt.id
-                            && currencyConfirmationState.currency === RECEIPT_PRIMARY_CURRENCY_CONFIRMATION_OPTION
+                            && currencyConfirmationState.currency === preferredReceiptCurrency
                             ? 'Saving...'
-                            : 'GBP'}
+                            : preferredReceiptCurrency}
                         </button>
                         <button
                           type="button"
@@ -897,7 +887,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                           <option value="" disabled className="bg-neutral-950 text-gray-400">
                             Select currency
                           </option>
-                          {RECEIPT_CURRENCY_CONFIRMATION_OPTIONS.map((currencyOption) => (
+                          {orderedCurrencyConfirmationOptions.map((currencyOption) => (
                             <option
                               key={currencyOption}
                               value={currencyOption}

@@ -50,8 +50,18 @@ const money = (currency: string | null, value: unknown) => {
   const amount = toNumber(value);
   if (amount === null) return "Not recorded";
   const code = (currency || "GBP").toUpperCase();
-  const symbol = code === "GBP" ? "£" : code === "EUR" ? "€" : code === "USD" ? "$" : `${code} `;
-  return `${symbol}${amount.toFixed(2)}`;
+  const symbols: Record<string, string> = {
+    GBP: "£",
+    AUD: "A$",
+    USD: "US$",
+    EUR: "€",
+    CAD: "C$",
+    NZD: "NZ$",
+  };
+  const symbol = symbols[code] || `${code} `;
+  const fractionDigits = new Intl.NumberFormat("en-GB", { style: "currency", currency: code })
+    .resolvedOptions().maximumFractionDigits;
+  return `${symbol}${amount.toFixed(fractionDigits)}`;
 };
 const britishDate = (value: string | null) => {
   if (!value) return "Not recorded";

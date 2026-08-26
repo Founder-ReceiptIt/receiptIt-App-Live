@@ -526,4 +526,9 @@ export interface Profile {
   plan: string | null;
   created_at: string;
   username: string | null;
+  preferred_currency?: string | null;
+  monthly_budget_amount?: number | null;
+  monthly_budget_currency?: string | null;
+  currency_setup_completed?: boolean | null;
+  legacy_budget_migration_completed?: boolean | null;
 }

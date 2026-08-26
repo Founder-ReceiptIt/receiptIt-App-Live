@@ -25,8 +25,8 @@ export function ProfileRecoveryModal() {
       if (error) {
         throw error;
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to recover profile');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to recover profile');
     } finally {
       setLoading(false);
     }

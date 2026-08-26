@@ -1,6 +1,17 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- This compatibility layer normalises several historical live profile/error shapes. */
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import { User, Session } from '@supabase/supabase-js';
+import {
+  AccountCurrencySettings,
+  BUDGET_INCREMENT,
+  clearLegacyMonthlyBudget,
+  DEFAULT_MONTHLY_BUDGET,
+  getLegacyMonthlyBudget,
+  isSupportedCurrency,
+  normalizeSupportedCurrency,
+  SupportedCurrencyCode,
+} from '../lib/currency';
 
 interface NotificationPreferences {
   receiptCaptured: boolean;
@@ -28,10 +39,17 @@ interface AuthContextType {
   emailAlias: string;
   fullName: string;
   needsAliasSetup: boolean;
+  needsCurrencySetup: boolean;
   needsProfileRecovery: boolean;
   profileSettings: ProfileSettings;
+  accountCurrency: AccountCurrencySettings;
   refreshProfileSettings: () => Promise<void>;
   updateProfileSettings: (nextSettings: Partial<ProfileSettings>) => Promise<{ error: any }>;
+  updateAccountCurrency: (
+    preferredCurrency: SupportedCurrencyCode,
+    monthlyBudgetAmount: number,
+    completeSetup?: boolean,
+  ) => Promise<{ error: any }>;
   refreshSignupAuthorization: (accessCode: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
@@ -57,6 +75,13 @@ const defaultPrivacyPreferences: PrivacyPreferences = {
 const defaultProfileSettings: ProfileSettings = {
   notifications: defaultNotificationPreferences,
   privacy: defaultPrivacyPreferences,
+};
+
+const defaultAccountCurrency: AccountCurrencySettings = {
+  preferredCurrency: 'GBP',
+  monthlyBudgetAmount: DEFAULT_MONTHLY_BUDGET,
+  monthlyBudgetCurrency: 'GBP',
+  currencySetupCompleted: true,
 };
 
 const signupAuthorizationKey = 'receiptit_signup_authorization';
@@ -115,6 +140,25 @@ const normalizeProfileSettings = (profileData: any): ProfileSettings => {
   return { notifications, privacy };
 };
 
+const toPositiveNumber = (value: unknown, fallback: number | null): number | null => {
+  const numericValue = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : fallback;
+};
+
+const normalizeAccountCurrency = (profileData: any): AccountCurrencySettings => {
+  const preferredCurrency = normalizeSupportedCurrency(profileData?.preferred_currency);
+  const monthlyBudgetCurrency = isSupportedCurrency(profileData?.monthly_budget_currency)
+    ? profileData.monthly_budget_currency.toUpperCase() as SupportedCurrencyCode
+    : preferredCurrency;
+
+  return {
+    preferredCurrency,
+    monthlyBudgetAmount: toPositiveNumber(profileData?.monthly_budget_amount, DEFAULT_MONTHLY_BUDGET),
+    monthlyBudgetCurrency: monthlyBudgetCurrency === preferredCurrency ? monthlyBudgetCurrency : preferredCurrency,
+    currencySetupCompleted: profileData?.currency_setup_completed !== false,
+  };
+};
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -126,13 +170,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [emailAlias, setEmailAlias] = useState('');
   const [fullName, setFullName] = useState('');
   const [needsAliasSetup, setNeedsAliasSetup] = useState(false);
+  const [needsCurrencySetup, setNeedsCurrencySetup] = useState(false);
   const [needsProfileRecovery, setNeedsProfileRecovery] = useState(false);
   const [profileSettings, setProfileSettings] = useState<ProfileSettings>(defaultProfileSettings);
+  const [accountCurrency, setAccountCurrency] = useState<AccountCurrencySettings>(defaultAccountCurrency);
   const [isSigningUp, setIsSigningUp] = useState(false);
   // `settings` is deliberately not requested here: older live profiles do not
   // have that optional column, and selecting a missing column makes Supabase
   // reject the entire profile read (which previously looked like a login loop).
-  const profileSelect = 'id, email, full_name, email_alias, username, plan, created_at';
+  const profileSelect = 'id, email, full_name, email_alias, username, plan, created_at, preferred_currency, monthly_budget_amount, monthly_budget_currency, currency_setup_completed, legacy_budget_migration_completed';
 
   const profileQueryForUser = (authUserId: string) =>
     supabase
@@ -170,6 +216,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setNeedsProfileRecovery(false);
     setNeedsAliasSetup(false);
     setProfileSettings(normalizeProfileSettings(profileData));
+    const currencySettings = normalizeAccountCurrency(profileData);
+    setAccountCurrency(currencySettings);
+    setNeedsCurrencySetup(!currencySettings.currencySetupCompleted);
+
+    if (profileData?.legacy_budget_migration_completed === false && profileData?.id) {
+      const legacyBudget = getLegacyMonthlyBudget();
+      const migrationPayload: Record<string, unknown> = {
+        legacy_budget_migration_completed: true,
+      };
+      if (legacyBudget !== null) {
+        migrationPayload.monthly_budget_amount = legacyBudget;
+        migrationPayload.monthly_budget_currency = 'GBP';
+        migrationPayload.preferred_currency = 'GBP';
+        setAccountCurrency({
+          ...currencySettings,
+          preferredCurrency: 'GBP',
+          monthlyBudgetCurrency: 'GBP',
+          monthlyBudgetAmount: legacyBudget,
+        });
+      }
+
+      void supabase.from('profiles').update(migrationPayload).eq('id', profileData.id).then(({ error }) => {
+        if (error) {
+          console.warn('[AuthContext] Legacy budget migration could not be completed:', error.message);
+          return;
+        }
+        clearLegacyMonthlyBudget();
+      });
+    }
   };
 
   const ensureInboxAlias = async () => {
@@ -278,6 +353,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateAccountCurrency = async (
+    preferredCurrency: SupportedCurrencyCode,
+    monthlyBudgetAmount: number,
+    completeSetup = true,
+  ) => {
+    if (!user) return { error: new Error('No authenticated user') };
+    if (!isSupportedCurrency(preferredCurrency)) return { error: new Error('Choose a supported currency') };
+    if (
+      !Number.isFinite(monthlyBudgetAmount)
+      || monthlyBudgetAmount <= 0
+      || !Number.isInteger(monthlyBudgetAmount / BUDGET_INCREMENT)
+    ) {
+      return { error: new Error(`Use whole ${BUDGET_INCREMENT}-unit amounts for your monthly budget.`) };
+    }
+
+    const normalizedCurrency = preferredCurrency.toUpperCase() as SupportedCurrencyCode;
+    const nextSettings: AccountCurrencySettings = {
+      preferredCurrency: normalizedCurrency,
+      monthlyBudgetAmount,
+      monthlyBudgetCurrency: normalizedCurrency,
+      currencySetupCompleted: completeSetup,
+    };
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        preferred_currency: normalizedCurrency,
+        monthly_budget_amount: monthlyBudgetAmount,
+        monthly_budget_currency: normalizedCurrency,
+        currency_setup_completed: completeSetup,
+        legacy_budget_migration_completed: true,
+      })
+      .eq('id', user.id);
+
+    if (!error) {
+      setAccountCurrency(nextSettings);
+      setNeedsCurrencySetup(!completeSetup);
+      clearLegacyMonthlyBudget();
+    }
+
+    return { error };
+  };
+
   const validateUserExists = async (): Promise<boolean> => {
     try {
       const { data: { user: authUser }, error } = await supabase.auth.getUser();
@@ -298,6 +416,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setFullName('');
     setNeedsAliasSetup(false);
     setProfileSettings(defaultProfileSettings);
+    setAccountCurrency(defaultAccountCurrency);
+    setNeedsCurrencySetup(false);
   };
 
   const fetchProfile = async (userId: string) => {
@@ -320,7 +440,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setEmailAlias('');
         setFullName('');
         setNeedsAliasSetup(false);
+        setNeedsCurrencySetup(false);
         setNeedsProfileRecovery(false);
+        setAccountCurrency(defaultAccountCurrency);
         await supabase.auth.signOut();
         setProfileLoading(false);
         return;
@@ -371,7 +493,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setUsername('');
             setEmailAlias('');
             setNeedsAliasSetup(false);
+            setNeedsCurrencySetup(false);
             setNeedsProfileRecovery(false);
+            setAccountCurrency(defaultAccountCurrency);
             await supabase.auth.signOut();
             setLoading(false);
             return;
@@ -388,7 +512,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUsername('');
           setEmailAlias('');
           setNeedsAliasSetup(false);
+          setNeedsCurrencySetup(false);
           setNeedsProfileRecovery(false);
+          setAccountCurrency(defaultAccountCurrency);
         }
       } else {
         console.log('[Auth] No session user found');
@@ -416,8 +542,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setEmailAlias('');
           setFullName('');
           setNeedsAliasSetup(false);
+          setNeedsCurrencySetup(false);
           setNeedsProfileRecovery(false);
           setProfileSettings(defaultProfileSettings);
+          setAccountCurrency(defaultAccountCurrency);
         }
 
         setLoading(false);
@@ -579,7 +707,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setEmailAlias('');
       setFullName('');
       setNeedsAliasSetup(false);
+      setNeedsCurrencySetup(false);
       setNeedsProfileRecovery(false);
+      setAccountCurrency(defaultAccountCurrency);
       await supabase.auth.signOut();
       return;
     }
@@ -663,8 +793,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setEmailAlias('');
     setFullName('');
     setNeedsAliasSetup(false);
+    setNeedsCurrencySetup(false);
     setNeedsProfileRecovery(false);
     setProfileSettings(defaultProfileSettings);
+    setAccountCurrency(defaultAccountCurrency);
     localStorage.removeItem('isScanning');
     localStorage.removeItem('scanningSource');
     await supabase.auth.signOut();
@@ -735,10 +867,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     emailAlias,
     fullName,
     needsAliasSetup,
+    needsCurrencySetup,
     needsProfileRecovery,
     profileSettings,
+    accountCurrency,
     refreshProfileSettings,
     updateProfileSettings,
+    updateAccountCurrency,
     refreshSignupAuthorization,
     signUp,
     signIn,

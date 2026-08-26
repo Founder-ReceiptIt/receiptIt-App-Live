@@ -1,17 +1,70 @@
 import { motion } from 'framer-motion';
-import { AlertTriangle, Download, FileText, Mail, MessageCircle, ShieldCheck, Trash2, X } from 'lucide-react';
-import { useState } from 'react';
+import { AlertTriangle, Coins, Download, FileText, Mail, MessageCircle, Minus, Plus, ShieldCheck, Trash2, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { ReceiptItWordmark } from '../ReceiptItWordmark';
+import {
+  BETA_CURRENCIES,
+  BUDGET_INCREMENT,
+  convertCurrencyAmount,
+  formatCurrency,
+  formatCurrencyInputSymbol,
+  SupportedCurrencyCode,
+} from '../../lib/currency';
 
 export function SettingsTab() {
-  const { user, signOut, deleteAccount } = useAuth();
+  const { user, signOut, deleteAccount, accountCurrency, updateAccountCurrency } = useAuth();
   const { showToast } = useToast();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [showProtectionDetail, setShowProtectionDetail] = useState(false);
+  const [currencyDraft, setCurrencyDraft] = useState<SupportedCurrencyCode>(accountCurrency.preferredCurrency);
+  const [budgetDraft, setBudgetDraft] = useState(String(accountCurrency.monthlyBudgetAmount ?? ''));
+  const [currencySaving, setCurrencySaving] = useState(false);
+  const [currencyError, setCurrencyError] = useState('');
+
+  useEffect(() => {
+    setCurrencyDraft(accountCurrency.preferredCurrency);
+    setBudgetDraft(String(accountCurrency.monthlyBudgetAmount ?? ''));
+  }, [accountCurrency]);
+
+  const handleCurrencyDraftChange = async (nextCurrency: SupportedCurrencyCode) => {
+    setCurrencyDraft(nextCurrency);
+    setCurrencyError('');
+    if (nextCurrency === accountCurrency.preferredCurrency || !accountCurrency.monthlyBudgetAmount) return;
+
+    const converted = await convertCurrencyAmount(
+      accountCurrency.monthlyBudgetAmount,
+      accountCurrency.preferredCurrency,
+      nextCurrency,
+    );
+    setBudgetDraft(converted === null ? '' : String(Math.max(BUDGET_INCREMENT, Math.round(converted / BUDGET_INCREMENT) * BUDGET_INCREMENT)));
+  };
+
+  const changeBudgetBy = (difference: number) => {
+    const current = Number(budgetDraft) || 0;
+    setBudgetDraft(String(Math.max(BUDGET_INCREMENT, current + difference)));
+    setCurrencyError('');
+  };
+
+  const handleSaveCurrencySettings = async () => {
+    const amount = Number(budgetDraft);
+    if (!Number.isFinite(amount) || amount <= 0 || !Number.isInteger(amount / BUDGET_INCREMENT)) {
+      setCurrencyError(`Use whole ${formatCurrency(BUDGET_INCREMENT, currencyDraft, { maximumFractionDigits: 0, minimumFractionDigits: 0 })} amounts.`);
+      return;
+    }
+
+    setCurrencySaving(true);
+    const { error } = await updateAccountCurrency(currencyDraft, amount, true);
+    setCurrencySaving(false);
+    if (error) {
+      setCurrencyError('We couldn’t save your currency settings. Please try again.');
+      return;
+    }
+    showToast('Currency settings saved');
+  };
 
   const handleExport = async () => {
     if (!user) return;
@@ -25,9 +78,12 @@ export function SettingsTab() {
       const safeValue = /^[=+\-@]/.test(rawValue) ? `'${rawValue}` : rawValue;
       return `"${safeValue.replace(/"/g, '""')}"`;
     };
+    const settingsHeaders = ['Preferred currency', 'Monthly budget', 'Budget currency'];
+    const settingsRow = [accountCurrency.preferredCurrency, accountCurrency.monthlyBudgetAmount, accountCurrency.monthlyBudgetCurrency];
     const headers = ['Status', 'Document type', 'Date', 'Store', 'Amount', 'Currency', 'Category', 'Reference'];
     const rows = receipts.map((receipt) => [receipt.status, receipt.document_type, receipt.transaction_date, receipt.merchant, receipt.amount, receipt.currency, receipt.category, receipt.reference_number]);
-    const blob = new Blob([[headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\n')], { type: 'text/csv' });
+    const exportRows = [settingsHeaders, settingsRow, [], headers, ...rows];
+    const blob = new Blob([exportRows.map((row) => row.map(csvCell).join(',')).join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -55,6 +111,38 @@ export function SettingsTab() {
         <section className="mt-8 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.045]">
           <div className="flex items-center gap-2 border-b border-white/10 px-5 py-4"><Mail className="h-5 w-5 text-teal-300" strokeWidth={1.7} /><h2 className="font-bold text-white">Account</h2></div>
           <div className="p-5"><p className="text-xs font-semibold uppercase tracking-[0.13em] text-gray-500">Email</p><p className="mt-1 break-all text-sm text-gray-300">{user?.email || 'No email set'}</p><button onClick={() => void signOut()} className="mt-5 min-h-11 text-sm font-semibold text-gray-300 transition-colors hover:text-white">Sign out</button></div>
+        </section>
+        <section className="mt-5 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.045]">
+          <div className="flex items-center gap-2 border-b border-white/10 px-5 py-4"><Coins className="h-5 w-5 text-teal-300" strokeWidth={1.7} /><h2 className="font-bold text-white">Currency &amp; budget</h2></div>
+          <div className="grid gap-5 p-5 md:grid-cols-2">
+            <label className="text-xs font-semibold uppercase tracking-[0.13em] text-gray-500">
+              Main currency
+              <select
+                aria-label="Main currency"
+                value={currencyDraft}
+                onChange={(event) => void handleCurrencyDraftChange(event.target.value as SupportedCurrencyCode)}
+                className="mt-2 w-full rounded-xl border border-white/10 bg-neutral-950 px-4 py-3 text-sm font-semibold normal-case tracking-normal text-white outline-none focus:border-teal-300/40"
+              >
+                {BETA_CURRENCIES.map((currency) => <option key={currency.code} value={currency.code}>{currency.symbol} {currency.name} ({currency.code})</option>)}
+              </select>
+              <span className="mt-2 block text-xs font-normal normal-case tracking-normal text-gray-500">Used for Wallet and Insights totals. Receipts keep their original currency.</span>
+            </label>
+            <label className="text-xs font-semibold uppercase tracking-[0.13em] text-gray-500">
+              Monthly budget
+              <span className="mt-2 flex items-center rounded-xl border border-white/10 bg-black/20">
+                <button type="button" aria-label="Decrease monthly budget" onClick={() => changeBudgetBy(-BUDGET_INCREMENT)} className="min-h-12 px-3 text-gray-300 hover:text-white"><Minus className="h-4 w-4" /></button>
+                <span className="text-base text-gray-400">{formatCurrencyInputSymbol(currencyDraft)}</span>
+                <input aria-label="Monthly budget" type="number" min={BUDGET_INCREMENT} step={BUDGET_INCREMENT} inputMode="numeric" value={budgetDraft} onChange={(event) => { setBudgetDraft(event.target.value); setCurrencyError(''); }} className="min-w-0 flex-1 bg-transparent px-2 py-3 text-base font-semibold text-white outline-none" />
+                <button type="button" aria-label="Increase monthly budget" onClick={() => changeBudgetBy(BUDGET_INCREMENT)} className="min-h-12 px-3 text-gray-300 hover:text-white"><Plus className="h-4 w-4" /></button>
+              </span>
+              <span className="mt-2 block text-xs font-normal normal-case tracking-normal text-gray-500">Adjusts in {formatCurrency(BUDGET_INCREMENT, currencyDraft, { maximumFractionDigits: 0, minimumFractionDigits: 0 })} steps.</span>
+            </label>
+            <div className="md:col-span-2">
+              {currencyDraft !== accountCurrency.preferredCurrency ? <p className="mb-3 text-sm text-teal-100">Your currency will change to {currencyDraft}. Confirm the monthly budget above before saving.</p> : null}
+              {currencyError ? <p className="mb-3 text-sm text-amber-200">{currencyError}</p> : null}
+              <button type="button" disabled={currencySaving} onClick={() => void handleSaveCurrencySettings()} className="rounded-xl bg-teal-400 px-4 py-3 text-sm font-bold text-black hover:bg-teal-300 disabled:opacity-50">{currencySaving ? 'Saving…' : 'Save currency settings'}</button>
+            </div>
+          </div>
         </section>
         <section className="mt-5 rounded-2xl border border-white/10 bg-white/[0.045] p-6">
           <div className="flex items-start gap-4"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-teal-400/25 bg-teal-400/10"><ShieldCheck className="h-5 w-5 text-teal-300" strokeWidth={1.7} /></div><div><h2 className="text-lg font-bold text-white">Privacy &amp; security</h2><p className="mt-1 text-sm leading-6 text-gray-400">Your receipts and purchase information are private to your account.</p><button type="button" onClick={() => setShowProtectionDetail((value) => !value)} aria-expanded={showProtectionDetail} className="mt-3 inline-flex items-baseline gap-1 text-sm font-semibold text-teal-300 transition-colors hover:text-teal-200">How <ReceiptItWordmark className="text-sm text-teal-300" /> protects your data</button>{showProtectionDetail && <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.16 }} className="mt-3 max-w-xl text-sm leading-6 text-gray-400">Only you can see your saved receipts. You can download or permanently delete your data whenever you need to.</motion.p>}</div></div>
