@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Shield, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Download, Undo2, ChevronDown } from 'lucide-react';
+import { X, Shield, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Download, Undo2, ChevronDown, Pencil, Check } from 'lucide-react';
 import { Receipt } from './WalletTab';
 import { ReportProblemDialog } from './ReportProblemDialog';
 import { useState, useEffect } from 'react';
@@ -60,8 +60,13 @@ const getWebsiteHref = (website: string): string => (
 );
 
 const mapReceiptItemRow = (row: Record<string, unknown>): ReceiptModalItem => ({
+  id: getNonEmptyString(row.id) || '',
+  receiptId: getNonEmptyString(row.receipt_id) || '',
   lineIndex: getNullableNumber(row.line_index) ?? 0,
   description: getNonEmptyString(row.description),
+  rawDescription: getNonEmptyString(row.raw_description),
+  displayName: getNonEmptyString(row.display_name),
+  brandName: getNonEmptyString(row.brand_name),
   itemType: getNonEmptyString(row.item_type),
   quantity: getNullableNumber(row.quantity),
   quantityUnit: getNonEmptyString(row.quantity_unit),
@@ -136,13 +141,25 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const [showOtherCurrencyOptions, setShowOtherCurrencyOptions] = useState(false);
   const [showReportProblemDialog, setShowReportProblemDialog] = useState(false);
   const [isGeneratingProofPack, setIsGeneratingProofPack] = useState(false);
+  const [displayMerchant, setDisplayMerchant] = useState(receipt?.merchant || '');
+  const [isEditingMerchant, setIsEditingMerchant] = useState(false);
+  const [merchantDraft, setMerchantDraft] = useState(receipt?.merchant || '');
+  const [isSavingMerchant, setIsSavingMerchant] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [itemDisplayNameDraft, setItemDisplayNameDraft] = useState('');
+  const [savingItemId, setSavingItemId] = useState<string | null>(null);
 
   useEffect(() => {
     setShowMoreDetails(false);
     setShowCompanyDetails(false);
     setShowOtherCurrencyOptions(false);
     setShowReportProblemDialog(false);
-  }, [receipt?.id]);
+    setDisplayMerchant(receipt?.merchant || '');
+    setMerchantDraft(receipt?.merchant || '');
+    setIsEditingMerchant(false);
+    setEditingItemId(null);
+    setItemDisplayNameDraft('');
+  }, [receipt?.id, receipt?.merchant]);
 
   useEffect(() => {
     setProcessingAttemptStartedAt(receipt?.processingAttemptStartedAt || null);
@@ -303,6 +320,84 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     }
   };
 
+  const handleSaveMerchant = async () => {
+    if (!receipt || isSavingMerchant) return;
+
+    const nextMerchant = merchantDraft.trim();
+    if (!nextMerchant || nextMerchant.length > 160) {
+      showToast('Store name not saved', 'Use between 1 and 160 characters.');
+      return;
+    }
+
+    setIsSavingMerchant(true);
+    const { data, error } = await supabase
+      .from('receipts')
+      .update({ merchant: nextMerchant })
+      .eq('id', receipt.id)
+      .eq('user_id', receipt.userId)
+      .select('merchant')
+      .single();
+
+    setIsSavingMerchant(false);
+    if (error) {
+      console.error('[ReceiptModal] Store name correction failed:', error);
+      showToast('Store name not saved', 'Please try again.');
+      return;
+    }
+
+    const savedMerchant = getNonEmptyString(data?.merchant) || nextMerchant;
+    setDisplayMerchant(savedMerchant);
+    setMerchantDraft(savedMerchant);
+    setIsEditingMerchant(false);
+    showToast('Store name updated');
+  };
+
+  const startEditingItem = (item: ReceiptModalItem) => {
+    setEditingItemId(item.id);
+    setItemDisplayNameDraft(
+      item.displayName?.trim()
+      || item.rawDescription?.trim()
+      || item.description?.trim()
+      || ''
+    );
+  };
+
+  const handleSaveItemDisplayName = async (item: ReceiptModalItem) => {
+    if (!receipt || !item.id || savingItemId) return;
+
+    const nextDisplayName = itemDisplayNameDraft.trim();
+    if (nextDisplayName.length > 160) {
+      showToast('Item name not saved', 'Use no more than 160 characters.');
+      return;
+    }
+
+    setSavingItemId(item.id);
+    const { data, error } = await supabase
+      .from('receipt_items')
+      .update({ display_name: nextDisplayName || null })
+      .eq('id', item.id)
+      .eq('receipt_id', receipt.id)
+      .select('id, display_name')
+      .single();
+
+    setSavingItemId(null);
+    if (error) {
+      console.error('[ReceiptModal] Item name correction failed:', error);
+      showToast('Item name not saved', 'Please try again.');
+      return;
+    }
+
+    const savedDisplayName = getNonEmptyString(data?.display_name);
+    setReceiptItems((currentItems) => currentItems.map((currentItem) => (
+      currentItem.id === item.id
+        ? { ...currentItem, displayName: savedDisplayName }
+        : currentItem
+    )));
+    setEditingItemId(null);
+    setItemDisplayNameDraft('');
+    showToast('Item name updated');
+  };
+
   if (!receipt) return null;
 
   // --- LOGIC FIX: BETTER DATE HANDLING ---
@@ -337,6 +432,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
   const isFreshProcessing = isProcessingReceipt && !isStaleProcessing;
   const isNeedsInputReceipt = receipt.status === 'needs_input';
   const isNonFinalReceipt = isProcessingReceipt || isNeedsInputReceipt || receipt.status === 'needs_review' || receipt.status === 'rejected' || receipt.status === 'failed';
+  const canEditStructuredReceipt = ['parsed', 'completed', 'needs_review'].includes(receipt.status || '');
   const requiresCurrencyConfirmation = needsCurrencyConfirmation(receipt.status, receipt.errorReason);
   const isConfirmingCurrency = currencyConfirmationState?.receiptId === receipt.id;
   const receiptCurrencySymbol = getCurrencySymbol(receipt.currency);
@@ -356,11 +452,18 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     if (normalizedType === 'discount') return 'discount';
     return 'product';
   };
+  const getItemDisplayName = (item: ReceiptModalItem) => (
+    item.displayName?.trim()
+    || item.rawDescription?.trim()
+    || item.description?.trim()
+    || 'Unnamed item'
+  );
   const isCurrentReceiptDetails = detailReceiptId === receipt.id;
   const activeReceiptItems = isCurrentReceiptDetails ? receiptItems : [];
   const activeReceiptPayments = isCurrentReceiptDetails ? receiptPayments : [];
   const normalizedReceiptItems = activeReceiptItems.filter((item) => {
-    const hasDescription = typeof item.description === 'string' && item.description.trim().length > 0;
+    const hasDescription = [item.displayName, item.rawDescription, item.description, item.brandName]
+      .some((value) => typeof value === 'string' && value.trim().length > 0);
     return hasDescription
       || getValidMoneyValue(item.quantity) !== null
       || getValidMoneyValue(item.unitPrice) !== null
@@ -676,8 +779,64 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                     )}
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-2xl font-bold text-white mb-1">{receipt.merchant || 'Receipt (Seller Unknown)'}</h3>
-                    {receipt.summary && (
+                    {isEditingMerchant ? (
+                      <div className="mb-2 flex max-w-xl items-center gap-2">
+                        <input
+                          value={merchantDraft}
+                          onChange={(event) => setMerchantDraft(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') void handleSaveMerchant();
+                            if (event.key === 'Escape') {
+                              setMerchantDraft(displayMerchant);
+                              setIsEditingMerchant(false);
+                            }
+                          }}
+                          maxLength={160}
+                          autoFocus
+                          aria-label="Store name"
+                          className="min-w-0 flex-1 rounded-lg border border-teal-400/40 bg-black/30 px-3 py-2 text-lg font-bold text-white outline-none focus:border-teal-300"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void handleSaveMerchant()}
+                          disabled={isSavingMerchant}
+                          aria-label="Save store name"
+                          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-teal-400/30 bg-teal-400/10 text-teal-300 transition-colors hover:bg-teal-400/15 disabled:opacity-50"
+                        >
+                          {isSavingMerchant ? <Clock className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMerchantDraft(displayMerchant);
+                            setIsEditingMerchant(false);
+                          }}
+                          aria-label="Cancel store name edit"
+                          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-gray-400 transition-colors hover:text-white"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="mb-1 flex items-start gap-2">
+                        <h3 className="min-w-0 text-2xl font-bold text-white">{displayMerchant || 'Receipt (Seller Unknown)'}</h3>
+                        {canEditStructuredReceipt && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMerchantDraft(displayMerchant);
+                              setIsEditingMerchant(true);
+                            }}
+                            aria-label="Edit store name"
+                            title="Edit store name"
+                            className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-white/5 hover:text-teal-300"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {receipt.status === 'needs_review' && receipt.summary && (
                       <p className="text-teal-400 text-sm mb-2">{receipt.summary}</p>
                     )}
                     {purchaseDateDisplay && (
@@ -952,13 +1111,74 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                             <div className="divide-y divide-white/10">
                               {section.items.map((item) => (
                                 <div
-                                  key={`${section.key}-${item.lineIndex}-${item.description ?? 'item'}`}
+                                  key={item.id || `${section.key}-${item.lineIndex}-${item.description ?? 'item'}`}
                                   className={`grid ${receiptBreakdownGridColumns} ${receiptBreakdownGridSpacing} items-start py-3`}
                                 >
                                   <div className="col-span-3 min-w-0 sm:col-span-1">
-                                    <div className="text-sm font-semibold leading-snug text-white break-words [word-break:normal] [overflow-wrap:break-word]">
-                                      {item.description?.trim() || 'Unnamed item'}
-                                    </div>
+                                    {editingItemId === item.id ? (
+                                      <div className="flex items-center gap-1.5">
+                                        <input
+                                          value={itemDisplayNameDraft}
+                                          onChange={(event) => setItemDisplayNameDraft(event.target.value)}
+                                          onKeyDown={(event) => {
+                                            if (event.key === 'Enter') void handleSaveItemDisplayName(item);
+                                            if (event.key === 'Escape') {
+                                              setEditingItemId(null);
+                                              setItemDisplayNameDraft('');
+                                            }
+                                          }}
+                                          maxLength={160}
+                                          autoFocus
+                                          aria-label={`Item name for ${getItemDisplayName(item)}`}
+                                          className="min-w-0 flex-1 rounded-md border border-teal-400/40 bg-black/30 px-2 py-1.5 text-sm font-semibold text-white outline-none focus:border-teal-300"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => void handleSaveItemDisplayName(item)}
+                                          disabled={savingItemId === item.id}
+                                          aria-label="Save item name"
+                                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-teal-400/30 bg-teal-400/10 text-teal-300 disabled:opacity-50"
+                                        >
+                                          {savingItemId === item.id ? <Clock className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setEditingItemId(null);
+                                            setItemDisplayNameDraft('');
+                                          }}
+                                          aria-label="Cancel item name edit"
+                                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/5 text-gray-500 hover:text-white"
+                                        >
+                                          <X className="h-3.5 w-3.5" />
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-start gap-1.5">
+                                        <div className="min-w-0 flex-1">
+                                          <div
+                                            className="text-sm font-semibold leading-snug text-white break-words [word-break:normal] [overflow-wrap:break-word]"
+                                            title={item.rawDescription?.trim() || item.description?.trim() || undefined}
+                                          >
+                                            {getItemDisplayName(item)}
+                                          </div>
+                                          {item.brandName?.trim() && (
+                                            <div className="mt-0.5 text-xs text-gray-500">{item.brandName.trim()}</div>
+                                          )}
+                                        </div>
+                                        {canEditStructuredReceipt && item.id && (
+                                          <button
+                                            type="button"
+                                            onClick={() => startEditingItem(item)}
+                                            aria-label={`Edit ${getItemDisplayName(item)}`}
+                                            title="Edit item name"
+                                            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-gray-600 transition-colors hover:bg-white/5 hover:text-teal-300"
+                                          >
+                                            <Pencil className="h-3 w-3" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    )}
                                     {(getValidMoneyValue(item.vatRate) !== null || getValidMoneyValue(item.vatAmount) !== null) && (
                                       <div className="text-xs text-gray-400 mt-1">
                                         {getValidMoneyValue(item.vatRate) !== null ? `VAT ${item.vatRate!.toFixed(2)}%` : 'VAT'}

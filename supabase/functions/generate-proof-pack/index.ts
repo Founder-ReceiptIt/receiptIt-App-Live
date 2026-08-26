@@ -28,7 +28,7 @@ type ReceiptRow = {
   warranty_date: string | null;
 };
 
-type ItemRow = { description: string | null; quantity: number | string | null; quantity_unit: string | null; unit_price: number | string | null; line_total: number | string | null };
+type ItemRow = { description: string | null; raw_description: string | null; display_name: string | null; brand_name: string | null; quantity: number | string | null; quantity_unit: string | null; unit_price: number | string | null; line_total: number | string | null };
 type PaymentRow = { payment_method?: string | null; method?: string | null; amount?: number | string | null; currency?: string | null };
 
 const json = (request: Request, body: Record<string, unknown>, status = 200) => new Response(JSON.stringify(body), {
@@ -168,7 +168,7 @@ Deno.serve(async (request) => {
   if (!receipt.storage_path) return json(request, { error: "No original receipt is available for this receipt" }, 409);
 
   const [itemsResult, paymentsResult] = await Promise.all([
-    admin.from("receipt_items").select("description,quantity,quantity_unit,unit_price,line_total").eq("receipt_id", receipt.id).order("line_index"),
+    admin.from("receipt_items").select("description,raw_description,display_name,brand_name,quantity,quantity_unit,unit_price,line_total").eq("receipt_id", receipt.id).order("line_index"),
     admin.from("receipt_payments").select("method,amount,currency").eq("receipt_id", receipt.id),
   ]);
   if (itemsResult.error || paymentsResult.error) {
@@ -183,7 +183,11 @@ Deno.serve(async (request) => {
     ...(asText(receipt.customer_number) ? [{ text: `Customer number: ${receipt.customer_number}` }] : []),
     ...(asText(receipt.loyalty_member_id) ? [{ text: `Loyalty number: ${receipt.loyalty_member_id}` }] : []),
   ];
-  const itemLines = ((itemsResult.data || []) as ItemRow[]).map((item) => ({ text: `${asText(item.description) || "Item"}${toNumber(item.quantity) !== null ? ` · ${item.quantity}${asText(item.quantity_unit) ? ` ${item.quantity_unit}` : ""}` : ""}${toNumber(item.line_total) !== null ? ` · ${money(receipt.currency, item.line_total)}` : toNumber(item.unit_price) !== null ? ` · ${money(receipt.currency, item.unit_price)}` : ""}` }));
+  const itemLines = ((itemsResult.data || []) as ItemRow[]).map((item) => {
+    const itemName = asText(item.display_name) || asText(item.raw_description) || asText(item.description) || "Item";
+    const brand = asText(item.brand_name);
+    return { text: `${itemName}${brand ? ` (${brand})` : ""}${toNumber(item.quantity) !== null ? ` · ${item.quantity}${asText(item.quantity_unit) ? ` ${item.quantity_unit}` : ""}` : ""}${toNumber(item.line_total) !== null ? ` · ${money(receipt.currency, item.line_total)}` : toNumber(item.unit_price) !== null ? ` · ${money(receipt.currency, item.unit_price)}` : ""}` };
+  });
   const paymentLines = ((paymentsResult.data || []) as PaymentRow[]).map((payment) => ({ text: `${paymentDescription(asText(payment.payment_method) || asText(payment.method))} · ${money(payment.currency || receipt.currency, payment.amount)}` }));
   const lines: Array<{ text: string; strong?: boolean }> = [
     { text: "Proof of purchase", strong: true },

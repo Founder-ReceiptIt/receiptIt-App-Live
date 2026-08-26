@@ -426,6 +426,9 @@ export interface ReceiptItem {
   receipt_id: string;
   line_index: number;
   description?: string | null;
+  raw_description?: string | null;
+  display_name?: string | null;
+  brand_name?: string | null;
   item_type?: 'product' | 'charge' | 'discount' | string | null;
   quantity?: number | null;
   quantity_unit?: string | null;

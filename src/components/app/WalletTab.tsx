@@ -421,8 +421,13 @@ export interface Receipt {
   itemDescriptions: string[];
   searchText: string;
   items?: Array<{
+    id: string;
+    receiptId: string;
     lineIndex: number;
     description?: string | null;
+    rawDescription?: string | null;
+    displayName?: string | null;
+    brandName?: string | null;
     itemType?: 'product' | 'charge' | 'discount' | string | null;
     quantity?: number | null;
     quantityUnit?: string | null;
@@ -539,7 +544,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
         if (visibleDedupedRows.length > 0) {
           const { data: receiptItemsData, error: receiptItemsError } = await supabase
             .from('receipt_items')
-            .select('receipt_id, description')
+            .select('receipt_id, description, raw_description, display_name, brand_name')
             .in('receipt_id', visibleDedupedRows.map((row) => row.id));
 
           if (receiptItemsError) {
@@ -547,12 +552,23 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
           } else {
             (receiptItemsData || []).forEach((row) => {
               const receiptId = getNonEmptyString((row as { receipt_id?: string | null }).receipt_id);
-              const description = getNonEmptyString((row as { description?: string | null }).description);
+              const itemRow = row as {
+                description?: string | null;
+                raw_description?: string | null;
+                display_name?: string | null;
+                brand_name?: string | null;
+              };
+              const searchableDescriptions = [
+                itemRow.display_name,
+                itemRow.brand_name,
+                itemRow.raw_description,
+                itemRow.description,
+              ].map(getNonEmptyString).filter((value): value is string => value !== null);
 
-              if (!receiptId || !description) return;
+              if (!receiptId || searchableDescriptions.length === 0) return;
 
               const existingDescriptions = itemDescriptionsByReceipt.get(receiptId) || [];
-              existingDescriptions.push(description);
+              existingDescriptions.push(...searchableDescriptions);
               itemDescriptionsByReceipt.set(receiptId, existingDescriptions);
             });
           }
