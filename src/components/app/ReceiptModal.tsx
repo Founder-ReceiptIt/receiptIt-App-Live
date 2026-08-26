@@ -1162,7 +1162,7 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                                           >
                                             {getItemDisplayName(item)}
                                           </div>
-                                          {item.brandName?.trim() && (
+                                          {item.displayName?.trim() && item.brandName?.trim() && (
                                             <div className="mt-0.5 text-xs text-gray-500">{item.brandName.trim()}</div>
                                           )}
                                         </div>
