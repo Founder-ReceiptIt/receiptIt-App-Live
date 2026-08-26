@@ -158,7 +158,7 @@ Deno.serve(async (request) => {
         if (!response.ok) return { entry, error: true as const };
         const body = await response.json();
         const rate = Number(body?.rate);
-        const rateDate = typeof body?.date === "string" && ISO_DATE.test(body.date)
+      const rateDate = typeof body?.date === "string" && ISO_DATE.test(body.date)
           ? body.date
           : entry.requestedDate;
         if (!Number.isFinite(rate) || rate <= 0) return { entry, error: true as const };
@@ -178,7 +178,7 @@ Deno.serve(async (request) => {
         requestedDate: entry.requestedDate,
         rateDate,
         rate,
-        approximate: entry.approximate,
+        approximate: entry.approximate || rateDate !== entry.requestedDate,
         provider: "frankfurter",
       });
       cacheWrites.push({
@@ -188,7 +188,7 @@ Deno.serve(async (request) => {
         rate_date: rateDate,
         rate,
         provider: "frankfurter",
-        approximate: entry.approximate,
+        approximate: entry.approximate || rateDate !== entry.requestedDate,
         fetched_at: new Date().toISOString(),
       });
     }
