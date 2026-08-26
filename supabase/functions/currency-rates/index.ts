@@ -158,7 +158,7 @@ Deno.serve(async (request) => {
         if (!response.ok) return { entry, error: true as const };
         const body = await response.json();
         const rate = Number(body?.rate);
-      const rateDate = typeof body?.date === "string" && ISO_DATE.test(body.date)
+        const rateDate = typeof body?.date === "string" && ISO_DATE.test(body.date)
           ? body.date
           : entry.requestedDate;
         if (!Number.isFinite(rate) || rate <= 0) return { entry, error: true as const };
