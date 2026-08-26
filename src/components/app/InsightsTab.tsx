@@ -5,7 +5,7 @@ import { FINALIZED_RECEIPT_STATUSES, supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { convertReceiptAmounts, formatCurrency } from '../../lib/currency';
 
-type InsightReceipt = { id: string; amount: number; currency: string; convertedAmount: number | null; category: string; merchant: string; date: string };
+type InsightReceipt = { id: string; amount: number; currency: string; convertedAmount: number | null; category: string; merchant: string; date: string; transactionDate: string | null };
 
 const asNumber = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -47,12 +47,13 @@ export function InsightsTab() {
           category: typeof row.category === 'string' && row.category.trim() ? row.category.trim() : 'Other',
           merchant: typeof row.merchant === 'string' && row.merchant.trim() ? row.merchant.trim() : 'Store unknown',
           date: String(row.transaction_date || row.created_at || new Date().toISOString()),
+          transactionDate: row.transaction_date ? String(row.transaction_date) : null,
         }));
         const converted = await convertReceiptAmounts(sourceReceipts.map((receipt) => ({
           id: receipt.id,
           amount: receipt.amount,
           currency: receipt.currency,
-          transactionDate: receipt.date,
+          transactionDate: receipt.transactionDate,
         })), preferredCurrency);
         if (!active) return;
         setExcludedCount(converted.excludedReceiptIds.length);

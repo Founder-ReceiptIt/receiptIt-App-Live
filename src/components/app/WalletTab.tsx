@@ -706,7 +706,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
         id: receipt.id,
         amount: receipt.amount,
         currency: receipt.currency,
-        transactionDate: receipt.date || receipt.createdAt,
+        transactionDate: receipt.date || null,
       })), accountCurrency.preferredCurrency);
       if (!active) return;
       setConvertedAmounts(converted.amounts);

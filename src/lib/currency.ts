@@ -50,6 +50,10 @@ const EURO_REGION_PREFIXES = new Set([
   'at', 'be', 'cy', 'de', 'ee', 'es', 'fi', 'fr', 'gr', 'hr', 'ie', 'it',
   'lt', 'lu', 'lv', 'mt', 'nl', 'pt', 'si', 'sk',
 ]);
+const EURO_LANGUAGE_PREFIXES = new Set([
+  'de', 'el', 'es', 'et', 'fi', 'fr', 'hr', 'it', 'lt', 'lv', 'mt', 'nl',
+  'pt', 'sk', 'sl',
+]);
 
 const currencyByCode = new Map(BETA_CURRENCIES.map((currency) => [currency.code, currency]));
 const memoryRateCache = new Map<string, { rate: number; approximate: boolean }>();
@@ -79,8 +83,9 @@ export const suggestPreferredCurrency = (locale = navigator.language): Supported
   if (normalized === 'en-nz' || normalized.endsWith('-nz')) return 'NZD';
 
   const parts = normalized.split('-');
+  const language = parts[0] || '';
   const region = parts.length > 1 ? parts[parts.length - 1] : '';
-  if (EURO_REGION_PREFIXES.has(region) || normalized.startsWith('de-') || normalized.startsWith('fr-')) return 'EUR';
+  if (EURO_REGION_PREFIXES.has(region) || EURO_LANGUAGE_PREFIXES.has(language)) return 'EUR';
   return 'GBP';
 };
 

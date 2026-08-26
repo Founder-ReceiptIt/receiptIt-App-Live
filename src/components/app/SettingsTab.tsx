@@ -51,7 +51,12 @@ export function SettingsTab() {
       nextCurrency,
     );
     if (requestId !== currencyRequestId.current) return;
-    setBudgetDraft(converted === null ? '' : String(Math.max(BUDGET_INCREMENT, Math.round(converted / BUDGET_INCREMENT) * BUDGET_INCREMENT)));
+    if (converted === null) {
+      setBudgetDraft('');
+      setCurrencyError(`We couldn’t suggest a converted budget. Enter the amount you want in ${nextCurrency}.`);
+      return;
+    }
+    setBudgetDraft(String(Math.max(BUDGET_INCREMENT, Math.round(converted / BUDGET_INCREMENT) * BUDGET_INCREMENT)));
   };
 
   const changeBudgetBy = (difference: number) => {
