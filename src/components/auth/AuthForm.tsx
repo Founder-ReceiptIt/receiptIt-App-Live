@@ -61,7 +61,7 @@ export function AuthForm() {
         return;
       }
       setAliasState(result.available ? 'available' : 'unavailable');
-      setAliasMessage(result.available ? 'Address available' : 'That address is unavailable. Try another.');
+      setAliasMessage(result.available ? 'Available' : 'Already taken');
     }, 400);
 
     return () => {
@@ -88,7 +88,7 @@ export function AuthForm() {
         }
         const availability = await checkAliasAvailability(aliasLocalPart);
         if (availability.error) throw availability.error;
-        if (!availability.available) throw new Error('That private address is unavailable. Choose another.');
+        if (!availability.available) throw new Error('Already taken');
 
         const { error: signupError } = await signUp(email, password, '', aliasLocalPart);
         if (signupError) {
@@ -154,7 +154,7 @@ export function AuthForm() {
             {isSignUp && !isForgotPassword ? <div>
               <div className="flex items-center justify-between gap-3"><label htmlFor="private-address" className="text-sm font-semibold text-gray-300">Choose your <ReceiptItWordmark className="text-sm" /> address</label><button type="button" onClick={chooseSuggestion} className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal-300 hover:text-teal-200"><RefreshCw className="h-3.5 w-3.5" />Suggest one</button></div>
               <div className="mt-2 flex items-center rounded-lg border border-white/10 bg-white/5 focus-within:border-teal-400/50"><input id="private-address" type="text" value={aliasLocalPart} onChange={(event) => setAliasLocalPart(normaliseAliasInput(event.target.value))} placeholder="bluefox23" required minLength={3} maxLength={30} className="min-w-0 flex-1 bg-transparent py-3 pl-4 text-white outline-none placeholder:text-gray-600" /><span className="shrink-0 pr-4 text-sm text-gray-400">@in.receiptit.app</span></div>
-              <p className={`mt-2 flex min-h-5 items-center gap-1.5 text-xs ${aliasState === 'available' ? 'text-teal-300' : aliasState === 'unavailable' ? 'text-amber-200' : 'text-gray-500'}`}>{aliasState === 'available' ? <Check className="h-3.5 w-3.5" /> : null}{aliasMessage || 'Choose something you’re happy to give to stores instead of your personal email.'}</p>
+              <p className={`mt-2 flex min-h-5 items-center gap-1.5 text-xs ${aliasState === 'available' ? 'text-teal-300' : aliasState === 'unavailable' ? 'text-amber-200' : 'text-gray-500'}`}>{aliasState === 'available' ? <Check className="h-3.5 w-3.5" /> : null}{aliasMessage || 'Pick something you’re happy to give shops instead of your personal email.'}</p>
             </div> : null}
 
             {resetRequested ? <div className="rounded-lg border border-teal-300/25 bg-teal-400/10 p-3 text-sm leading-6 text-teal-100">If an account exists for that email, we’ve sent a reset link.</div> : null}

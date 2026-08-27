@@ -121,8 +121,8 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
           </h1>
 
           <p className="text-gray-400 text-sm leading-relaxed">
-            Access is limited to invited beta members.<br />
-            Please enter your access code below.
+            This beta is invite-only.<br />
+            Enter your access code to continue.
           </p>
         </div>
 
@@ -168,7 +168,7 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
             Already have an account? Sign in
           </button>
           <p className="text-gray-600 text-xs">
-            Need an access code?<br />
+            Need access?<br />
             <a
               href="mailto:founder@receiptit.co.uk"
               className="text-[#2DD4BF] hover:text-[#2DD4BF]/80 transition-colors"

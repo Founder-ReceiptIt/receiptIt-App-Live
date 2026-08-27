@@ -776,7 +776,6 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
               >
                 <div className="mb-5 text-center">
                   <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-teal-400/25 bg-teal-400/10"><Camera className="w-7 h-7 text-teal-300" strokeWidth={1.5} /></div>
-                  <h2 className="mt-4 text-2xl font-bold text-white mb-2">Add your receipt</h2>
                 </div>
 
                 <input
@@ -847,7 +846,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
                 <div className="mt-5 text-center">
                   <p className="text-sm text-gray-300 leading-relaxed">
-                    For best results, keep the receipt flat, well-lit, and clear.
+                    For the clearest result, keep the receipt flat and well lit.
                   </p>
                 </div>
 
