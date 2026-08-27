@@ -535,6 +535,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      // The explicit getSession() bootstrap above owns INITIAL_SESSION. Running
+      // profile/auth requests from both paths can contend for Supabase's auth
+      // lock and leave a protected-route refresh on the loading screen.
+      if (_event === 'INITIAL_SESSION') {
+        return;
+      }
+
       // Supabase holds an internal auth lock while this callback is running.
       // Defer profile/RPC work so sign-in and signup cannot deadlock while the
       // callback tries to make another authenticated request.
