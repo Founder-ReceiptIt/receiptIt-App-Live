@@ -2,3 +2,23 @@
 # Resend cannot supply a Supabase JWT. The function verifies the raw Svix
 # signature and five-minute timestamp before reading any message data.
 verify_jwt = false
+
+[auth]
+# Password recovery and other Auth links must return to the live ReceiptIt app.
+site_url = "https://www.receiptit.app"
+additional_redirect_urls = [
+  "https://www.receiptit.app/**",
+  "https://receiptit.app/**",
+  "http://localhost:3000/**",
+  "http://localhost:5173/**",
+]
+
+[auth.email]
+# Preserve the production anti-abuse and OTP settings that pre-date this change.
+max_frequency = "1m0s"
+otp_length = 8
+
+[auth.mfa.totp]
+# Preserve the production TOTP capability; the redirect fix must not weaken MFA.
+enroll_enabled = true
+verify_enabled = true
