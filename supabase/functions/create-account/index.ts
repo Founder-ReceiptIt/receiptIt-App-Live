@@ -9,10 +9,12 @@ import {
 } from "../_shared/security.ts";
 
 interface CreateAccountRequest {
+  mode?: unknown;
   email?: unknown;
   password?: unknown;
   fullName?: unknown;
   signupAuthorization?: unknown;
+  aliasLocalPart?: unknown;
 }
 
 const jsonResponse = (request: Request, body: Record<string, unknown>, status: number) =>
@@ -23,6 +25,15 @@ const jsonResponse = (request: Request, body: Record<string, unknown>, status: n
 
 const optionalText = (value: unknown, maximumLength: number): string =>
   typeof value === "string" ? value.trim().slice(0, maximumLength) : "";
+
+const normaliseAlias = (value: unknown): string =>
+  optionalText(value, 30).toLowerCase();
+
+const aliasLooksValid = (value: string): boolean =>
+  value.length >= 3 &&
+  value.length <= 30 &&
+  /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])$/.test(value) &&
+  !value.includes("--");
 
 Deno.serve(async (request: Request) => {
   if (request.method === "OPTIONS") {
@@ -55,16 +66,58 @@ Deno.serve(async (request: Request) => {
   const password = typeof body.password === "string" ? body.password : "";
   const fullName = optionalText(body.fullName, 120);
   const signupAuthorization = optionalText(body.signupAuthorization, 256);
-
-  if (!email || !password || password.length < 8) {
-    return jsonResponse(request, { error: "Enter a valid email and password of at least 8 characters." }, 400);
-  }
+  const aliasLocalPart = normaliseAlias(body.aliasLocalPart);
+  const mode = body.mode === "check-alias" ? "check-alias" : "create";
 
   if (!signupAuthorization) {
     return jsonResponse(request, { error: "A current access-key verification is required to create an account." }, 403);
   }
 
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const authorizationHash = await valueHash(signupAuthorization);
+  const { data: authorizationValid, error: authorizationError } = await supabaseAdmin.rpc(
+    "signup_authorization_is_valid",
+    { p_token_hash: authorizationHash },
+  );
+
+  if (authorizationError || authorizationValid !== true) {
+    return jsonResponse(request, { error: "A current access-key verification is required to create an account." }, 403);
+  }
+
+  if (!aliasLooksValid(aliasLocalPart)) {
+    return jsonResponse(request, {
+      available: false,
+      error: "Use 3–30 lowercase letters, numbers or single hyphens.",
+    }, 400);
+  }
+
   const requestHash = await requestSubjectHash(request, "unknown-client");
+  const aliasHash = await valueHash(aliasLocalPart);
+  if (mode === "check-alias") {
+    const [ipAllowed, aliasAllowed] = await Promise.all([
+      isRateLimitAllowed(supabaseUrl, serviceRoleKey, "signup-alias-check-ip", requestHash, 30, 900),
+      isRateLimitAllowed(supabaseUrl, serviceRoleKey, "signup-alias-check-value", aliasHash, 10, 900),
+    ]);
+    if (!ipAllowed || !aliasAllowed) {
+      return jsonResponse(request, { error: "Too many checks. Please try again shortly." }, 429);
+    }
+
+    const { data: available, error: availabilityError } = await supabaseAdmin.rpc(
+      "friendly_alias_is_available",
+      { p_local_part: aliasLocalPart },
+    );
+    if (availabilityError) {
+      console.error("[create-account] Alias availability check failed", { code: availabilityError.code });
+      return jsonResponse(request, { error: "Address availability is temporarily unavailable." }, 503);
+    }
+    return jsonResponse(request, { available: available === true }, 200);
+  }
+
+  if (!email || !password || password.length < 8) {
+    return jsonResponse(request, { error: "Enter a valid email and password of at least 8 characters." }, 400);
+  }
   const emailHash = await valueHash(email);
   const [ipAllowed, emailAllowed] = await Promise.all([
     isRateLimitAllowed(supabaseUrl, serviceRoleKey, "signup-ip", requestHash, 5, 3600),
@@ -75,26 +128,23 @@ Deno.serve(async (request: Request) => {
     return jsonResponse(request, { error: "Too many signup attempts. Please try again later." }, 429);
   }
 
-  const username = email.split("@")[0] || "user";
-  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-
-  const authorizationHash = await valueHash(signupAuthorization);
-  const { data: authorizationConsumed, error: authorizationError } = await supabaseAdmin.rpc(
-    "consume_signup_authorization",
-    { p_token_hash: authorizationHash },
+  const { data: aliasAvailable, error: availabilityError } = await supabaseAdmin.rpc(
+    "friendly_alias_is_available",
+    { p_local_part: aliasLocalPart },
   );
-
-  if (authorizationError || authorizationConsumed !== true) {
-    return jsonResponse(request, { error: "A current access-key verification is required to create an account." }, 403);
+  if (availabilityError) {
+    console.error("[create-account] Alias availability check failed", { code: availabilityError.code });
+    return jsonResponse(request, { error: "Could not check that private address." }, 503);
+  }
+  if (aliasAvailable !== true) {
+    return jsonResponse(request, { error: "That private address is unavailable. Choose another." }, 409);
   }
 
   const { data: createdAccount, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
-    user_metadata: { full_name: fullName, username },
+    user_metadata: { full_name: fullName },
   });
 
   if (createUserError || !createdAccount.user) {
@@ -107,41 +157,31 @@ Deno.serve(async (request: Request) => {
   }
 
   const userId = createdAccount.user.id;
-  const { error: profileError } = await supabaseAdmin.from("profiles").insert({
-    id: userId,
-    email,
-    full_name: fullName,
-    username,
-    email_alias: null,
-    plan: "free",
-  });
-
-  if (profileError) {
-    console.error("[create-account] Profile creation failed", { code: profileError.code });
-    await supabaseAdmin.auth.admin.deleteUser(userId, false);
-    return jsonResponse(request, { error: "Could not finish account setup." }, 500);
-  }
-
-  const { error: aliasError } = await supabaseAdmin.rpc("provision_email_alias_for_user", {
+  const { data: friendlyAddress, error: signupError } = await supabaseAdmin.rpc("complete_beta_signup", {
     p_user_id: userId,
+    p_token_hash: authorizationHash,
+    p_email: email,
+    p_full_name: fullName,
+    p_alias_local_part: aliasLocalPart,
   });
 
-  if (aliasError) {
-    console.error("[create-account] Alias provisioning failed", { code: aliasError.code });
-    await supabaseAdmin.from("profiles").delete().eq("id", userId);
+  if (signupError || typeof friendlyAddress !== "string") {
+    console.error("[create-account] Transactional account setup failed", { code: signupError?.code });
     await supabaseAdmin.auth.admin.deleteUser(userId, false);
-    return jsonResponse(request, { error: "Could not finish private inbox setup." }, 500);
+    const aliasUnavailable = /signup_input_invalid|unique/i.test(signupError?.message ?? "") || signupError?.code === "23505";
+    const accessExpired = /signup_authorization_invalid/i.test(signupError?.message ?? "");
+    return jsonResponse(
+      request,
+      {
+        error: aliasUnavailable
+          ? "That private address is unavailable. Choose another."
+          : accessExpired
+            ? "Your beta access has expired. Return to the access page and try again."
+            : "Could not finish account setup.",
+      },
+      aliasUnavailable ? 409 : accessExpired ? 403 : 500,
+    );
   }
 
-  const { error: friendlyAliasError } = await supabaseAdmin.rpc("provision_friendly_email_alias_for_user", {
-    p_user_id: userId,
-  });
-  if (friendlyAliasError) {
-    console.error("[create-account] Friendly alias provisioning failed", { code: friendlyAliasError.code });
-    await supabaseAdmin.from("profiles").delete().eq("id", userId);
-    await supabaseAdmin.auth.admin.deleteUser(userId, false);
-    return jsonResponse(request, { error: "Could not finish receipt address setup." }, 500);
-  }
-
-  return jsonResponse(request, { success: true, userId, email }, 200);
+  return jsonResponse(request, { success: true, email, friendlyAddress }, 200);
 });

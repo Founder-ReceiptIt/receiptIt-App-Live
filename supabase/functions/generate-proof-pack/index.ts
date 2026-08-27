@@ -52,16 +52,17 @@ const money = (currency: string | null, value: unknown) => {
   const code = (currency || "GBP").toUpperCase();
   const symbols: Record<string, string> = {
     GBP: "£",
-    AUD: "A$",
-    USD: "US$",
+    AUD: "$",
+    USD: "$",
     EUR: "€",
-    CAD: "C$",
-    NZD: "NZ$",
+    CAD: "$",
+    NZD: "$",
   };
   const symbol = symbols[code] || `${code} `;
   const fractionDigits = new Intl.NumberFormat("en-GB", { style: "currency", currency: code })
     .resolvedOptions().maximumFractionDigits;
-  return `${symbol}${amount.toFixed(fractionDigits)}`;
+  const formatted = `${symbol}${amount.toFixed(fractionDigits)}`;
+  return ["AUD", "USD", "CAD", "NZD"].includes(code) ? `${formatted} ${code}` : formatted;
 };
 const britishDate = (value: string | null) => {
   if (!value) return "Not recorded";

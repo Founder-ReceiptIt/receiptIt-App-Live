@@ -35,31 +35,55 @@ Deno.serve(async (request: Request) => {
   }
 
   let accessCode = "";
+  let signupAuthorization = "";
   try {
-    const body = await request.json() as { accessCode?: unknown };
+    const body = await request.json() as { accessCode?: unknown; signupAuthorization?: unknown };
     accessCode = typeof body.accessCode === "string" ? body.accessCode.trim().toUpperCase() : "";
+    signupAuthorization = typeof body.signupAuthorization === "string"
+      ? body.signupAuthorization.trim().slice(0, 256)
+      : "";
   } catch {
     return jsonResponse(request, { valid: false }, 400);
   }
 
-  if (!accessCode || accessCode.length > 128) {
+  if ((!accessCode && !signupAuthorization) || accessCode.length > 128) {
     return jsonResponse(request, { valid: false }, 400);
   }
 
   const requestHash = await requestSubjectHash(request, "unknown-client");
-  const codeHash = await valueHash(accessCode);
-  const [ipAllowed, codeAllowed] = await Promise.all([
-    isRateLimitAllowed(supabaseUrl, serviceRoleKey, "access-code-ip", requestHash, 10, 900),
-    isRateLimitAllowed(supabaseUrl, serviceRoleKey, "access-code-value", codeHash, 5, 900),
+  const submittedValueHash = await valueHash(accessCode || signupAuthorization);
+  const rateLimitPrefix = signupAuthorization ? "signup-authorization-check" : "access-code";
+  const requestLimit = signupAuthorization ? 30 : 10;
+  const valueLimit = signupAuthorization ? 30 : 5;
+  const [ipAllowed, valueAllowed] = await Promise.all([
+    isRateLimitAllowed(supabaseUrl, serviceRoleKey, `${rateLimitPrefix}-ip`, requestHash, requestLimit, 900),
+    isRateLimitAllowed(supabaseUrl, serviceRoleKey, `${rateLimitPrefix}-value`, submittedValueHash, valueLimit, 900),
   ]);
 
-  if (!ipAllowed || !codeAllowed) {
+  if (!ipAllowed || !valueAllowed) {
     return jsonResponse(request, { error: "Too many attempts. Please try again later." }, 429);
   }
 
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+
+  if (signupAuthorization) {
+    const tokenHash = await valueHash(signupAuthorization);
+    const { data: valid, error } = await admin.rpc("signup_authorization_is_valid", {
+      p_token_hash: tokenHash,
+    });
+    if (error) {
+      console.error("[verify-access-code] Authorization validation failed", { code: error.code });
+      return jsonResponse(request, { error: "Verification is temporarily unavailable" }, 503);
+    }
+    return jsonResponse(
+      request,
+      valid === true ? { valid: true, signupAuthorization } : { valid: false },
+      200,
+    );
+  }
+
   const { data, error } = await admin
     .from("access_codes")
     .select("id")

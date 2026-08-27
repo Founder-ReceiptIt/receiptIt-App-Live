@@ -13,6 +13,7 @@ import { AuthForm } from './components/auth/AuthForm';
 import { AliasSetupModal } from './components/auth/AliasSetupModal';
 import { ProfileRecoveryModal } from './components/auth/ProfileRecoveryModal';
 import { CurrencySetupModal } from './components/auth/CurrencySetupModal';
+import { ResetPasswordForm } from './components/auth/ResetPasswordForm';
 import { Toast } from './components/app/Toast';
 import { ToastProvider } from './contexts/ToastContext';
 import { useAuth } from './contexts/AuthContext';
@@ -26,7 +27,7 @@ const getTabFromLocation = (): AppTab => {
 };
 
 function App() {
-  const { user, session, loading: authLoading, needsAliasSetup, needsCurrencySetup, needsProfileRecovery } = useAuth();
+  const { user, session, loading: authLoading, needsAliasSetup, needsCurrencySetup, needsProfileRecovery, passwordRecoveryActive } = useAuth();
   const [showApp, setShowApp] = useState(false);
   const [activeTab, setActiveTab] = useState<AppTab>(() => getTabFromLocation());
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
@@ -98,6 +99,10 @@ function App() {
       setActiveTab('wallet');
     }
   }, [authLoading, isAuthenticated, needsAliasSetup, showApp, user, session]);
+
+  if (passwordRecoveryActive && user && session) {
+    return <ResetPasswordForm />;
+  }
 
   if (!user || !session) {
     return <AuthForm />;

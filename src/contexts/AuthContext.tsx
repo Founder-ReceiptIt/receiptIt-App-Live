@@ -41,6 +41,7 @@ interface AuthContextType {
   needsAliasSetup: boolean;
   needsCurrencySetup: boolean;
   needsProfileRecovery: boolean;
+  passwordRecoveryActive: boolean;
   profileSettings: ProfileSettings;
   accountCurrency: AccountCurrencySettings;
   refreshProfileSettings: () => Promise<void>;
@@ -50,9 +51,11 @@ interface AuthContextType {
     monthlyBudgetAmount: number,
     completeSetup?: boolean,
   ) => Promise<{ error: any }>;
-  refreshSignupAuthorization: (accessCode: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
+  checkAliasAvailability: (aliasLocalPart: string) => Promise<{ available: boolean; error: Error | null }>;
+  signUp: (email: string, password: string, fullName: string, aliasLocalPart: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
+  requestPasswordReset: (email: string) => Promise<void>;
+  completePasswordReset: (password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   createAlias: () => Promise<{ error: any }>;
   recoverProfile: (username: string, fullName: string, alias: string | null) => Promise<{ error: any }>;
@@ -172,6 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [needsAliasSetup, setNeedsAliasSetup] = useState(false);
   const [needsCurrencySetup, setNeedsCurrencySetup] = useState(false);
   const [needsProfileRecovery, setNeedsProfileRecovery] = useState(false);
+  const [passwordRecoveryActive, setPasswordRecoveryActive] = useState(false);
   const [profileSettings, setProfileSettings] = useState<ProfileSettings>(defaultProfileSettings);
   const [accountCurrency, setAccountCurrency] = useState<AccountCurrencySettings>(defaultAccountCurrency);
   const [isSigningUp, setIsSigningUp] = useState(false);
@@ -485,6 +489,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (session?.user) {
         try {
+          if (new URLSearchParams(window.location.search).get('reset') === '1') {
+            setPasswordRecoveryActive(true);
+          }
           const { data: { user: authUser }, error } = await supabase.auth.getUser();
           if (error || !authUser) {
             console.warn('[Auth] Session exists but user not found in auth - clearing stale session');
@@ -532,6 +539,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('[onAuthStateChange] Auth state changed, event:', _event, 'user:', session?.user?.id);
         setSession(session);
         setUser(session?.user ?? null);
+        if (_event === 'PASSWORD_RECOVERY') {
+          setPasswordRecoveryActive(true);
+        }
 
         if (session?.user) {
           console.log('[onAuthStateChange] Auth state change - calling fetchProfile for user:', session.user.id);
@@ -555,7 +565,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signUp = async (email: string, password: string, fullName: string) => {
+  const checkAliasAvailability = async (aliasLocalPart: string) => {
+    const signupAuthorization = sessionStorage.getItem(signupAuthorizationKey);
+    if (!signupAuthorization) {
+      return { available: false, error: new Error('Your beta access has expired.') };
+    }
+
+    const { data, error } = await supabase.functions.invoke('create-account', {
+      body: {
+        mode: 'check-alias',
+        aliasLocalPart,
+        signupAuthorization,
+      },
+    });
+    if (error) {
+      let message = 'We couldn’t check that address right now.';
+      const response = (error as any)?.context;
+      if (response && typeof response.json === 'function') {
+        try {
+          const body = await response.json();
+          message = body?.error || message;
+        } catch {
+          // Keep the generic message if the response body is unavailable.
+        }
+      }
+      return { available: false, error: new Error(message) };
+    }
+    return { available: data?.available === true, error: null };
+  };
+
+  const signUp = async (email: string, password: string, fullName: string, aliasLocalPart: string) => {
     try {
       console.log('[signUp] Starting new account creation for email:', email);
       setIsSigningUp(true);
@@ -565,6 +604,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email,
           password,
           fullName,
+          aliasLocalPart,
           signupAuthorization: sessionStorage.getItem(signupAuthorizationKey),
         },
       });
@@ -625,24 +665,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const refreshSignupAuthorization = async (accessCode: string): Promise<{ error: Error | null }> => {
-    const normalizedAccessCode = accessCode.trim().toUpperCase();
-    if (!normalizedAccessCode) {
-      return { error: new Error('Enter your beta access code.') };
-    }
-
-    const { data, error } = await supabase.functions.invoke('verify-access-code', {
-      body: { accessCode: normalizedAccessCode },
-    });
-
-    if (error || !data?.valid || typeof data.signupAuthorization !== 'string') {
-      return { error: new Error('That access code didn’t work. Please request access from the team.') };
-    }
-
-    sessionStorage.setItem(signupAuthorizationKey, data.signupAuthorization);
-    return { error: null };
-  };
-
   const signIn = async (email: string, password: string) => {
     try {
       console.log('[signIn] Attempting sign-in for email:', email);
@@ -693,6 +715,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('[signIn] Unexpected error:', err);
       return { error: err };
     }
+  };
+
+  const requestPasswordReset = async (email: string) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) return;
+    const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+      redirectTo: `${window.location.origin}/?reset=1`,
+    });
+    if (error) {
+      console.warn('[passwordRecovery] Reset request could not be completed:', error.message);
+    }
+  };
+
+  const completePasswordReset = async (password: string) => {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (!error) {
+      setPasswordRecoveryActive(false);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    return { error };
   };
 
   const forceRefresh = async () => {
@@ -795,6 +837,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setNeedsAliasSetup(false);
     setNeedsCurrencySetup(false);
     setNeedsProfileRecovery(false);
+    setPasswordRecoveryActive(false);
     setProfileSettings(defaultProfileSettings);
     setAccountCurrency(defaultAccountCurrency);
     localStorage.removeItem('isScanning');
@@ -869,14 +912,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     needsAliasSetup,
     needsCurrencySetup,
     needsProfileRecovery,
+    passwordRecoveryActive,
     profileSettings,
     accountCurrency,
     refreshProfileSettings,
     updateProfileSettings,
     updateAccountCurrency,
-    refreshSignupAuthorization,
+    checkAliasAvailability,
     signUp,
     signIn,
+    requestPasswordReset,
+    completePasswordReset,
     signOut,
     createAlias,
     recoverProfile,

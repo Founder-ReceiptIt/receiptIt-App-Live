@@ -1473,7 +1473,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
                             </div>
                             {hasPreferredCurrencyConversion ? (
                               <div className="pt-1 text-[11px] text-gray-400 whitespace-nowrap sm:text-xs">
-                                {formatCurrencyAmount(receipt.currency, receipt.amount)} original
+                                {formatCurrencyAmount(receipt.currency, receipt.amount)} {receipt.currency.toUpperCase()} original
                               </div>
                             ) : null}
                             {requiresCurrencyConfirmation ? (

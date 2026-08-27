@@ -2,11 +2,11 @@ import { supabase } from './supabase';
 
 export const BETA_CURRENCIES = [
   { code: 'GBP', name: 'British pound', symbol: '£', locale: 'en-GB' },
-  { code: 'AUD', name: 'Australian dollar', symbol: 'A$', locale: 'en-AU' },
-  { code: 'USD', name: 'US dollar', symbol: 'US$', locale: 'en-US' },
+  { code: 'AUD', name: 'Australian dollar', symbol: '$', locale: 'en-AU' },
+  { code: 'USD', name: 'US dollar', symbol: '$', locale: 'en-US' },
   { code: 'EUR', name: 'Euro', symbol: '€', locale: 'en-IE' },
-  { code: 'CAD', name: 'Canadian dollar', symbol: 'C$', locale: 'en-CA' },
-  { code: 'NZD', name: 'New Zealand dollar', symbol: 'NZ$', locale: 'en-NZ' },
+  { code: 'CAD', name: 'Canadian dollar', symbol: '$', locale: 'en-CA' },
+  { code: 'NZD', name: 'New Zealand dollar', symbol: '$', locale: 'en-NZ' },
 ] as const;
 
 export type SupportedCurrencyCode = typeof BETA_CURRENCIES[number]['code'];

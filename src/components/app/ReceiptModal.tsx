@@ -853,6 +853,9 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                       <div className="text-3xl font-bold text-white">
                       {heroAmountDisplay}
                       </div>
+                    {['AUD', 'USD', 'CAD', 'NZD'].includes(receiptCurrencyCode) ? (
+                      <div className="pt-1 text-xs font-semibold text-gray-500">{receiptCurrencyCode}</div>
+                    ) : null}
                     {isNonFinalReceipt && !hasMeaningfulOriginalTotal && !isCompactFailedReceipt && (
                       <div className="text-sm pt-1 text-gray-500">
                         Still analyzing

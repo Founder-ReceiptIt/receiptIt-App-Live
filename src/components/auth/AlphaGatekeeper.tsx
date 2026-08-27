@@ -2,10 +2,13 @@ import { useState, useEffect } from 'react';
 import { Lock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { ReceiptItWordmark } from '../ReceiptItWordmark';
+import { useAuth } from '../../contexts/AuthContext';
 
 const signupAuthorizationKey = 'receiptit_signup_authorization';
+const existingSignInKey = 'receiptit_existing_user_signin';
 
 export default function AlphaGatekeeper({ children }: { children: React.ReactNode }) {
+  const { session, loading: authLoading, passwordRecoveryActive } = useAuth();
   const [isVerified, setIsVerified] = useState(false);
   const [accessCode, setAccessCode] = useState('');
   const [error, setError] = useState('');
@@ -13,12 +16,47 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-    const verified = localStorage.getItem('is_alpha_verified');
-    if (verified === 'true') {
-      setIsVerified(true);
-    }
-    setIsChecking(false);
-  }, []);
+    let active = true;
+
+    const restoreGateState = async () => {
+      if (authLoading) return;
+      if (
+        session
+        || passwordRecoveryActive
+        || new URLSearchParams(window.location.search).get('reset') === '1'
+        || sessionStorage.getItem(existingSignInKey) === 'true'
+      ) {
+        if (active) {
+          setIsVerified(true);
+          setIsChecking(false);
+        }
+        return;
+      }
+
+      const signupAuthorization = sessionStorage.getItem(signupAuthorizationKey);
+      if (!signupAuthorization) {
+        if (active) {
+          setIsVerified(false);
+          setIsChecking(false);
+        }
+        return;
+      }
+
+      const { data, error: validationError } = await supabase.functions.invoke('verify-access-code', {
+        body: { signupAuthorization },
+      });
+      if (validationError || !data?.valid) {
+        sessionStorage.removeItem(signupAuthorizationKey);
+      }
+      if (active) {
+        setIsVerified(!validationError && data?.valid === true);
+        setIsChecking(false);
+      }
+    };
+
+    void restoreGateState();
+    return () => { active = false; };
+  }, [authLoading, passwordRecoveryActive, session]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,8 +83,8 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
         return;
       }
 
-      localStorage.setItem('is_alpha_verified', 'true');
       sessionStorage.setItem(signupAuthorizationKey, data.signupAuthorization);
+      sessionStorage.removeItem(existingSignInKey);
       setIsVerified(true);
     } catch (err) {
       console.error('Access code verification error:', err);
@@ -119,6 +157,16 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
         </form>
 
         <div className="text-center pt-4">
+          <button
+            type="button"
+            onClick={() => {
+              sessionStorage.setItem(existingSignInKey, 'true');
+              setIsVerified(true);
+            }}
+            className="mb-5 text-sm font-semibold text-gray-300 transition-colors hover:text-white"
+          >
+            Already have an account? Sign in
+          </button>
           <p className="text-gray-600 text-xs">
             Need an access code?<br />
             <a
