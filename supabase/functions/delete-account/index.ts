@@ -18,26 +18,43 @@ const listUserObjects = async (
   userId: string,
 ): Promise<string[]> => {
   const objects: string[] = [];
-  let offset = 0;
+  const prefixes = [userId];
+  const visited = new Set<string>();
 
-  while (true) {
-    const { data, error } = await storage.from(bucket).list(userId, {
-      limit: 1000,
-      offset,
-      sortBy: { column: "name", order: "asc" },
-    });
+  while (prefixes.length > 0) {
+    const prefix = prefixes.shift();
+    if (!prefix || visited.has(prefix)) continue;
+    visited.add(prefix);
 
-    if (error) throw error;
-    if (!data || data.length === 0) break;
+    let offset = 0;
+    while (true) {
+      const { data, error } = await storage.from(bucket).list(prefix, {
+        limit: 1000,
+        offset,
+        sortBy: { column: "name", order: "asc" },
+      });
 
-    for (const entry of data) {
-      // ReceiptIt's enforced bucket convention is <auth.uid()>/<random-file>.
-      // Storage list returns direct file names for that prefix.
-      if (entry.name) objects.push(`${userId}/${entry.name}`);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+
+      for (const entry of data) {
+        if (!entry.name) continue;
+
+        const path = `${prefix}/${entry.name}`;
+        // Supabase represents a nested folder in list() with no object id or
+        // metadata. Inbound email originals use <uid>/email/<message-id>/file,
+        // so account deletion must walk those folders rather than treating the
+        // first folder name as a removable object.
+        if (entry.id === null && entry.metadata === null) {
+          prefixes.push(path);
+        } else {
+          objects.push(path);
+        }
+      }
+
+      if (data.length < 1000) break;
+      offset += data.length;
     }
-
-    if (data.length < 1000) break;
-    offset += data.length;
   }
 
   return objects;
