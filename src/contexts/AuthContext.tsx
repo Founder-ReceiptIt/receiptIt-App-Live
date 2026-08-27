@@ -535,7 +535,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      (async () => {
+      // Supabase holds an internal auth lock while this callback is running.
+      // Defer profile/RPC work so sign-in and signup cannot deadlock while the
+      // callback tries to make another authenticated request.
+      window.setTimeout(() => { void (async () => {
         console.log('[onAuthStateChange] Auth state changed, event:', _event, 'user:', session?.user?.id);
         setSession(session);
         setUser(session?.user ?? null);
@@ -559,7 +562,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         setLoading(false);
-      })();
+      })(); }, 0);
     });
 
     return () => subscription.unsubscribe();
