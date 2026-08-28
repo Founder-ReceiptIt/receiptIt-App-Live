@@ -12,6 +12,8 @@ import {
 } from '../../lib/uploadValidation';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+import { consumeReceiptSectionCaptureRequest } from '../../lib/receiptCaptureUtils';
+import { getReceiptFailureDetails } from '../../lib/receiptUiUtils';
 
 type ScanState = 'idle' | 'review' | 'uploading' | 'processing' | 'pending' | 'success' | 'error';
 
@@ -46,6 +48,12 @@ const MAX_MULTI_RECEIPT_IMAGES = 10;
 const MAX_MULTI_RECEIPT_TOTAL_BYTES = 30 * 1024 * 1024;
 const MAX_MULTI_RECEIPT_SOURCE_PIXELS = 20_000_000;
 const MULTI_IMAGE_GAP = 18;
+
+type ReceiptPickerMode = 'camera' | 'files';
+
+const isPdfSelection = (file: File): boolean => (
+  file.type.toLowerCase() === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+);
 
 const toHashHex = (hashBuffer: ArrayBuffer): string =>
   Array.from(new Uint8Array(hashBuffer)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
@@ -155,7 +163,11 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
   const [isCombiningImages, setIsCombiningImages] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [errorTitle, setErrorTitle] = useState<string>('Couldn’t add receipt');
+  const [failedReceiptSaved, setFailedReceiptSaved] = useState(false);
+  const [sectionCaptureMode, setSectionCaptureMode] = useState(() => consumeReceiptSectionCaptureRequest());
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pickerModeRef = useRef<ReceiptPickerMode>('files');
   const isScanningRef = useRef(false);
   const restoredPickerRef = useRef(false);
   const activeScanTokenRef = useRef(0);
@@ -288,6 +300,78 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     };
   }, []);
 
+  const showSelectionError = (message: string) => {
+    setErrorTitle('Couldn’t add receipt');
+    setErrorMessage(message);
+    setFailedReceiptSaved(false);
+    setScanState('error');
+    isScanningRef.current = false;
+    showToast(message, undefined);
+  };
+
+  const prepareImageSelection = async (files: File[]): Promise<boolean> => {
+    if (files.length > MAX_MULTI_RECEIPT_IMAGES) {
+      showSelectionError(`Choose up to ${MAX_MULTI_RECEIPT_IMAGES} images for one receipt.`);
+      return false;
+    }
+
+    if (files.reduce((total, selectedImage) => total + selectedImage.size, 0) > MAX_MULTI_RECEIPT_TOTAL_BYTES) {
+      showSelectionError('These images are too large together. Choose up to 30MB in total.');
+      return false;
+    }
+
+    const validations = await Promise.all(files.map((selectedImage) => validateReceiptUpload(selectedImage)));
+    const invalidValidation = validations.find((validation) => !validation.valid);
+    if (invalidValidation && !invalidValidation.valid) {
+      console.warn('[ScanTab] Multi-image upload rejected before processing:', invalidValidation.errorReason);
+      showSelectionError(invalidValidation.message);
+      return false;
+    }
+
+    if (validations.some((validation) => validation.valid && validation.kind !== 'image')) {
+      showSelectionError('Upload one PDF at a time.');
+      return false;
+    }
+
+    const sourcePixels = validations.reduce((total, validation) => {
+      if (!validation.valid || !validation.dimensions) return total;
+      return total + validation.dimensions.width * validation.dimensions.height;
+    }, 0);
+    if (sourcePixels > MAX_MULTI_RECEIPT_SOURCE_PIXELS) {
+      showSelectionError('These images are too high-resolution together. Choose clearer or smaller images and try again.');
+      return false;
+    }
+
+    return true;
+  };
+
+  const openCameraPicker = () => {
+    pickerModeRef.current = 'camera';
+    localStorage.setItem('isScanning', 'true');
+    localStorage.setItem('scanningSource', 'camera');
+
+    if (fileInputRef.current) {
+      fileInputRef.current.removeAttribute('multiple');
+      fileInputRef.current.setAttribute('capture', 'environment');
+      fileInputRef.current.click();
+    }
+
+    window.setTimeout(() => {
+      if (fileInputRef.current) {
+        fileInputRef.current.removeAttribute('capture');
+        fileInputRef.current.setAttribute('multiple', '');
+      }
+    }, 100);
+  };
+
+  const openFilePicker = () => {
+    pickerModeRef.current = 'files';
+    clearScanningStorage();
+    fileInputRef.current?.removeAttribute('capture');
+    fileInputRef.current?.setAttribute('multiple', '');
+    fileInputRef.current?.click();
+  };
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     // CRITICAL: Prevent any default browser behavior
     e.preventDefault();
@@ -295,6 +379,9 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
     const files = Array.from(e.target.files || []);
     const file = files[0];
+    const pickerMode: ReceiptPickerMode = localStorage.getItem('scanningSource') === 'camera'
+      ? 'camera'
+      : pickerModeRef.current;
     if (!file || (isScanningRef.current && !restoredPickerRef.current)) {
       console.log('[ScanTab] File selection blocked - already scanning or no file');
       // Clear localStorage if no file selected (user cancelled)
@@ -312,59 +399,38 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     // Block a second selection while deterministic file validation is running.
     isScanningRef.current = true;
 
+    if (pickerMode === 'camera') {
+      const nextImages = [...selectedImageFiles, file];
+      if (!(await prepareImageSelection(nextImages))) return;
+
+      flushSync(() => {
+        setSelectedImageFiles(nextImages);
+        setSelectedFile(null);
+        setPreviewUrl(null);
+        setErrorMessage('');
+        setErrorTitle('Couldn’t add receipt');
+        setFailedReceiptSaved(false);
+        setScanState('review');
+      });
+      isScanningRef.current = false;
+      return;
+    }
+
+    if (files.length > 1 && files.some(isPdfSelection)) {
+      showSelectionError('Upload one PDF at a time.');
+      return;
+    }
+
     if (files.length > 1) {
-      if (files.length > MAX_MULTI_RECEIPT_IMAGES) {
-        setErrorMessage(`Choose up to ${MAX_MULTI_RECEIPT_IMAGES} images for one receipt.`);
-        setScanState('error');
-        isScanningRef.current = false;
-        showToast(`Choose up to ${MAX_MULTI_RECEIPT_IMAGES} images for one receipt.`, undefined);
-        return;
-      }
-
-      if (files.reduce((total, selectedFile) => total + selectedFile.size, 0) > MAX_MULTI_RECEIPT_TOTAL_BYTES) {
-        setErrorMessage('These images are too large together. Choose up to 30MB in total.');
-        setScanState('error');
-        isScanningRef.current = false;
-        showToast('These images are too large together. Choose up to 30MB in total.', undefined);
-        return;
-      }
-
-      const validations = await Promise.all(files.map((selectedFile) => validateReceiptUpload(selectedFile)));
-      const invalidValidation = validations.find((validation) => !validation.valid);
-      if (invalidValidation && !invalidValidation.valid) {
-        console.warn('[ScanTab] Multi-image upload rejected before processing:', invalidValidation.errorReason);
-        setErrorMessage(invalidValidation.message);
-        setScanState('error');
-        isScanningRef.current = false;
-        showToast(invalidValidation.message, undefined);
-        return;
-      }
-
-      if (validations.some((validation) => validation.valid && validation.kind !== 'image')) {
-        setErrorMessage('Choose images together. Upload a PDF on its own.');
-        setScanState('error');
-        isScanningRef.current = false;
-        showToast('Choose images together. Upload a PDF on its own.', undefined);
-        return;
-      }
-
-      const sourcePixels = validations.reduce((total, validation) => {
-        if (!validation.valid || !validation.dimensions) return total;
-        return total + validation.dimensions.width * validation.dimensions.height;
-      }, 0);
-      if (sourcePixels > MAX_MULTI_RECEIPT_SOURCE_PIXELS) {
-        setErrorMessage('These images are too high-resolution together. Choose clearer or smaller images and try again.');
-        setScanState('error');
-        isScanningRef.current = false;
-        showToast('These images are too high-resolution together. Choose clearer or smaller images and try again.', undefined);
-        return;
-      }
+      if (!(await prepareImageSelection(files))) return;
 
       flushSync(() => {
         setSelectedImageFiles(files);
         setSelectedFile(null);
         setPreviewUrl(null);
         setErrorMessage('');
+        setErrorTitle('Couldn’t add receipt');
+        setFailedReceiptSaved(false);
         setScanState('review');
       });
       isScanningRef.current = false;
@@ -404,7 +470,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
   };
 
   const handleContinueMultiImageReceipt = async () => {
-    if (selectedImageFiles.length < 2) {
+    if (selectedImageFiles.length < 1) {
       return;
     }
 
@@ -412,9 +478,20 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     activeScanTokenRef.current = scanToken;
     pendingReceiptIdRef.current = null;
     isScanningRef.current = true;
-    setIsCombiningImages(true);
     setErrorMessage('');
+    setErrorTitle('Couldn’t add receipt');
+    setFailedReceiptSaved(false);
     setScanState('uploading');
+
+    if (selectedImageFiles.length === 1) {
+      const singleImage = selectedImageFiles[0];
+      setSelectedFile(singleImage);
+      setPreviewUrl(URL.createObjectURL(singleImage));
+      window.setTimeout(() => void startScan(singleImage, 'image', scanToken), 0);
+      return;
+    }
+
+    setIsCombiningImages(true);
 
     try {
       const [fileHash, combinedFile] = await Promise.all([
@@ -661,18 +738,22 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                 return;
               }
 
-              if (updatedStatus === 'failed' || updatedStatus === 'needs_input' || updatedStatus === 'needs_review' || updatedStatus === 'rejected') {
+              if (updatedStatus === 'failed' || updatedStatus === 'error' || updatedStatus === 'needs_input' || updatedStatus === 'needs_review' || updatedStatus === 'rejected') {
                 console.log('[ScanTab] Receipt status resolved to error:', updatedStatus);
                 cleanupReceiptStatusWatcher();
+                const failureDetails = getReceiptFailureDetails({
+                  status: updatedStatus,
+                  errorReason: payload.new?.error_reason,
+                  createdAt: payload.new?.created_at,
+                  processingAttemptStartedAt: payload.new?.processing_attempt_started_at,
+                });
+                setErrorTitle(failureDetails?.title || 'Couldn’t process receipt');
                 setErrorMessage(
-                  updatedStatus === 'needs_input'
-                    ? 'This receipt needs one quick confirmation. Check your Wallet for the next step.'
-                    : updatedStatus === 'needs_review'
-                      ? 'This looks like a purchase document and needs a quick review in your receipts.'
-                      : updatedStatus === 'rejected'
-                        ? 'This file does not appear to be a receipt or purchase document. You can review it in your receipts.'
-                        : 'We couldn’t process this file. Retry it or upload a clearer copy from your Wallet.'
+                  failureDetails
+                    ? [failureDetails.reason, failureDetails.advice].filter(Boolean).join(' ')
+                    : 'We couldn’t read enough of this receipt. Try again from your Wallet.'
                 );
+                setFailedReceiptSaved(true);
                 setScanState('error');
                 isScanningRef.current = false;
                 clearScanningStorage();
@@ -703,6 +784,8 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       console.error('[ScanTab] Error during scan:', error);
       if (isScanActive(scanToken)) {
         setErrorMessage('We couldn’t process this file. Please try again.');
+        setErrorTitle('Couldn’t add receipt');
+        setFailedReceiptSaved(Boolean(pendingReceiptIdRef.current));
         setScanState('error');
         isScanningRef.current = false;
         // ANDROID FIX: Clear localStorage on error
@@ -720,6 +803,9 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     setSelectedFile(null);
     setSelectedImageFiles([]);
     setIsCombiningImages(false);
+    setSectionCaptureMode(false);
+    setErrorTitle('Couldn’t add receipt');
+    setFailedReceiptSaved(false);
     pendingReceiptIdRef.current = null;
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
@@ -797,26 +883,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                 <div className="space-y-3">
                   <button
                     type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      // ANDROID FIX: Save to localStorage BEFORE opening file picker
-                      // This survives tab kill when Android opens camera
-                      localStorage.setItem('isScanning', 'true');
-                      localStorage.setItem('scanningSource', 'camera');
-
-                      if (fileInputRef.current) {
-                        fileInputRef.current.removeAttribute('multiple');
-                        fileInputRef.current.setAttribute('capture', 'environment');
-                      }
-                      fileInputRef.current?.click();
-
-                      setTimeout(() => {
-                        if (fileInputRef.current) {
-                          fileInputRef.current.removeAttribute('capture');
-                          fileInputRef.current.setAttribute('multiple', '');
-                        }
-                      }, 100);
-                    }}
+                    onClick={(e) => { e.preventDefault(); openCameraPicker(); }}
                     className="w-full backdrop-blur-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/30 rounded-xl p-4 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
                   >
                     <div className="flex items-center justify-center gap-3">
@@ -831,9 +898,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                       e.preventDefault();
                       // Gallery selection is not a camera capture and should
                       // never trigger Android's camera-recovery path.
-                      clearScanningStorage();
-                      fileInputRef.current?.setAttribute('multiple', '');
-                      fileInputRef.current?.click();
+                      openFilePicker();
                     }}
                     className="w-full backdrop-blur-xl bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl p-4 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
                   >
@@ -846,7 +911,9 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
                 <div className="mt-5 text-center">
                   <p className="text-sm text-gray-300 leading-relaxed">
-                    For the clearest result, keep the receipt flat and well lit.
+                    {sectionCaptureMode
+                      ? 'Scan each section in order, starting at the top.'
+                      : 'For the clearest result, keep the receipt flat and well lit.'}
                   </p>
                 </div>
 
@@ -864,12 +931,20 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
               >
                 <div className="text-center">
                   <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-teal-400/25 bg-teal-400/10"><FileImage className="h-7 w-7 text-teal-300" strokeWidth={1.5} /></div>
-                  <h2 className="mt-4 text-2xl font-bold text-white">{selectedImageFiles.length} images selected</h2>
+                  <h2 className="mt-4 text-2xl font-bold text-white">
+                    {selectedImageFiles.length} {selectedImageFiles.length === 1 ? 'image' : 'images'} selected
+                  </h2>
                   <p className="mt-2 text-sm text-gray-300">We’ll read them together as one receipt.</p>
                   <div className="mt-5 flex justify-center gap-2" aria-label={`${selectedImageFiles.length} images in selection order`}>
                     {selectedImageFiles.map((file, index) => <span key={`${file.name}-${file.lastModified}-${index}`} className="flex h-8 w-8 items-center justify-center rounded-full border border-teal-300/20 bg-teal-400/10 text-xs font-bold text-teal-100">{index + 1}</span>)}
                   </div>
-                  <div className="mt-7 space-y-3"><button type="button" onClick={() => void handleContinueMultiImageReceipt()} className="w-full rounded-xl border border-teal-400/30 bg-teal-500/20 p-4 font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:bg-teal-500/30 active:scale-[0.98]">Continue</button><button type="button" onClick={resetScan} className="w-full rounded-xl border border-white/10 bg-white/5 p-4 font-semibold text-gray-300 transition-all duration-300 hover:bg-white/10">Choose again</button></div>
+                  <div className="mt-7 space-y-3">
+                    <button type="button" onClick={openCameraPicker} className="w-full rounded-xl border border-white/10 bg-white/5 p-4 font-semibold text-white transition-all duration-300 hover:bg-white/10">
+                      <span className="inline-flex items-center justify-center gap-2"><Camera className="h-4 w-4" />Add another image</span>
+                    </button>
+                    <button type="button" onClick={() => void handleContinueMultiImageReceipt()} className="w-full rounded-xl border border-teal-400/30 bg-teal-500/20 p-4 font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:bg-teal-500/30 active:scale-[0.98]">Continue</button>
+                    <button type="button" onClick={resetScan} className="w-full rounded-xl border border-white/10 bg-white/5 p-4 font-semibold text-gray-300 transition-all duration-300 hover:bg-white/10">Choose again</button>
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -1046,16 +1121,29 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                 <div className="text-center">
                   <X className="w-20 h-20 text-red-400 mx-auto mb-4" strokeWidth={1.5} />
 
-                  <h2 className="text-2xl font-bold text-white mb-2">Couldn’t add receipt</h2>
+                  <h2 className="text-2xl font-bold text-white mb-2">{errorTitle}</h2>
                   <p className="text-gray-400 mb-6">{errorMessage || 'We couldn’t add this receipt. Try again when you’re ready.'}</p>
 
-                  <button
-                    type="button"
-                    onClick={resetScan}
-                    className="w-full backdrop-blur-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/30 rounded-xl py-3 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
-                  >
-                    <span className="font-semibold text-teal-400">Try Again</span>
-                  </button>
+                  {failedReceiptSaved ? (
+                    <>
+                      <p className="mb-4 text-sm text-gray-500">This receipt is saved in your Wallet, where you can try again or review the original.</p>
+                      <button
+                        type="button"
+                        onClick={() => { resetScan(); onNavigateToWallet(); }}
+                        className="w-full backdrop-blur-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/30 rounded-xl py-3 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                      >
+                        <span className="font-semibold text-teal-400">View in Wallet</span>
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={resetScan}
+                      className="w-full backdrop-blur-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/30 rounded-xl py-3 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                    >
+                      <span className="font-semibold text-teal-400">Try again</span>
+                    </button>
+                  )}
                 </div>
               </motion.div>
             )}

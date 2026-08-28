@@ -113,9 +113,10 @@ interface ReceiptModalProps {
   receipt: Receipt | null;
   onClose: () => void;
   onDelete?: () => void;
+  onCaptureAgain?: (inSections: boolean) => void;
 }
 
-export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) {
+export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: ReceiptModalProps) {
   const { showToast } = useToast();
   const { accountCurrency } = useAuth();
   const preferredReceiptCurrency: ReceiptCurrencyConfirmationOption = isReceiptCurrencyConfirmationOption(accountCurrency.preferredCurrency)
@@ -306,15 +307,15 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
       if (error) {
         console.error('[ReceiptModal] Error retrying receipt processing:', error);
         setProcessingAttemptStartedAt(previousProcessingAttemptStartedAt);
-        showToast('Failed to retry upload', receipt.merchant);
+        showToast('Couldn’t try again', receipt.merchant);
         return;
       }
 
-      showToast('Upload retry started', receipt.merchant);
+      showToast('Trying receipt again', receipt.merchant);
     } catch (error) {
       console.error('[ReceiptModal] Unexpected error retrying receipt processing:', error);
       setProcessingAttemptStartedAt(previousProcessingAttemptStartedAt);
-      showToast('Failed to retry upload', receipt.merchant);
+      showToast('Couldn’t try again', receipt.merchant);
     } finally {
       setCurrencyConfirmationState(null);
     }
@@ -508,6 +509,12 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
     createdAt: receipt.createdAt,
     processingAttemptStartedAt,
   });
+  const shouldRetryExistingReceipt = receiptFailureDetails?.primaryAction === 'retry';
+  const failurePrimaryActionLabel = receiptFailureDetails?.primaryAction === 'scan_sections'
+    ? 'Scan in sections'
+    : receiptFailureDetails?.primaryAction === 'replace'
+      ? 'Choose another file'
+      : 'Try again';
   const isCompactFailedReceipt = Boolean(receiptFailureDetails) && !requiresCurrencyConfirmation && !isFreshProcessing;
   const hasReceiptItems = displayReceiptItems.length > 0;
   const showItemsLoadingState = !isCurrentReceiptDetails || itemsLoading || !itemsLoaded;
@@ -741,11 +748,18 @@ export function ReceiptModal({ receipt, onClose, onDelete }: ReceiptModalProps) 
                     <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => void handleRetryReceipt()}
+                        onClick={() => {
+                          if (shouldRetryExistingReceipt) {
+                            void handleRetryReceipt();
+                            return;
+                          }
+
+                          onCaptureAgain?.(receiptFailureDetails?.primaryAction === 'scan_sections');
+                        }}
                         disabled={isDeleting || isConfirmingCurrency}
                         className="px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {isConfirmingCurrency ? 'Retrying...' : 'Retry'}
+                        {isConfirmingCurrency ? 'Trying again...' : failurePrimaryActionLabel}
                       </button>
                       <button
                         type="button"

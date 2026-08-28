@@ -23,6 +23,7 @@ import { hasReceiptOriginal, openReceiptOriginal } from '../../lib/receiptOrigin
 import { useAuth } from '../../contexts/AuthContext';
 import { getReturnWindowStatus } from '../../lib/returnWindowUtils';
 import { getReceiptFailureDetails, getReceiptPurchaseDateDisplay } from '../../lib/receiptUiUtils';
+import { requestReceiptSectionCapture } from '../../lib/receiptCaptureUtils';
 import { getReceiptMilestone } from '../../lib/receiptMilestones';
 import { useToast } from '../../contexts/ToastContext';
 import { convertReceiptAmounts, formatCurrency, getCurrencyConfig } from '../../lib/currency';
@@ -69,7 +70,7 @@ const formatCurrencyAmount = (currencyCode: string, amount: number): string => (
   formatCurrency(amount, currencyCode)
 );
 
-const WALLET_RECEIPT_STATUSES = ['needs_input', 'processing', 'parsed', 'completed', 'duplicate', 'failed', 'skipped', 'needs_review', 'rejected'] as const;
+const WALLET_RECEIPT_STATUSES = ['needs_input', 'processing', 'parsed', 'completed', 'duplicate', 'failed', 'error', 'skipped', 'needs_review', 'rejected'] as const;
 const HIDDEN_WALLET_RECEIPT_STATUSES = ['duplicate', 'skipped'] as const;
 const RECEIPT_MILESTONE_STORAGE_PREFIX = 'receiptit:shown-receipt-milestones:';
 
@@ -105,7 +106,7 @@ const getReceiptStatusPriority = (status: unknown): number => {
   if (status === 'parsed') return 4;
   if (status === 'completed') return 3;
   if (status === 'processing') return 2;
-  if (status === 'failed' || status === 'rejected') return 1;
+  if (status === 'failed' || status === 'error' || status === 'rejected') return 1;
   return 0;
 };
 
@@ -196,7 +197,7 @@ const filterVisibleReceiptRows = (rows: SupabaseReceiptRow[]): SupabaseReceiptRo
   rows.filter((row) => {
     if (isFinalizedReceiptStatus(row.status)) return true;
     if (needsCurrencyConfirmation(row.status, row.error_reason)) return true;
-    if (['processing', 'failed', 'needs_review', 'rejected'].includes(row.status || '')) return true;
+    if (['processing', 'needs_input', 'failed', 'error', 'needs_review', 'rejected'].includes(row.status || '')) return true;
     if (isHiddenWalletReceiptStatus(row.status)) return false;
     return false;
   });
@@ -205,7 +206,7 @@ const filterVisibleWalletReceipts = (receipts: Receipt[]): Receipt[] =>
   receipts.filter((receipt) => {
     if (isFinalizedReceiptStatus(receipt.status)) return true;
     if (needsCurrencyConfirmation(receipt.status, receipt.errorReason)) return true;
-    if (['processing', 'failed', 'needs_review', 'rejected'].includes(receipt.status || '')) return true;
+    if (['processing', 'needs_input', 'failed', 'error', 'needs_review', 'rejected'].includes(receipt.status || '')) return true;
     if (isHiddenWalletReceiptStatus(receipt.status)) return false;
     return false;
   });
@@ -974,7 +975,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
           }
           return nextValue;
         });
-        showToast('Failed to retry upload', targetReceipt.merchant);
+        showToast('Couldn’t try again', targetReceipt.merchant);
         return;
       }
 
@@ -989,7 +990,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
           : receipt
       )));
 
-      showToast('Upload retry started', targetReceipt.merchant);
+      showToast('Trying receipt again', targetReceipt.merchant);
     } catch (error) {
       console.error('[WalletTab] Unexpected error retrying receipt processing:', error);
       setProcessingAttemptStartedAtByReceiptId((currentValue) => {
@@ -1001,7 +1002,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
         }
         return nextValue;
       });
-      showToast('Failed to retry upload', targetReceipt.merchant);
+      showToast('Couldn’t try again', targetReceipt.merchant);
     } finally {
       setCurrencyConfirmationState(null);
     }
@@ -1319,7 +1320,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
                 );
                 const isFreshProcessing = isProcessing && !isStaleProcessing;
                 const isNeedsInput = receipt.status === 'needs_input';
-                const isNonFinalReceipt = isProcessing || isNeedsInput || receipt.status === 'needs_review' || receipt.status === 'rejected' || receipt.status === 'failed';
+                const isNonFinalReceipt = isProcessing || isNeedsInput || receipt.status === 'needs_review' || receipt.status === 'rejected' || receipt.status === 'failed' || receipt.status === 'error';
                 const requiresCurrencyConfirmation = needsCurrencyConfirmation(receipt.status, receipt.errorReason);
                 const isConfirmingCurrency = currencyConfirmationState?.receiptId === receipt.id;
                 const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
@@ -1338,6 +1339,12 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
                 const showIssueHeading = Boolean(receiptFailureDetails);
                 const showOpenOriginalReceiptAction = (isNonFinalReceipt || showIssueHeading) && hasReceiptOriginal(receipt);
                 const showFailedReceiptActions = showIssueHeading && !requiresCurrencyConfirmation;
+                const shouldRetryExistingReceipt = receiptFailureDetails?.primaryAction === 'retry';
+                const failurePrimaryActionLabel = receiptFailureDetails?.primaryAction === 'scan_sections'
+                  ? 'Scan in sections'
+                  : receiptFailureDetails?.primaryAction === 'replace'
+                    ? 'Choose another file'
+                    : 'Try again';
                 const receiptCurrencyCode = receipt.currency?.toUpperCase() || '';
                 const hasPreferredCurrencyConversion = (
                   isFinalizedReceiptStatus(receipt.status)
@@ -1519,11 +1526,21 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
                         <div className="flex flex-wrap items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => void handleRetryReceipt(receipt.id)}
+                            onClick={() => {
+                              if (shouldRetryExistingReceipt) {
+                                void handleRetryReceipt(receipt.id);
+                                return;
+                              }
+
+                              if (receiptFailureDetails?.primaryAction === 'scan_sections') {
+                                requestReceiptSectionCapture();
+                              }
+                              onNavigateToScan();
+                            }}
                             disabled={isDeleting || isConfirmingCurrency}
                             className="px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            {isConfirmingCurrency ? 'Retrying...' : 'Retry'}
+                            {isConfirmingCurrency ? 'Trying again...' : failurePrimaryActionLabel}
                           </button>
                           <button
                             type="button"

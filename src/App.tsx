@@ -17,6 +17,7 @@ import { ResetPasswordForm } from './components/auth/ResetPasswordForm';
 import { Toast } from './components/app/Toast';
 import { ToastProvider } from './contexts/ToastContext';
 import { useAuth } from './contexts/AuthContext';
+import { requestReceiptSectionCapture } from './lib/receiptCaptureUtils';
 
 const APP_TABS = ['wallet', 'alias', 'scan', 'insights', 'settings'] as const;
 type AppTab = typeof APP_TABS[number];
@@ -226,6 +227,11 @@ function App() {
               receipt={selectedReceipt}
               onClose={() => setSelectedReceipt(null)}
               onDelete={() => setRefreshKey(prev => prev + 1)}
+              onCaptureAgain={(inSections) => {
+                if (inSections) requestReceiptSectionCapture();
+                setSelectedReceipt(null);
+                handleTabChange('scan');
+              }}
             />
           </motion.div>
         )}
