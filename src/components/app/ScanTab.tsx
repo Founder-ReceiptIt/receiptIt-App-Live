@@ -222,6 +222,36 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     setScanState('pending');
   };
 
+  const resolveScanFailure = (
+    scanToken: number,
+    status: string,
+    errorReason?: string | null,
+    createdAt?: string | null,
+    processingAttemptStartedAt?: string | null,
+  ) => {
+    if (!isScanActive(scanToken)) {
+      return;
+    }
+
+    cleanupReceiptStatusWatcher();
+    const failureDetails = getReceiptFailureDetails({
+      status,
+      errorReason,
+      createdAt,
+      processingAttemptStartedAt,
+    });
+    setErrorTitle(failureDetails?.title || 'Couldn’t process receipt');
+    setErrorMessage(
+      failureDetails
+        ? [failureDetails.reason, failureDetails.advice].filter(Boolean).join(' ')
+        : 'We couldn’t read enough of this receipt. Try again from your Wallet.'
+    );
+    setFailedReceiptSaved(true);
+    setScanState('error');
+    isScanningRef.current = false;
+    clearScanningStorage();
+  };
+
   const isScanActive = (scanToken: number) => activeScanTokenRef.current === scanToken;
 
   const removeUploadedReceiptFile = async (storagePath: string) => {
@@ -740,23 +770,13 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
               if (updatedStatus === 'failed' || updatedStatus === 'error' || updatedStatus === 'needs_input' || updatedStatus === 'needs_review' || updatedStatus === 'rejected') {
                 console.log('[ScanTab] Receipt status resolved to error:', updatedStatus);
-                cleanupReceiptStatusWatcher();
-                const failureDetails = getReceiptFailureDetails({
-                  status: updatedStatus,
-                  errorReason: payload.new?.error_reason,
-                  createdAt: payload.new?.created_at,
-                  processingAttemptStartedAt: payload.new?.processing_attempt_started_at,
-                });
-                setErrorTitle(failureDetails?.title || 'Couldn’t process receipt');
-                setErrorMessage(
-                  failureDetails
-                    ? [failureDetails.reason, failureDetails.advice].filter(Boolean).join(' ')
-                    : 'We couldn’t read enough of this receipt. Try again from your Wallet.'
+                resolveScanFailure(
+                  scanToken,
+                  updatedStatus,
+                  payload.new?.error_reason,
+                  payload.new?.created_at,
+                  payload.new?.processing_attempt_started_at,
                 );
-                setFailedReceiptSaved(true);
-                setScanState('error');
-                isScanningRef.current = false;
-                clearScanningStorage();
               }
             }
           )
@@ -765,12 +785,53 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
         statusChannelRef.current = receiptStatusChannel;
 
         statusFallbackTimeoutRef.current = window.setTimeout(() => {
-          if (!isScanActive(scanToken)) {
-            return;
-          }
+          void (async () => {
+            if (!isScanActive(scanToken)) {
+              return;
+            }
 
-          console.log('[ScanTab] Receipt status has not resolved after 30 seconds. Keeping it visible as pending.');
-          resolveScanPending(scanToken);
+            // Realtime is a fast-path, not the source of truth. A mobile tab can
+            // briefly lose its channel while the processor still completes. Read
+            // the owner-scoped row once before showing the recoverable pending
+            // state so a successfully parsed receipt never looks stuck.
+            const { data: latestReceipt, error: latestReceiptError } = await supabase
+              .from('receipts')
+              .select('status, error_reason, created_at, processing_attempt_started_at')
+              .eq('id', receiptId)
+              .eq('user_id', user.id)
+              .maybeSingle();
+
+            if (!isScanActive(scanToken)) {
+              return;
+            }
+
+            if (!latestReceiptError && latestReceipt) {
+              const latestStatus = latestReceipt.status as string | undefined;
+
+              if (latestStatus === 'completed' || latestStatus === 'parsed') {
+                console.log('[ScanTab] Receipt completed without a realtime event:', latestStatus);
+                resolveScanSuccess(scanToken);
+                return;
+              }
+
+              if (latestStatus && ['failed', 'error', 'needs_input', 'needs_review', 'rejected'].includes(latestStatus)) {
+                console.log('[ScanTab] Receipt failure resolved by status check:', latestStatus);
+                resolveScanFailure(
+                  scanToken,
+                  latestStatus,
+                  latestReceipt.error_reason,
+                  latestReceipt.created_at,
+                  latestReceipt.processing_attempt_started_at,
+                );
+                return;
+              }
+            } else if (latestReceiptError) {
+              console.warn('[ScanTab] Could not confirm receipt status after realtime timeout:', latestReceiptError);
+            }
+
+            console.log('[ScanTab] Receipt status has not resolved after 30 seconds. Keeping it visible as pending.');
+            resolveScanPending(scanToken);
+          })();
         }, 30000);
       } catch (err) {
         console.error('Scan error:', err);
