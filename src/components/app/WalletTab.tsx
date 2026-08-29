@@ -1044,7 +1044,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
   };
 
   return (
-    <div className="pb-32 px-6 pt-8 max-w-7xl mx-auto">
+    <div className="ri-mobile-page mx-auto min-w-0 max-w-7xl px-4 pt-8 sm:px-6">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -1058,7 +1058,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
         {primaryAction ? <div className="mb-4 rounded-2xl border border-amber-300/25 bg-gradient-to-br from-amber-400/12 to-teal-400/5 p-5"><div className="flex items-start gap-3"><div className="rounded-xl border border-amber-300/25 bg-amber-400/10 p-2.5"><AlertCircle className="h-5 w-5 text-amber-200" /></div><div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-200">{actionHeading}</p><p className="mt-1 text-2xl font-bold text-white">{primaryAction.detail}</p></div></div></div> : null}
 
         <div className="mb-6 rounded-2xl border border-teal-300/25 bg-gradient-to-br from-teal-400/15 to-cyan-400/5 p-5">
-          <div className="flex items-start gap-3"><div className="rounded-xl border border-teal-300/20 bg-teal-400/10 p-2.5"><ShieldCheck className="h-5 w-5 text-teal-200" strokeWidth={1.5} /></div><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-200">This month</p><p className="mt-1 text-2xl font-bold text-white">{formatCurrency(spentThisMonth, accountCurrency.preferredCurrency)} spent</p></div><div className="shrink-0 text-right"><p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">Average purchase</p><p className="mt-1 text-lg font-bold text-white">{formatCurrency(averagePurchaseThisMonth, accountCurrency.preferredCurrency)}</p></div></div>{monthlyBudget ? <><p className="mt-4 text-sm text-gray-300">of {formatCurrency(monthlyBudget, accountCurrency.preferredCurrency, { maximumFractionDigits: 0, minimumFractionDigits: 0 })} budget</p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-teal-400 transition-[width] duration-300" style={{ width: `${budgetProgress}%` }} /></div><p className="mt-2 text-xs text-gray-400">{budgetUsed.toFixed(1)}% used</p></> : null}{excludedThisMonthCount > 0 ? <p className="mt-3 text-xs text-amber-100">{excludedThisMonthCount === 1 ? 'One purchase couldn’t be included in this total.' : `${excludedThisMonthCount} purchases couldn’t be included in this total.`}</p> : null}</div></div>
+          <div className="flex min-w-0 items-start gap-3"><div className="shrink-0 rounded-xl border border-teal-300/20 bg-teal-400/10 p-2.5"><ShieldCheck className="h-5 w-5 text-teal-200" strokeWidth={1.5} /></div><div className="min-w-0 flex-1"><div className="grid min-w-0 grid-cols-1 gap-3 min-[380px]:grid-cols-2"><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-200">This month</p><p className="mt-1 break-words text-2xl font-bold text-white">{formatCurrency(spentThisMonth, accountCurrency.preferredCurrency)} spent</p></div><div className="min-w-0 min-[380px]:text-right"><p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">Average purchase</p><p className="mt-1 break-words text-lg font-bold text-white">{formatCurrency(averagePurchaseThisMonth, accountCurrency.preferredCurrency)}</p></div></div>{monthlyBudget ? <><p className="mt-4 text-sm text-gray-300">of {formatCurrency(monthlyBudget, accountCurrency.preferredCurrency, { maximumFractionDigits: 0, minimumFractionDigits: 0 })} budget</p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-teal-400 transition-[width] duration-300" style={{ width: `${budgetProgress}%` }} /></div><p className="mt-2 text-xs text-gray-400">{budgetUsed.toFixed(1)}% used</p></> : null}{excludedThisMonthCount > 0 ? <p className="mt-3 text-xs text-amber-100">{excludedThisMonthCount === 1 ? 'One purchase couldn’t be included in this total.' : `${excludedThisMonthCount} purchases couldn’t be included in this total.`}</p> : null}</div></div>
         </div>
 
         <div className="mb-6">
@@ -1385,7 +1385,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
                       }}
                       className={`w-full text-left ${!isFreshProcessing ? 'cursor-pointer' : 'cursor-default'}`}
                     >
-                      <div className="flex items-start gap-4 mb-3">
+                      <div className="mb-3 flex min-w-0 items-start gap-3 sm:gap-4">
                         {selectMode ? (
                           <div className="w-12 h-12 flex-shrink-0 rounded-xl border border-teal-400/50 bg-teal-400/10 flex items-center justify-center">
                             {selectedReceipts.has(receipt.id) ? (
@@ -1447,7 +1447,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
                               )}
                             </>
                           ) : (
-                            <h3 className="text-lg font-bold mb-1 text-white">
+                            <h3 className="mb-1 break-words text-lg font-bold text-white">
                               {receipt.merchant}
                             </h3>
                           )}
@@ -1470,8 +1470,8 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
                           </div>
                         </div>
                         {!isFreshProcessing && (
-                          <div className="shrink-0 text-right">
-                            <div className="whitespace-nowrap text-xl font-bold text-white sm:text-2xl">
+                          <div className="max-w-[46%] shrink-0 text-right">
+                            <div className="break-words text-xl font-bold text-white sm:text-2xl">
                               {requiresCurrencyConfirmation || isStaleProcessing
                                 ? receipt.amount.toFixed(2)
                                 : hasPreferredCurrencyConversion && preferredCurrencyAmount !== undefined
@@ -1479,7 +1479,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
                                   : formatCurrencyAmount(receipt.currency, receipt.amount)}
                             </div>
                             {hasPreferredCurrencyConversion ? (
-                              <div className="pt-1 text-[11px] text-gray-400 whitespace-nowrap sm:text-xs">
+                              <div className="break-words pt-1 text-[11px] text-gray-400 sm:text-xs">
                                 {formatCurrencyAmount(receipt.currency, receipt.amount)} {receipt.currency.toUpperCase()} original
                               </div>
                             ) : null}
@@ -1606,7 +1606,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
                                   }
                                 }}
                                 disabled={isConfirmingCurrency}
-                                className="w-full min-w-[200px] rounded-lg border border-amber-300/30 bg-black/30 px-3 py-2 text-sm font-semibold text-amber-50 outline-none transition-colors hover:border-amber-200/50 focus:border-amber-200/60 disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto"
+                                className="w-full min-w-0 rounded-lg border border-amber-300/30 bg-black/30 px-3 py-2 text-sm font-semibold text-amber-50 outline-none transition-colors hover:border-amber-200/50 focus:border-amber-200/60 disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto sm:min-w-[200px]"
                               >
                                 <option value="" disabled className="bg-neutral-950 text-gray-400">
                                   Select currency
@@ -1646,14 +1646,15 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+              className="ri-scroll-viewport bg-black/80"
               onClick={() => !isDeleting && setDeleteConfirmOpen(false)}
             >
+              <div className="ri-scroll-viewport__inner">
               <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="backdrop-blur-xl bg-black/90 border border-white/10 rounded-2xl p-6 max-w-sm mx-4"
+                className="mx-auto w-full min-w-0 max-w-sm rounded-2xl border border-white/10 bg-black/90 p-5 backdrop-blur-xl sm:p-6"
                 onClick={(e) => e.stopPropagation()}
               >
                 <h3 className="text-xl font-bold text-white mb-2">Delete Receipts?</h3>
@@ -1681,6 +1682,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
                   </motion.button>
                 </div>
               </motion.div>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>

@@ -10,7 +10,7 @@ interface PlaceholderTabProps {
 
 export function PlaceholderTab({ title, description, icon: Icon }: PlaceholderTabProps) {
   return (
-    <div className="pb-32 px-6 pt-8 min-h-screen flex flex-col">
+    <div className="ri-mobile-page ri-page-height flex min-w-0 flex-col px-4 pt-8 sm:px-6">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

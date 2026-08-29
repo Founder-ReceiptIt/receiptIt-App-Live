@@ -37,14 +37,15 @@ export function ProfileRecoveryModal() {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="ri-scroll-viewport bg-black/80 backdrop-blur-sm">
+      <div className="ri-scroll-viewport__inner">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.3 }}
-        className="w-full max-w-md"
+        className="w-full min-w-0 max-w-md"
       >
-        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-xl sm:p-8">
           <div className="text-center mb-8">
             <motion.div
               animate={{
@@ -120,6 +121,7 @@ export function ProfileRecoveryModal() {
           </form>
         </div>
       </motion.div>
+      </div>
     </div>
   );
 }

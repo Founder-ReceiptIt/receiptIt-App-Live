@@ -20,16 +20,16 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
       initial={{ y: 100 }}
       animate={{ y: 0 }}
       transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-      className="fixed bottom-0 left-0 right-0 z-50 md:hidden"
+      className="fixed bottom-0 left-0 right-0 z-50 min-w-0 md:hidden"
     >
-      <div className="max-w-2xl mx-auto px-6 pb-6">
-        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-4 shadow-[0_0_40px_rgba(0,0,0,0.5)]">
-          <div className="flex items-center justify-between">
+      <div className="ri-bottom-safe mx-auto w-full min-w-0 max-w-2xl px-2 sm:px-6">
+        <div className="w-full min-w-0 rounded-2xl border border-white/10 bg-white/5 px-1 py-2 shadow-[0_0_40px_rgba(0,0,0,0.5)] backdrop-blur-xl sm:p-4">
+          <div className="flex w-full min-w-0 items-center">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}
-                className="relative flex flex-col items-center gap-1 px-4 py-2 group"
+                className="group relative flex min-w-0 flex-1 flex-col items-center gap-1 px-1 py-2"
               >
                 {activeTab === tab.id && (
                   <motion.div
@@ -47,7 +47,7 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
                 />
 
                 <span
-                  className={`text-xs relative z-10 transition-colors font-semibold ${
+                  className={`relative z-10 max-w-full truncate text-[10px] font-semibold transition-colors sm:text-xs ${
                     activeTab === tab.id ? 'text-teal-400' : 'text-gray-500 group-hover:text-gray-400'
                   }`}
                 >

@@ -96,7 +96,7 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
 
   if (isChecking) {
     return (
-      <div className="fixed inset-0 bg-[#050505] flex items-center justify-center z-[9999]">
+      <div className="ri-page-height fixed inset-0 z-[9999] flex items-center justify-center bg-[#050505]">
         <div className="animate-pulse text-[#2DD4BF]">Loading...</div>
       </div>
     );
@@ -107,8 +107,9 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="fixed inset-0 bg-[#050505] flex items-center justify-center z-[9999] p-4">
-      <div className="max-w-md w-full space-y-8">
+    <div className="ri-scroll-viewport z-[9999] bg-[#050505]">
+      <div className="ri-scroll-viewport__inner">
+      <div className="w-full min-w-0 max-w-md space-y-8">
         <div className="text-center space-y-4">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[#2DD4BF]/10 mb-4">
             <Lock className="w-8 h-8 text-[#2DD4BF]" />
@@ -177,6 +178,7 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
             </a>
           </p>
         </div>
+      </div>
       </div>
     </div>
   );

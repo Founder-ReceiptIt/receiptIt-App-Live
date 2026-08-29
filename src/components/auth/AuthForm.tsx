@@ -129,8 +129,8 @@ export function AuthForm() {
   };
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center px-6 py-12">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="w-full max-w-md">
+    <div className="ri-auth-page ri-page-height flex items-start justify-center overflow-x-clip bg-black sm:items-center">
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="w-full min-w-0 max-w-md">
         <div className="text-center mb-8">
           <Shield className="w-16 h-16 text-teal-400 mx-auto mb-4" strokeWidth={1.5} />
           <h1 className="mb-2"><ReceiptItWordmark className="text-4xl" /></h1>
@@ -152,8 +152,8 @@ export function AuthForm() {
             {!isForgotPassword ? <label className="block text-sm font-semibold text-gray-300">Password<span className="relative mt-2 block"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" /><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="••••••••" required minLength={8} className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-teal-400/50" /></span>{isSignUp ? <span className="mt-2 block text-xs font-normal text-gray-500">At least 8 characters.</span> : null}</label> : null}
 
             {isSignUp && !isForgotPassword ? <div>
-              <div className="flex items-center justify-between gap-3"><label htmlFor="private-address" className="text-sm font-semibold text-gray-300">Choose your <ReceiptItWordmark className="text-sm" /> address</label><button type="button" onClick={chooseSuggestion} className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal-300 hover:text-teal-200"><RefreshCw className="h-3.5 w-3.5" />Suggest one</button></div>
-              <div className="mt-2 flex items-center rounded-lg border border-white/10 bg-white/5 focus-within:border-teal-400/50"><input id="private-address" type="text" value={aliasLocalPart} onChange={(event) => setAliasLocalPart(normaliseAliasInput(event.target.value))} placeholder="bluefox23" required minLength={3} maxLength={30} className="min-w-0 flex-1 bg-transparent py-3 pl-4 text-white outline-none placeholder:text-gray-600" /><span className="shrink-0 pr-4 text-sm text-gray-400">@in.receiptit.app</span></div>
+              <div className="flex flex-wrap items-center justify-between gap-3"><label htmlFor="private-address" className="min-w-0 text-sm font-semibold text-gray-300">Choose your <ReceiptItWordmark className="text-sm" /> address</label><button type="button" onClick={chooseSuggestion} className="inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold text-teal-300 hover:text-teal-200"><RefreshCw className="h-3.5 w-3.5" />Suggest one</button></div>
+              <div className="mt-2 flex min-w-0 flex-wrap items-center rounded-lg border border-white/10 bg-white/5 focus-within:border-teal-400/50"><input id="private-address" type="text" value={aliasLocalPart} onChange={(event) => setAliasLocalPart(normaliseAliasInput(event.target.value))} placeholder="bluefox23" required minLength={3} maxLength={30} className="min-w-0 flex-[1_1_8rem] bg-transparent py-3 pl-4 text-white outline-none placeholder:text-gray-600" /><span className="shrink-0 py-3 pr-4 text-sm text-gray-400">@in.receiptit.app</span></div>
               <p className={`mt-2 flex min-h-5 items-center gap-1.5 text-xs ${aliasState === 'available' ? 'text-teal-300' : aliasState === 'unavailable' ? 'text-amber-200' : 'text-gray-500'}`}>{aliasState === 'available' ? <Check className="h-3.5 w-3.5" /> : null}{aliasMessage || 'Pick something you’re happy to give shops instead of your personal email.'}</p>
             </div> : null}
 

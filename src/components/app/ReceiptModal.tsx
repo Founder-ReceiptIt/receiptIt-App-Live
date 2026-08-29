@@ -648,7 +648,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-end md:items-center justify-center"
+        className="fixed inset-0 z-50 flex min-w-0 items-end justify-center overflow-x-clip md:items-center"
         onClick={onClose}
       >
         <motion.div
@@ -663,25 +663,27 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: "100%", opacity: 0 }}
           transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-          className="relative w-full max-w-2xl mx-4 mb-4 md:mb-0"
+          className="relative mb-[max(0.5rem,var(--ri-safe-bottom))] mx-2 w-full min-w-0 max-w-2xl sm:mx-4 md:mb-0"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="backdrop-blur-xl bg-black/90 border border-white/10 rounded-3xl overflow-hidden shadow-[0_0_60px_rgba(45,212,191,0.3)]">
             
             {/* --- HEADER --- */}
-            <div className="p-6 border-b border-white/10 flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-white">Receipt</h2>
-              <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-white/10 p-4 sm:p-6">
+              <h2 className="shrink-0 text-2xl font-bold text-white">Receipt</h2>
+              <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
                 {hasOriginalReceipt && isFinalizedReceiptStatus(receipt.status) && (
                   <motion.button
                     type="button"
                     onClick={() => void handleProofPack()}
                     disabled={isGeneratingProofPack}
                     whileTap={{ scale: 0.985 }}
-                    className="inline-flex h-10 items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-4 text-sm font-semibold text-emerald-100 transition-colors hover:border-emerald-300/45 hover:text-white disabled:opacity-50"
+                    className="inline-flex h-10 items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 text-sm font-semibold text-emerald-100 transition-colors hover:border-emerald-300/45 hover:text-white disabled:opacity-50 sm:px-4"
+                    title={isGeneratingProofPack ? 'Preparing proof of purchase' : 'Proof of purchase'}
+                    aria-label={isGeneratingProofPack ? 'Preparing proof of purchase' : 'Proof of purchase'}
                   >
                     <FileText className="w-4 h-4" />
-                    <span>{isGeneratingProofPack ? 'Preparing...' : 'Proof of purchase'}</span>
+                    <span className="hidden min-[390px]:inline">{isGeneratingProofPack ? 'Preparing...' : 'Proof of purchase'}</span>
                   </motion.button>
                 )}
                 {hasOriginalReceipt && (
@@ -689,11 +691,11 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
                     type="button"
                     onClick={(event) => void handleDownloadClick(event)}
                     whileTap={{ scale: 0.985 }}
-                    className="inline-flex h-10 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 text-sm font-semibold text-gray-300 transition-colors hover:border-teal-400/30 hover:text-teal-300"
+                    className="inline-flex h-10 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 text-sm font-semibold text-gray-300 transition-colors hover:border-teal-400/30 hover:text-teal-300 sm:px-4"
                     title="View receipt"
                   >
                     <Download className="w-4 h-4" />
-                    <span>View receipt</span>
+                    <span className="hidden min-[390px]:inline">View receipt</span>
                   </motion.button>
                 )}
                 <motion.button
@@ -720,7 +722,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
               </div>
             </div>
 
-            <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+            <div className="ri-dialog-body-height space-y-6 overflow-y-auto p-4 sm:p-6">
               {isCompactFailedReceipt ? (
                 <>
                   <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6">
@@ -1061,7 +1063,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
                             }
                           }}
                           disabled={isConfirmingCurrency}
-                          className="w-full min-w-[200px] rounded-lg border border-amber-300/30 bg-black/30 px-3 py-2 text-sm font-semibold text-amber-50 outline-none transition-colors hover:border-amber-200/50 focus:border-amber-200/60 disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto"
+                          className="w-full min-w-0 rounded-lg border border-amber-300/30 bg-black/30 px-3 py-2 text-sm font-semibold text-amber-50 outline-none transition-colors hover:border-amber-200/50 focus:border-amber-200/60 disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto sm:min-w-[200px]"
                         >
                           <option value="" disabled className="bg-neutral-950 text-gray-400">
                             Select currency
@@ -1203,17 +1205,17 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
                                       </div>
                                     )}
                                   </div>
-                                  <div className="min-w-0 self-start text-left text-xs text-gray-300 sm:text-right sm:text-sm whitespace-nowrap">
+                                  <div className="min-w-0 self-start text-left text-xs text-gray-300 sm:text-right sm:text-sm">
                                     <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500 sm:hidden">Qty</span>
                                     {formatOptionalQuantity(item.quantity, item.quantityUnit)}
                                   </div>
-                                  <div className="min-w-0 self-start text-left text-xs text-gray-300 sm:text-right sm:text-sm whitespace-nowrap">
+                                  <div className="min-w-0 self-start text-left text-xs text-gray-300 sm:text-right sm:text-sm">
                                     <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500 sm:hidden">Unit</span>
                                     {section.key === 'discount'
                                       ? formatOptionalDeductionMoney(receiptCurrencySymbol, item.unitPrice)
                                       : formatOptionalMoney(receiptCurrencySymbol, item.unitPrice)}
                                   </div>
-                                  <div className={`min-w-0 self-start text-right text-xs sm:text-sm font-semibold whitespace-nowrap ${section.key === 'discount' ? 'text-emerald-400' : 'text-white'}`}>
+                                  <div className={`min-w-0 self-start break-words text-right text-xs font-semibold sm:text-sm ${section.key === 'discount' ? 'text-emerald-400' : 'text-white'}`}>
                                     <span className="mb-1 block text-left text-[10px] font-bold uppercase tracking-wide text-gray-500 sm:hidden">Total</span>
                                     {section.key === 'discount'
                                       ? formatOptionalDeductionMoney(receiptCurrencySymbol, item.lineTotal)

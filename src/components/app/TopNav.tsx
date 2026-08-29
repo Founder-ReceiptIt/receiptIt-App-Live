@@ -28,10 +28,10 @@ export function TopNav({ activeTab, onTabChange }: TopNavProps) {
       initial={{ y: -100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-      className="fixed top-0 left-0 right-0 z-50 backdrop-blur-xl bg-black/50 border-b border-white/10"
+      className="ri-top-safe fixed left-0 right-0 top-0 z-50 border-b border-white/10 bg-black/50 backdrop-blur-xl"
     >
-      <div className="max-w-7xl mx-auto px-6 py-4">
-        <div className="flex items-center justify-between">
+      <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6">
+        <div className="flex min-w-0 items-center justify-between">
           {/* Logo - Left Side */}
           <motion.div
             whileHover={{ y: -1 }}

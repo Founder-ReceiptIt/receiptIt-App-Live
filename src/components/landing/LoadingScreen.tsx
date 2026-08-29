@@ -3,7 +3,7 @@ import { ReceiptItWordmark } from '../ReceiptItWordmark';
 
 export function LoadingScreen() {
   return (
-    <div className="min-h-screen flex items-center justify-center px-6">
+    <div className="ri-auth-page ri-page-height flex items-center justify-center overflow-x-clip">
       <div className="text-center">
         <motion.div
           initial={{ opacity: 0, y: 8 }}

@@ -123,7 +123,7 @@ function App() {
 
   return (
     <ToastProvider>
-      <div className="min-h-screen bg-black text-white font-mono overflow-x-hidden">
+      <div className="ri-page-height min-w-0 overflow-x-clip bg-black font-mono text-white">
       <style>
         {`
           * {
@@ -148,11 +148,11 @@ function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-            className="min-h-screen"
+            className="ri-page-height min-w-0"
           >
             <TopNav activeTab={activeTab} onTabChange={handleTabChange} />
 
-            <div className="pt-20">
+            <div className="ri-app-content min-w-0">
               <AnimatePresence mode="wait">
                 {activeTab === 'wallet' && (
                   <motion.div

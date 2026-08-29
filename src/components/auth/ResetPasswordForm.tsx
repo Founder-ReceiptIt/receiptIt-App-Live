@@ -34,8 +34,8 @@ export function ResetPasswordForm() {
   };
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center px-6 py-12">
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-6 sm:p-8">
+    <div className="ri-auth-page ri-page-height flex items-start justify-center overflow-x-clip bg-black sm:items-center">
+      <div className="w-full min-w-0 max-w-md rounded-2xl border border-white/10 bg-white/5 p-6 sm:p-8">
         <div className="text-center">
           <Shield className="mx-auto h-14 w-14 text-teal-400" strokeWidth={1.5} />
           <h1 className="mt-4"><ReceiptItWordmark className="text-4xl" /></h1>

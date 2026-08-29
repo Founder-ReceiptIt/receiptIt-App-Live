@@ -92,15 +92,15 @@ export function InsightsTab() {
     return { total, thisMonth, average: aggregateReceipts.length ? total / aggregateReceipts.length : 0, byCategory, byMerchant, months };
   }, [receipts]);
 
-  if (loading) return <div className="mx-auto max-w-7xl px-6 pb-32 pt-8"><div className="h-8 w-32 animate-pulse rounded bg-white/10" /><div className="mt-8 grid gap-4 sm:grid-cols-3"><div className="h-32 animate-pulse rounded-2xl bg-white/[0.045]" /><div className="h-32 animate-pulse rounded-2xl bg-white/[0.045]" /><div className="h-32 animate-pulse rounded-2xl bg-white/[0.045]" /></div></div>;
-  if (error) return <div className="mx-auto max-w-7xl px-6 pb-32 pt-8"><h1 className="text-3xl font-bold text-white">Insights</h1><div className="mt-8 max-w-3xl rounded-2xl border border-white/10 bg-white/[0.045] p-8 text-center"><p className="text-gray-300">Could not load insights right now.</p><button onClick={() => setRefreshKey((value) => value + 1)} className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-teal-300"><RefreshCw className="h-4 w-4" />Try again</button></div></div>;
+  if (loading) return <div className="ri-mobile-page mx-auto min-w-0 max-w-7xl px-4 pt-8 sm:px-6"><div className="h-8 w-32 animate-pulse rounded bg-white/10" /><div className="mt-8 grid gap-4 sm:grid-cols-3"><div className="h-32 animate-pulse rounded-2xl bg-white/[0.045]" /><div className="h-32 animate-pulse rounded-2xl bg-white/[0.045]" /><div className="h-32 animate-pulse rounded-2xl bg-white/[0.045]" /></div></div>;
+  if (error) return <div className="ri-mobile-page mx-auto min-w-0 max-w-7xl px-4 pt-8 sm:px-6"><h1 className="text-3xl font-bold text-white">Insights</h1><div className="mt-8 max-w-3xl rounded-2xl border border-white/10 bg-white/[0.045] p-5 text-center sm:p-8"><p className="text-gray-300">Could not load insights right now.</p><button onClick={() => setRefreshKey((value) => value + 1)} className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-teal-300"><RefreshCw className="h-4 w-4" />Try again</button></div></div>;
 
   const meaningfulChart = receipts.length >= 2 && summary.months.some((month) => month.amount > 0);
   const maxMonth = Math.max(...summary.months.map((month) => month.amount), 1);
   const maxCategory = Math.max(...summary.byCategory.map(([, amount]) => amount), 1);
 
   return (
-    <div className="mx-auto max-w-7xl px-6 pb-32 pt-8">
+    <div className="ri-mobile-page mx-auto min-w-0 max-w-7xl px-4 pt-8 sm:px-6">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
         <h1 className="text-3xl font-bold text-white">Insights</h1>
         {receipts.length === 0 ? <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.045] p-10 text-center"><BarChart3 className="mx-auto h-8 w-8 text-teal-300" /><p className="mt-4 text-gray-300">Your insights will appear as you add receipts.</p></div> : <>

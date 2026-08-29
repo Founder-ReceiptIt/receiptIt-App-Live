@@ -899,7 +899,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
   };
 
   return (
-    <div className="min-h-screen max-w-7xl px-6 pb-32 pt-8 mx-auto">
+    <div className="ri-mobile-page ri-page-height mx-auto min-w-0 max-w-7xl px-4 pt-8 sm:px-6">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -919,7 +919,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.3 }}
-                className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8"
+                className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-xl sm:p-8"
               >
                 <div className="mb-5 text-center">
                   <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-teal-400/25 bg-teal-400/10"><Camera className="w-7 h-7 text-teal-300" strokeWidth={1.5} /></div>
@@ -988,7 +988,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.3 }}
-                className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8"
+                className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-xl sm:p-8"
               >
                 <div className="text-center">
                   <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-teal-400/25 bg-teal-400/10"><FileImage className="h-7 w-7 text-teal-300" strokeWidth={1.5} /></div>
@@ -1017,7 +1017,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.3 }}
-                className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8"
+                className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-xl sm:p-8"
               >
                 <div className="text-center mb-6">
                   {previewUrl && selectedFile && (
@@ -1114,7 +1114,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.3 }}
-                className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-8"
+                className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-xl sm:p-8"
               >
                 <div className="text-center">
                   <motion.div
@@ -1148,7 +1148,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.3 }}
-                className="backdrop-blur-xl bg-white/5 border border-amber-400/20 rounded-2xl p-8"
+                className="rounded-2xl border border-amber-400/20 bg-white/5 p-5 backdrop-blur-xl sm:p-8"
               >
                 <div className="text-center">
                   <Clock className="w-20 h-20 text-amber-300 mx-auto mb-4" strokeWidth={1.5} />
@@ -1177,7 +1177,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.3 }}
-                className="backdrop-blur-xl bg-white/5 border border-red-400/20 rounded-2xl p-8"
+                className="rounded-2xl border border-red-400/20 bg-white/5 p-5 backdrop-blur-xl sm:p-8"
               >
                 <div className="text-center">
                   <X className="w-20 h-20 text-red-400 mx-auto mb-4" strokeWidth={1.5} />

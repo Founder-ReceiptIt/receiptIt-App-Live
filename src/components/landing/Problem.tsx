@@ -11,7 +11,7 @@ export function Problem() {
   ];
 
   return (
-    <section className="min-h-screen flex items-center justify-center px-6 py-20">
+    <section className="ri-auth-page ri-page-height flex items-center justify-center py-20">
       <div className="max-w-4xl w-full">
         <motion.div
           initial={{ opacity: 0, y: 50 }}
@@ -65,7 +65,7 @@ export function Problem() {
                       </div>
                       <p className="text-white font-semibold truncate">{email.subject}</p>
                     </div>
-                    <span className="text-xs text-gray-500 whitespace-nowrap">{email.time}</span>
+                    <span className="shrink-0 text-xs text-gray-500">{email.time}</span>
                   </div>
                 </motion.div>
               ))}

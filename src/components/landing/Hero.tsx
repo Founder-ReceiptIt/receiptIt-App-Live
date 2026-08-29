@@ -7,7 +7,7 @@ interface HeroProps {
 
 export function Hero({ onReserve }: HeroProps) {
   return (
-    <section className="min-h-screen flex items-center justify-center relative overflow-hidden px-6">
+    <section className="ri-auth-page ri-page-height relative flex items-center justify-center overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(45,212,191,0.1)_0%,_transparent_70%)]" />
 
       {[...Array(20)].map((_, i) => (
@@ -91,7 +91,7 @@ export function Hero({ onReserve }: HeroProps) {
             transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
             className="absolute inset-0 blur-xl bg-teal-400/50 rounded-full"
           />
-          <div className="relative px-12 py-5 bg-teal-400 text-black font-bold text-lg rounded-full backdrop-blur-xl border border-teal-300 shadow-[0_0_30px_rgba(45,212,191,0.5)]">
+          <div className="relative rounded-full border border-teal-300 bg-teal-400 px-8 py-5 text-lg font-bold text-black shadow-[0_0_30px_rgba(45,212,191,0.5)] backdrop-blur-xl sm:px-12">
             Get a private address
           </div>
         </motion.button>

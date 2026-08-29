@@ -37,11 +37,12 @@ export function CurrencySetupModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black p-4">
+    <div className="ri-scroll-viewport bg-black">
+      <div className="ri-scroll-viewport__inner">
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-lg rounded-2xl border border-white/10 bg-neutral-950 p-6 shadow-2xl sm:p-8"
+        className="w-full min-w-0 max-w-lg rounded-2xl border border-white/10 bg-neutral-950 p-5 shadow-2xl sm:p-8"
       >
         <div className="text-center">
           <Coins className="mx-auto h-10 w-10 text-teal-300" strokeWidth={1.5} />
@@ -59,14 +60,14 @@ export function CurrencySetupModal() {
                   key={option.code}
                   type="button"
                   onClick={() => setCurrency(option.code)}
-                  className={`flex min-h-14 items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
+                  className={`flex min-h-14 min-w-0 items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
                     currency === option.code
                       ? 'border-teal-300/50 bg-teal-400/15 text-white'
                       : 'border-white/10 bg-white/[0.035] text-gray-300 hover:bg-white/[0.06]'
                   }`}
                 >
                   <span className="w-9 text-lg font-bold text-teal-200">{option.symbol}</span>
-                  <span><span className="block text-sm font-semibold">{option.name}</span><span className="text-xs text-gray-500">{option.code}</span></span>
+                  <span className="min-w-0"><span className="block break-words text-sm font-semibold">{option.name}</span><span className="text-xs text-gray-500">{option.code}</span></span>
                 </button>
               ))}
             </div>
@@ -97,6 +98,7 @@ export function CurrencySetupModal() {
           </div>
         )}
       </motion.div>
+      </div>
     </div>
   );
 }

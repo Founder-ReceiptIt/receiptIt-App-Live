@@ -125,14 +125,15 @@ export function ReportProblemDialog({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className={`fixed inset-0 ${zIndexClassName} flex items-center justify-center bg-black/80 backdrop-blur-sm p-4`}
+          className={`ri-scroll-viewport ${zIndexClassName} bg-black/80 backdrop-blur-sm`}
           onClick={() => !isSubmitting && onClose()}
         >
+          <div className="ri-scroll-viewport__inner">
           <motion.div
             initial={{ scale: 0.96, opacity: 0, y: 12 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.96, opacity: 0, y: 12 }}
-            className="w-full max-w-md backdrop-blur-xl bg-black/90 border border-white/10 rounded-2xl shadow-[0_0_40px_rgba(0,0,0,0.45)]"
+            className="w-full min-w-0 max-w-md rounded-2xl border border-white/10 bg-black/90 shadow-[0_0_40px_rgba(0,0,0,0.45)] backdrop-blur-xl"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4 p-5 border-b border-white/10">
@@ -266,6 +267,7 @@ export function ReportProblemDialog({
               </button>
             </div>
           </motion.div>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>
