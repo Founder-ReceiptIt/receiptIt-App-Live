@@ -689,7 +689,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
           <div className="min-w-0 rounded-3xl border border-white/10 bg-black/90 shadow-[0_0_60px_rgba(45,212,191,0.3)] backdrop-blur-xl">
             
             {/* --- HEADER --- */}
-            <div className="flex min-w-0 flex-wrap items-center gap-1.5 border-b border-white/10 p-3 sm:gap-2 sm:p-6">
+            <div className="relative flex min-w-0 flex-wrap items-center gap-1.5 border-b border-white/10 p-3 sm:gap-2 sm:p-6">
               <h2 className="mr-auto shrink-0 text-xl font-bold text-white sm:text-2xl">Receipt</h2>
               <div className="flex shrink-0 items-center justify-end gap-1.5 sm:gap-2">
                 {hasOriginalReceipt && (
@@ -705,7 +705,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
                     <span>View receipt</span>
                   </motion.button>
                 )}
-                <div className="relative shrink-0">
+                <div className="shrink-0">
                   <motion.button
                     type="button"
                     whileTap={{ scale: 0.96 }}
@@ -719,58 +719,6 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
                     <MoreHorizontal className="h-5 w-5" />
                   </motion.button>
 
-                  <AnimatePresence>
-                    {isActionMenuOpen && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -6, scale: 0.98 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                        transition={{ duration: 0.14 }}
-                        role="menu"
-                        className="absolute right-0 top-full z-30 mt-2 w-56 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-white/10 bg-neutral-950/95 p-1.5 shadow-2xl backdrop-blur-xl"
-                      >
-                        {hasOriginalReceipt && isFinalizedReceiptStatus(receipt.status) && (
-                          <button
-                            type="button"
-                            role="menuitem"
-                            onClick={() => {
-                              setIsActionMenuOpen(false);
-                              void handleProofPack();
-                            }}
-                            disabled={isGeneratingProofPack}
-                            className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-gray-200 transition-colors hover:bg-white/5 disabled:opacity-50"
-                          >
-                            <FileText className="h-4 w-4 text-emerald-300" />
-                            {isGeneratingProofPack ? 'Preparing...' : 'Proof of purchase'}
-                          </button>
-                        )}
-                        {canEditStructuredReceipt && (
-                          <button
-                            type="button"
-                            role="menuitem"
-                            onClick={startEditingReceipt}
-                            className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-gray-200 transition-colors hover:bg-white/5"
-                          >
-                            <FileText className="h-4 w-4 text-teal-300" />
-                            Edit receipt
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => {
-                            setIsActionMenuOpen(false);
-                            void handleDelete();
-                          }}
-                          disabled={isDeleting}
-                          className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-red-300 transition-colors hover:bg-red-400/10 disabled:opacity-50"
-                        >
-                          {isDeleting ? <Clock className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                          {isDeleting ? 'Deleting...' : 'Delete receipt'}
-                        </button>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
                 </div>
                 <motion.button
                   type="button"
@@ -784,6 +732,58 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
                   <X className="w-5 h-5" />
                 </motion.button>
               </div>
+              <AnimatePresence>
+                {isActionMenuOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                    transition={{ duration: 0.14 }}
+                    role="menu"
+                    className="absolute right-3 top-full z-30 mt-2 w-56 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-white/10 bg-neutral-950/95 p-1.5 shadow-2xl backdrop-blur-xl sm:right-6"
+                  >
+                    {hasOriginalReceipt && isFinalizedReceiptStatus(receipt.status) && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setIsActionMenuOpen(false);
+                          void handleProofPack();
+                        }}
+                        disabled={isGeneratingProofPack}
+                        className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-gray-200 transition-colors hover:bg-white/5 disabled:opacity-50"
+                      >
+                        <FileText className="h-4 w-4 text-emerald-300" />
+                        {isGeneratingProofPack ? 'Preparing...' : 'Proof of purchase'}
+                      </button>
+                    )}
+                    {canEditStructuredReceipt && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={startEditingReceipt}
+                        className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-gray-200 transition-colors hover:bg-white/5"
+                      >
+                        <FileText className="h-4 w-4 text-teal-300" />
+                        Edit receipt
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setIsActionMenuOpen(false);
+                        void handleDelete();
+                      }}
+                      disabled={isDeleting}
+                      className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-red-300 transition-colors hover:bg-red-400/10 disabled:opacity-50"
+                    >
+                      {isDeleting ? <Clock className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                      {isDeleting ? 'Deleting...' : 'Delete receipt'}
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             <div className="ri-dialog-body-height min-w-0 space-y-6 overflow-x-hidden overflow-y-auto p-3 sm:p-6">
