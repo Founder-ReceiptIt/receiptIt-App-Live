@@ -45,6 +45,7 @@ const receiptModal = files['src/components/app/ReceiptModal.tsx'];
 check(receiptModal.includes('overflow-x-hidden overflow-y-auto'), 'receipt details must never require horizontal scrolling');
 check(receiptModal.includes('<span>View receipt</span>'), 'the signed-original action must retain its explicit label');
 check(receiptModal.includes('Receipt actions'), 'secondary receipt actions must remain in the compact action menu');
+check(receiptModal.includes('absolute right-3 top-full'), 'the receipt action menu must anchor to the modal edge on narrow screens');
 check(receiptModal.includes('isEditMode'), 'receipt details must retain a single receipt-wide edit mode');
 check(!receiptModal.includes('<Pencil'), 'scattered receipt-field pencil actions must not return');
 
