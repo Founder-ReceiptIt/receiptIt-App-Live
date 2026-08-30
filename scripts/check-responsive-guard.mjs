@@ -5,6 +5,8 @@ const files = Object.fromEntries(await Promise.all([
   'src/index.css',
   'src/components/app/BottomNav.tsx',
   'src/components/app/AliasTab.tsx',
+  'src/components/app/ReceiptModal.tsx',
+  'src/components/app/WalletTab.tsx',
   'src/components/auth/AlphaGatekeeper.tsx',
   'src/components/auth/AuthForm.tsx',
   'src/components/auth/AliasSetupModal.tsx',
@@ -38,6 +40,17 @@ const bottomNav = files['src/components/app/BottomNav.tsx'];
 check(bottomNav.includes('min-w-0 flex-1'), 'each bottom navigation item must be allowed to shrink');
 check(!bottomNav.includes('gap-1 px-4 py-2 group'), 'desktop-width bottom navigation padding must not return');
 check(bottomNav.includes('ri-bottom-safe'), 'bottom navigation must respect the device safe area');
+
+const receiptModal = files['src/components/app/ReceiptModal.tsx'];
+check(receiptModal.includes('overflow-x-hidden overflow-y-auto'), 'receipt details must never require horizontal scrolling');
+check(receiptModal.includes('<span>View receipt</span>'), 'the signed-original action must retain its explicit label');
+check(receiptModal.includes('Receipt actions'), 'secondary receipt actions must remain in the compact action menu');
+check(receiptModal.includes('isEditMode'), 'receipt details must retain a single receipt-wide edit mode');
+check(!receiptModal.includes('<Pencil'), 'scattered receipt-field pencil actions must not return');
+
+const wallet = files['src/components/app/WalletTab.tsx'];
+check(wallet.includes('aria-label="Scan receipt"'), 'Wallet must retain the one-tap Scan receipt shortcut');
+check(wallet.includes('onClick={onNavigateToScan}'), 'Wallet Quick Scan must reuse the existing Scan route');
 
 check(!files['src/components/app/AliasTab.tsx'].includes('whitespace-nowrap'), 'long purchase addresses must be allowed to wrap');
 check(files['src/components/auth/AuthForm.tsx'].includes('ri-auth-page'), 'authentication must use the scroll-safe page layout');

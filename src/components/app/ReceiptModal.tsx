@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Shield, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Download, Undo2, ChevronDown, Pencil, Check } from 'lucide-react';
+import { X, Shield, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Undo2, ChevronDown, MoreHorizontal } from 'lucide-react';
 import { Receipt } from './WalletTab';
 import { ReportProblemDialog } from './ReportProblemDialog';
 import { useState, useEffect } from 'react';
@@ -142,24 +142,23 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
   const [showOtherCurrencyOptions, setShowOtherCurrencyOptions] = useState(false);
   const [showReportProblemDialog, setShowReportProblemDialog] = useState(false);
   const [isGeneratingProofPack, setIsGeneratingProofPack] = useState(false);
+  const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [displayMerchant, setDisplayMerchant] = useState(receipt?.merchant || '');
-  const [isEditingMerchant, setIsEditingMerchant] = useState(false);
   const [merchantDraft, setMerchantDraft] = useState(receipt?.merchant || '');
-  const [isSavingMerchant, setIsSavingMerchant] = useState(false);
-  const [editingItemId, setEditingItemId] = useState<string | null>(null);
-  const [itemDisplayNameDraft, setItemDisplayNameDraft] = useState('');
-  const [savingItemId, setSavingItemId] = useState<string | null>(null);
+  const [itemDisplayNameDrafts, setItemDisplayNameDrafts] = useState<Record<string, string>>({});
+  const [isSavingReceiptEdits, setIsSavingReceiptEdits] = useState(false);
 
   useEffect(() => {
     setShowMoreDetails(false);
     setShowCompanyDetails(false);
     setShowOtherCurrencyOptions(false);
     setShowReportProblemDialog(false);
+    setIsActionMenuOpen(false);
+    setIsEditMode(false);
     setDisplayMerchant(receipt?.merchant || '');
     setMerchantDraft(receipt?.merchant || '');
-    setIsEditingMerchant(false);
-    setEditingItemId(null);
-    setItemDisplayNameDraft('');
+    setItemDisplayNameDrafts({});
   }, [receipt?.id, receipt?.merchant]);
 
   useEffect(() => {
@@ -321,82 +320,103 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
     }
   };
 
-  const handleSaveMerchant = async () => {
-    if (!receipt || isSavingMerchant) return;
+  const getEditableItemName = (item: ReceiptModalItem) => (
+    item.displayName?.trim()
+    || item.rawDescription?.trim()
+    || item.description?.trim()
+    || ''
+  );
+
+  const startEditingReceipt = () => {
+    setMerchantDraft(displayMerchant);
+    setItemDisplayNameDrafts(Object.fromEntries(
+      receiptItems
+        .filter((item) => item.id)
+        .map((item) => [item.id, getEditableItemName(item)])
+    ));
+    setIsActionMenuOpen(false);
+    setIsEditMode(true);
+  };
+
+  const cancelEditingReceipt = () => {
+    setMerchantDraft(displayMerchant);
+    setItemDisplayNameDrafts({});
+    setIsEditMode(false);
+  };
+
+  const handleSaveReceiptEdits = async () => {
+    if (!receipt || isSavingReceiptEdits) return;
 
     const nextMerchant = merchantDraft.trim();
     if (!nextMerchant || nextMerchant.length > 160) {
-      showToast('Store name not saved', 'Use between 1 and 160 characters.');
+      showToast('Receipt not updated', 'Use a store name between 1 and 160 characters.');
       return;
     }
 
-    setIsSavingMerchant(true);
-    const { data, error } = await supabase
-      .from('receipts')
-      .update({ merchant: nextMerchant })
-      .eq('id', receipt.id)
-      .eq('user_id', receipt.userId)
-      .select('merchant')
-      .single();
+    const changedItems = receiptItems
+      .filter((item) => item.id)
+      .map((item) => ({
+        item,
+        nextDisplayName: (itemDisplayNameDrafts[item.id] ?? getEditableItemName(item)).trim(),
+      }))
+      .filter(({ item, nextDisplayName }) => nextDisplayName !== getEditableItemName(item));
 
-    setIsSavingMerchant(false);
-    if (error) {
-      console.error('[ReceiptModal] Store name correction failed:', error);
-      showToast('Store name not saved', 'Please try again.');
+    if (changedItems.some(({ nextDisplayName }) => nextDisplayName.length > 160)) {
+      showToast('Receipt not updated', 'Use item names of no more than 160 characters.');
       return;
     }
 
-    const savedMerchant = getNonEmptyString(data?.merchant) || nextMerchant;
+    setIsSavingReceiptEdits(true);
+    const merchantChanged = nextMerchant !== displayMerchant;
+    const merchantResult = merchantChanged
+      ? await supabase
+          .from('receipts')
+          .update({ merchant: nextMerchant })
+          .eq('id', receipt.id)
+          .eq('user_id', receipt.userId)
+          .select('merchant')
+          .single()
+      : { data: { merchant: displayMerchant }, error: null };
+
+    const itemResults = await Promise.all(changedItems.map(async ({ item, nextDisplayName }) => {
+      const result = await supabase
+        .from('receipt_items')
+        .update({ display_name: nextDisplayName || null })
+        .eq('id', item.id)
+        .eq('receipt_id', receipt.id)
+        .select('id, display_name')
+        .single();
+
+      return { itemId: item.id, nextDisplayName, ...result };
+    }));
+
+    setIsSavingReceiptEdits(false);
+
+    if (merchantResult.error || itemResults.some((result) => result.error)) {
+      console.error('[ReceiptModal] Receipt correction failed:', {
+        merchantError: merchantResult.error,
+        itemErrors: itemResults.filter((result) => result.error).map((result) => result.error),
+      });
+      showToast('Receipt not fully updated', 'Please check your changes and try again.');
+      return;
+    }
+
+    const savedMerchant = getNonEmptyString(merchantResult.data?.merchant) || nextMerchant;
+    const savedItemNames = new Map(itemResults.map((result) => [
+      result.itemId,
+      getNonEmptyString(result.data?.display_name),
+    ]));
+
     setDisplayMerchant(savedMerchant);
     setMerchantDraft(savedMerchant);
-    setIsEditingMerchant(false);
-    showToast('Store name updated');
-  };
-
-  const startEditingItem = (item: ReceiptModalItem) => {
-    setEditingItemId(item.id);
-    setItemDisplayNameDraft(
-      item.displayName?.trim()
-      || item.rawDescription?.trim()
-      || item.description?.trim()
-      || ''
-    );
-  };
-
-  const handleSaveItemDisplayName = async (item: ReceiptModalItem) => {
-    if (!receipt || !item.id || savingItemId) return;
-
-    const nextDisplayName = itemDisplayNameDraft.trim();
-    if (nextDisplayName.length > 160) {
-      showToast('Item name not saved', 'Use no more than 160 characters.');
-      return;
-    }
-
-    setSavingItemId(item.id);
-    const { data, error } = await supabase
-      .from('receipt_items')
-      .update({ display_name: nextDisplayName || null })
-      .eq('id', item.id)
-      .eq('receipt_id', receipt.id)
-      .select('id, display_name')
-      .single();
-
-    setSavingItemId(null);
-    if (error) {
-      console.error('[ReceiptModal] Item name correction failed:', error);
-      showToast('Item name not saved', 'Please try again.');
-      return;
-    }
-
-    const savedDisplayName = getNonEmptyString(data?.display_name);
-    setReceiptItems((currentItems) => currentItems.map((currentItem) => (
-      currentItem.id === item.id
-        ? { ...currentItem, displayName: savedDisplayName }
-        : currentItem
+    setReceiptItems((currentItems) => currentItems.map((item) => (
+      savedItemNames.has(item.id)
+        ? { ...item, displayName: savedItemNames.get(item.id) || null }
+        : item
     )));
-    setEditingItemId(null);
-    setItemDisplayNameDraft('');
-    showToast('Item name updated');
+    setItemDisplayNameDrafts({});
+    setIsEditMode(false);
+    showToast('Receipt updated');
   };
 
   if (!receipt) return null;
@@ -535,7 +555,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
       items: displayReceiptItems.filter((item) => getReceiptItemGroup(item) === 'discount'),
     },
   ].filter((section) => section.items.length > 0);
-  const receiptBreakdownGridColumns = 'grid-cols-3 sm:grid-cols-[minmax(0,1.6fr)_70px_110px_110px]';
+  const receiptBreakdownGridColumns = 'grid-cols-[repeat(3,minmax(0,1fr))] sm:grid-cols-[minmax(0,1.6fr)_70px_110px_110px]';
   const receiptBreakdownGridSpacing = 'gap-x-1.5 gap-y-2 px-3 sm:gap-x-3 sm:px-4';
   const heroMetadataChips = [
     receipt.orderNumber ? { label: `Order ${receipt.orderNumber}`, value: receipt.orderNumber, icon: FileText } : null,
@@ -648,7 +668,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex min-w-0 items-end justify-center overflow-x-clip md:items-center"
+        className="fixed inset-0 z-50 flex min-w-0 items-end justify-center overflow-x-hidden md:items-center"
         onClick={onClose}
       >
         <motion.div
@@ -663,66 +683,110 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: "100%", opacity: 0 }}
           transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-          className="relative mb-[max(0.5rem,var(--ri-safe-bottom))] mx-2 w-full min-w-0 max-w-2xl sm:mx-4 md:mb-0"
+          className="relative mb-[max(0.5rem,var(--ri-safe-bottom))] mx-1 w-full min-w-0 max-w-[calc(100vw-0.5rem)] sm:mx-4 sm:max-w-2xl md:mb-0"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="backdrop-blur-xl bg-black/90 border border-white/10 rounded-3xl overflow-hidden shadow-[0_0_60px_rgba(45,212,191,0.3)]">
+          <div className="min-w-0 rounded-3xl border border-white/10 bg-black/90 shadow-[0_0_60px_rgba(45,212,191,0.3)] backdrop-blur-xl">
             
             {/* --- HEADER --- */}
-            <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-white/10 p-4 sm:p-6">
-              <h2 className="shrink-0 text-2xl font-bold text-white">Receipt</h2>
-              <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-                {hasOriginalReceipt && isFinalizedReceiptStatus(receipt.status) && (
-                  <motion.button
-                    type="button"
-                    onClick={() => void handleProofPack()}
-                    disabled={isGeneratingProofPack}
-                    whileTap={{ scale: 0.985 }}
-                    className="inline-flex h-10 items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 text-sm font-semibold text-emerald-100 transition-colors hover:border-emerald-300/45 hover:text-white disabled:opacity-50 sm:px-4"
-                    title={isGeneratingProofPack ? 'Preparing proof of purchase' : 'Proof of purchase'}
-                    aria-label={isGeneratingProofPack ? 'Preparing proof of purchase' : 'Proof of purchase'}
-                  >
-                    <FileText className="w-4 h-4" />
-                    <span className="hidden min-[390px]:inline">{isGeneratingProofPack ? 'Preparing...' : 'Proof of purchase'}</span>
-                  </motion.button>
-                )}
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5 border-b border-white/10 p-3 sm:gap-2 sm:p-6">
+              <h2 className="mr-auto shrink-0 text-xl font-bold text-white sm:text-2xl">Receipt</h2>
+              <div className="flex shrink-0 items-center justify-end gap-1.5 sm:gap-2">
                 {hasOriginalReceipt && (
                   <motion.button
                     type="button"
                     onClick={(event) => void handleDownloadClick(event)}
                     whileTap={{ scale: 0.985 }}
-                    className="inline-flex h-10 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 text-sm font-semibold text-gray-300 transition-colors hover:border-teal-400/30 hover:text-teal-300 sm:px-4"
+                    className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 text-xs font-semibold text-gray-200 transition-colors hover:border-teal-400/30 hover:text-teal-300 sm:gap-2 sm:px-4 sm:text-sm"
                     title="View receipt"
+                    aria-label="View receipt"
                   >
-                    <Download className="w-4 h-4" />
-                    <span className="hidden min-[390px]:inline">View receipt</span>
+                    <FileText className="h-4 w-4 shrink-0" />
+                    <span>View receipt</span>
                   </motion.button>
                 )}
-                <motion.button
-                  type="button"
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => void handleDelete()}
-                  disabled={isDeleting}
-                  className="inline-flex h-10 items-center justify-center rounded-full border border-red-400/20 bg-red-400/10 px-3 text-red-300 transition-colors hover:border-red-400/40 hover:bg-red-400/15 disabled:cursor-not-allowed disabled:opacity-50"
-                  title="Delete receipt"
-                  aria-label="Delete receipt"
-                >
-                  {isDeleting ? <Clock className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                </motion.button>
+                <div className="relative shrink-0">
+                  <motion.button
+                    type="button"
+                    whileTap={{ scale: 0.96 }}
+                    onClick={() => setIsActionMenuOpen((current) => !current)}
+                    className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-gray-300 transition-colors hover:border-white/20 hover:text-white"
+                    title="Receipt actions"
+                    aria-label="Receipt actions"
+                    aria-haspopup="menu"
+                    aria-expanded={isActionMenuOpen}
+                  >
+                    <MoreHorizontal className="h-5 w-5" />
+                  </motion.button>
+
+                  <AnimatePresence>
+                    {isActionMenuOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                        transition={{ duration: 0.14 }}
+                        role="menu"
+                        className="absolute right-0 top-full z-30 mt-2 w-56 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-white/10 bg-neutral-950/95 p-1.5 shadow-2xl backdrop-blur-xl"
+                      >
+                        {hasOriginalReceipt && isFinalizedReceiptStatus(receipt.status) && (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setIsActionMenuOpen(false);
+                              void handleProofPack();
+                            }}
+                            disabled={isGeneratingProofPack}
+                            className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-gray-200 transition-colors hover:bg-white/5 disabled:opacity-50"
+                          >
+                            <FileText className="h-4 w-4 text-emerald-300" />
+                            {isGeneratingProofPack ? 'Preparing...' : 'Proof of purchase'}
+                          </button>
+                        )}
+                        {canEditStructuredReceipt && (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={startEditingReceipt}
+                            className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-gray-200 transition-colors hover:bg-white/5"
+                          >
+                            <FileText className="h-4 w-4 text-teal-300" />
+                            Edit receipt
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setIsActionMenuOpen(false);
+                            void handleDelete();
+                          }}
+                          disabled={isDeleting}
+                          className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-red-300 transition-colors hover:bg-red-400/10 disabled:opacity-50"
+                        >
+                          {isDeleting ? <Clock className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                          {isDeleting ? 'Deleting...' : 'Delete receipt'}
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
                 <motion.button
                   type="button"
                   whileHover={{ scale: 1.04 }}
                   whileTap={{ scale: 0.96 }}
                   onClick={onClose}
-                  className="w-10 h-10 rounded-full backdrop-blur-md bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-white hover:border-white/20 transition-colors"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-gray-400 backdrop-blur-md transition-colors hover:border-white/20 hover:text-white"
+                  title="Close receipt"
+                  aria-label="Close receipt"
                 >
                   <X className="w-5 h-5" />
                 </motion.button>
               </div>
             </div>
 
-            <div className="ri-dialog-body-height space-y-6 overflow-y-auto p-4 sm:p-6">
+            <div className="ri-dialog-body-height min-w-0 space-y-6 overflow-x-hidden overflow-y-auto p-3 sm:p-6">
               {isCompactFailedReceipt ? (
                 <>
                   <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6">
@@ -784,73 +848,66 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
                 </>
               ) : (
                 <>
+              {isEditMode && (
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-teal-400/25 bg-teal-400/10 px-3 py-3 sm:px-4">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-teal-100">Edit receipt</p>
+                    <p className="mt-0.5 text-xs text-teal-100/65">Changes update your saved details, not the original receipt.</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={cancelEditingReceipt}
+                      disabled={isSavingReceiptEdits}
+                      className="inline-flex min-h-10 items-center justify-center rounded-lg border border-white/10 px-3 text-sm font-semibold text-gray-300 transition-colors hover:bg-white/5 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleSaveReceiptEdits()}
+                      disabled={isSavingReceiptEdits}
+                      className="inline-flex min-h-10 items-center justify-center rounded-lg bg-teal-400 px-3 text-sm font-bold text-black transition-colors hover:bg-teal-300 disabled:opacity-50"
+                    >
+                      {isSavingReceiptEdits ? 'Saving...' : 'Save changes'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* --- MAIN CARD --- */}
-              <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6">
-                <div className="flex items-start gap-4 mb-6">
-                  <div className="w-16 h-16 flex-shrink-0 rounded-xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 flex items-center justify-center">
+              <div className="min-w-0 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-xl sm:p-6">
+                <div className="mb-6 grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:gap-4">
+                  <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-xl border border-white/10 bg-gradient-to-br from-white/10 to-white/5 sm:h-16 sm:w-16">
                     {receipt.merchantIcon ? (
                        <receipt.merchantIcon className="w-8 h-8 text-teal-400" strokeWidth={1.5} />
                     ) : (
                        <span className="text-2xl font-bold text-teal-400">{(receipt.merchant || 'R').charAt(0)}</span>
                     )}
                   </div>
-                  <div className="flex-1">
-                    {isEditingMerchant ? (
-                      <div className="mb-2 flex max-w-xl items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    {isEditMode ? (
+                      <div className="mb-2 min-w-0 max-w-xl">
+                        <label htmlFor={`receipt-merchant-${receipt.id}`} className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-500">
+                          Store name
+                        </label>
                         <input
+                          id={`receipt-merchant-${receipt.id}`}
                           value={merchantDraft}
                           onChange={(event) => setMerchantDraft(event.target.value)}
                           onKeyDown={(event) => {
-                            if (event.key === 'Enter') void handleSaveMerchant();
-                            if (event.key === 'Escape') {
-                              setMerchantDraft(displayMerchant);
-                              setIsEditingMerchant(false);
-                            }
+                            if (event.key === 'Enter') void handleSaveReceiptEdits();
+                            if (event.key === 'Escape') cancelEditingReceipt();
                           }}
                           maxLength={160}
-                          autoFocus
                           aria-label="Store name"
-                          className="min-w-0 flex-1 rounded-lg border border-teal-400/40 bg-black/30 px-3 py-2 text-lg font-bold text-white outline-none focus:border-teal-300"
+                          className="w-full min-w-0 rounded-lg border border-teal-400/40 bg-black/30 px-3 py-2 text-lg font-bold text-white outline-none focus:border-teal-300"
                         />
-                        <button
-                          type="button"
-                          onClick={() => void handleSaveMerchant()}
-                          disabled={isSavingMerchant}
-                          aria-label="Save store name"
-                          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-teal-400/30 bg-teal-400/10 text-teal-300 transition-colors hover:bg-teal-400/15 disabled:opacity-50"
-                        >
-                          {isSavingMerchant ? <Clock className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setMerchantDraft(displayMerchant);
-                            setIsEditingMerchant(false);
-                          }}
-                          aria-label="Cancel store name edit"
-                          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-gray-400 transition-colors hover:text-white"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
                       </div>
                     ) : (
-                      <div className="mb-1 flex items-start gap-2">
-                        <h3 className="min-w-0 text-2xl font-bold text-white">{displayMerchant || 'Receipt (Seller Unknown)'}</h3>
-                        {canEditStructuredReceipt && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setMerchantDraft(displayMerchant);
-                              setIsEditingMerchant(true);
-                            }}
-                            aria-label="Edit store name"
-                            title="Edit store name"
-                            className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-white/5 hover:text-teal-300"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </div>
+                      <h3 className="mb-1 min-w-0 break-words text-2xl font-bold text-white [overflow-wrap:anywhere]">
+                        {displayMerchant || 'Receipt (Seller Unknown)'}
+                      </h3>
                     )}
                     {receipt.status === 'needs_review' && receipt.summary && (
                       <p className="text-teal-400 text-sm mb-2">{receipt.summary}</p>
@@ -865,8 +922,8 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
                       </div>
                     )}
                   </div>
-                    <div className="text-right">
-                      <div className="text-3xl font-bold text-white">
+                    <div className="col-span-2 min-w-0 justify-self-end text-right sm:col-span-1 sm:row-start-1">
+                      <div className="break-words text-3xl font-bold text-white [overflow-wrap:anywhere]">
                       {heroAmountDisplay}
                       </div>
                     {['AUD', 'USD', 'CAD', 'NZD'].includes(receiptCurrencyCode) ? (
@@ -1120,7 +1177,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
                       {receiptItemSections.map((section) => (
                         <div key={section.key}>
                           <h5 className="text-sm font-bold text-gray-400 mb-3 uppercase tracking-wide">{section.title}</h5>
-                          <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
+                          <div className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-white/5">
                             <div className={`hidden sm:grid ${receiptBreakdownGridColumns} ${receiptBreakdownGridSpacing} py-2 text-[11px] font-bold uppercase tracking-wide text-gray-500 border-b border-white/10`}>
                               <div>Description</div>
                               <div className="text-right">Qty</div>
@@ -1134,67 +1191,36 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
                                   className={`grid ${receiptBreakdownGridColumns} ${receiptBreakdownGridSpacing} items-start py-3`}
                                 >
                                   <div className="col-span-3 min-w-0 sm:col-span-1">
-                                    {editingItemId === item.id ? (
-                                      <div className="flex items-center gap-1.5">
+                                    {isEditMode && item.id ? (
+                                      <div className="min-w-0">
+                                        <label htmlFor={`receipt-item-${item.id}`} className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                                          Item name
+                                        </label>
                                         <input
-                                          value={itemDisplayNameDraft}
-                                          onChange={(event) => setItemDisplayNameDraft(event.target.value)}
+                                          id={`receipt-item-${item.id}`}
+                                          value={itemDisplayNameDrafts[item.id] ?? getItemDisplayName(item)}
+                                          onChange={(event) => setItemDisplayNameDrafts((currentDrafts) => ({
+                                            ...currentDrafts,
+                                            [item.id]: event.target.value,
+                                          }))}
                                           onKeyDown={(event) => {
-                                            if (event.key === 'Enter') void handleSaveItemDisplayName(item);
-                                            if (event.key === 'Escape') {
-                                              setEditingItemId(null);
-                                              setItemDisplayNameDraft('');
-                                            }
+                                            if (event.key === 'Escape') cancelEditingReceipt();
                                           }}
                                           maxLength={160}
-                                          autoFocus
                                           aria-label={`Item name for ${getItemDisplayName(item)}`}
-                                          className="min-w-0 flex-1 rounded-md border border-teal-400/40 bg-black/30 px-2 py-1.5 text-sm font-semibold text-white outline-none focus:border-teal-300"
+                                          className="w-full min-w-0 rounded-md border border-teal-400/40 bg-black/30 px-2 py-1.5 text-sm font-semibold text-white outline-none focus:border-teal-300"
                                         />
-                                        <button
-                                          type="button"
-                                          onClick={() => void handleSaveItemDisplayName(item)}
-                                          disabled={savingItemId === item.id}
-                                          aria-label="Save item name"
-                                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-teal-400/30 bg-teal-400/10 text-teal-300 disabled:opacity-50"
-                                        >
-                                          {savingItemId === item.id ? <Clock className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setEditingItemId(null);
-                                            setItemDisplayNameDraft('');
-                                          }}
-                                          aria-label="Cancel item name edit"
-                                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/5 text-gray-500 hover:text-white"
-                                        >
-                                          <X className="h-3.5 w-3.5" />
-                                        </button>
                                       </div>
                                     ) : (
-                                      <div className="flex items-start gap-1.5">
-                                        <div className="min-w-0 flex-1">
-                                          <div
-                                            className="text-sm font-semibold leading-snug text-white break-words [word-break:normal] [overflow-wrap:break-word]"
-                                            title={item.rawDescription?.trim() || item.description?.trim() || undefined}
-                                          >
-                                            {getItemDisplayName(item)}
-                                          </div>
-                                          {item.displayName?.trim() && item.brandName?.trim() && (
-                                            <div className="mt-0.5 text-xs text-gray-500">{item.brandName.trim()}</div>
-                                          )}
+                                      <div className="min-w-0">
+                                        <div
+                                          className="break-words text-sm font-semibold leading-snug text-white [overflow-wrap:anywhere] [word-break:normal]"
+                                          title={item.rawDescription?.trim() || item.description?.trim() || undefined}
+                                        >
+                                          {getItemDisplayName(item)}
                                         </div>
-                                        {canEditStructuredReceipt && item.id && (
-                                          <button
-                                            type="button"
-                                            onClick={() => startEditingItem(item)}
-                                            aria-label={`Edit ${getItemDisplayName(item)}`}
-                                            title="Edit item name"
-                                            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-gray-600 transition-colors hover:bg-white/5 hover:text-teal-300"
-                                          >
-                                            <Pencil className="h-3 w-3" />
-                                          </button>
+                                        {item.displayName?.trim() && item.brandName?.trim() && (
+                                          <div className="mt-0.5 break-words text-xs text-gray-500 [overflow-wrap:anywhere]">{item.brandName.trim()}</div>
                                         )}
                                       </div>
                                     )}
@@ -1205,17 +1231,17 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
                                       </div>
                                     )}
                                   </div>
-                                  <div className="min-w-0 self-start text-left text-xs text-gray-300 sm:text-right sm:text-sm">
+                                  <div className="min-w-0 self-start break-words text-left text-[11px] text-gray-300 [overflow-wrap:anywhere] sm:text-right sm:text-sm">
                                     <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500 sm:hidden">Qty</span>
                                     {formatOptionalQuantity(item.quantity, item.quantityUnit)}
                                   </div>
-                                  <div className="min-w-0 self-start text-left text-xs text-gray-300 sm:text-right sm:text-sm">
+                                  <div className="min-w-0 self-start break-words text-left text-[11px] text-gray-300 [overflow-wrap:anywhere] sm:text-right sm:text-sm">
                                     <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500 sm:hidden">Unit</span>
                                     {section.key === 'discount'
                                       ? formatOptionalDeductionMoney(receiptCurrencySymbol, item.unitPrice)
                                       : formatOptionalMoney(receiptCurrencySymbol, item.unitPrice)}
                                   </div>
-                                  <div className={`min-w-0 self-start break-words text-right text-xs font-semibold sm:text-sm ${section.key === 'discount' ? 'text-emerald-400' : 'text-white'}`}>
+                                  <div className={`min-w-0 self-start break-words text-right text-[11px] font-semibold [overflow-wrap:anywhere] sm:text-sm ${section.key === 'discount' ? 'text-emerald-400' : 'text-white'}`}>
                                     <span className="mb-1 block text-left text-[10px] font-bold uppercase tracking-wide text-gray-500 sm:hidden">Total</span>
                                     {section.key === 'discount'
                                       ? formatOptionalDeductionMoney(receiptCurrencySymbol, item.lineTotal)
@@ -1240,10 +1266,10 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
                       {visibleSummaryRows.map((row) => (
                         <div
                           key={row.label}
-                          className="flex items-center justify-between text-gray-400 text-sm"
+                          className="flex min-w-0 items-start justify-between gap-3 text-sm text-gray-400"
                         >
-                          <span>{row.label}</span>
-                          <span className={row.isDiscount ? 'text-emerald-400' : undefined}>
+                          <span className="min-w-0 break-words">{row.label}</span>
+                          <span className={`min-w-0 shrink-0 break-words text-right [overflow-wrap:anywhere] ${row.isDiscount ? 'text-emerald-400' : ''}`}>
                             {row.isDiscount && row.value !== null
                               ? `-${formatMoney(receiptCurrencySymbol, Math.abs(row.value))}`
                               : formatOptionalMoney(receiptCurrencySymbol, row.value)}
@@ -1251,9 +1277,9 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
                         </div>
                       ))}
                       {hasMeaningfulOriginalTotal && (
-                        <div className="flex items-center justify-between text-white font-bold text-lg pt-2 border-t border-white/10">
+                        <div className="flex min-w-0 items-start justify-between gap-3 border-t border-white/10 pt-2 text-lg font-bold text-white">
                           <span>Total</span>
-                          <span>{formatMoney(displayOriginalCurrencySymbol, displayOriginalTotal)}</span>
+                          <span className="min-w-0 break-words text-right [overflow-wrap:anywhere]">{formatMoney(displayOriginalCurrencySymbol, displayOriginalTotal)}</span>
                         </div>
                       )}
                     </div>
@@ -1266,10 +1292,10 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
                         {activeReceiptPayments.map((payment) => (
                           <div
                             key={payment.id}
-                            className="flex items-center justify-between text-sm text-gray-300"
+                            className="flex min-w-0 items-start justify-between gap-3 text-sm text-gray-300"
                           >
-                            <span>{payment.label}</span>
-                            <span className="font-semibold text-white">
+                            <span className="min-w-0 break-words [overflow-wrap:anywhere]">{payment.label}</span>
+                            <span className="min-w-0 shrink-0 break-words text-right font-semibold text-white [overflow-wrap:anywhere]">
                               {formatMoney(getCurrencySymbol(payment.currencyCode || receipt.currency), payment.amount)}
                             </span>
                           </div>

@@ -1050,9 +1050,21 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
-        <div className="mb-7">
-          <h1 className="text-3xl font-bold text-white">Receipts</h1>
-          <p className="mt-2 text-sm text-gray-400">Your purchases, in one place.</p>
+        <div className="mb-7 flex min-w-0 flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-3xl font-bold text-white">Receipts</h1>
+            <p className="mt-2 text-sm text-gray-400">Your purchases, in one place.</p>
+          </div>
+          <motion.button
+            type="button"
+            whileTap={{ scale: 0.98 }}
+            onClick={onNavigateToScan}
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-teal-400 px-4 py-2.5 text-sm font-bold text-black shadow-[0_10px_30px_rgba(45,212,191,0.12)] transition-colors hover:bg-teal-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-200 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+            aria-label="Scan receipt"
+          >
+            <ScanLine className="h-5 w-5" strokeWidth={1.8} />
+            Scan receipt
+          </motion.button>
         </div>
 
         {primaryAction ? <div className="mb-4 rounded-2xl border border-amber-300/25 bg-gradient-to-br from-amber-400/12 to-teal-400/5 p-5"><div className="flex items-start gap-3"><div className="rounded-xl border border-amber-300/25 bg-amber-400/10 p-2.5"><AlertCircle className="h-5 w-5 text-amber-200" /></div><div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-200">{actionHeading}</p><p className="mt-1 text-2xl font-bold text-white">{primaryAction.detail}</p></div></div></div> : null}
