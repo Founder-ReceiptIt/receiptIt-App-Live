@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test:responsive": "node scripts/check-responsive-guard.mjs",
+    "test:share-target": "node scripts/check-share-target.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
   },
   "dependencies": {

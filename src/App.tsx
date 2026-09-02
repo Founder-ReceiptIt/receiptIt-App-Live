@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LoadingScreen } from './components/landing/LoadingScreen';
 import { TopNav } from './components/app/TopNav';
@@ -18,6 +18,7 @@ import { Toast } from './components/app/Toast';
 import { ToastProvider } from './contexts/ToastContext';
 import { useAuth } from './contexts/AuthContext';
 import { requestReceiptSectionCapture } from './lib/receiptCaptureUtils';
+import { getShareTargetIntentId, recordShareTargetEvent } from './lib/shareTargetInbox';
 
 const APP_TABS = ['wallet', 'alias', 'scan', 'insights', 'settings'] as const;
 type AppTab = typeof APP_TABS[number];
@@ -34,6 +35,7 @@ function App() {
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [quickScanRequestId, setQuickScanRequestId] = useState(0);
+  const recordedShareAuthInterruptionRef = useRef<string | null>(null);
   const isAuthenticated = Boolean(user && session);
   const shouldShowBootSplash = authLoading || (isAuthenticated && !needsAliasSetup && !showApp);
 
@@ -85,6 +87,21 @@ function App() {
       setActiveTab('scan');
     }
   }, [user, session]);
+
+  useEffect(() => {
+    const shareTargetId = getShareTargetIntentId();
+    if (!shareTargetId || authLoading) return;
+
+    if (user && session) {
+      setActiveTab('scan');
+      return;
+    }
+
+    if (recordedShareAuthInterruptionRef.current !== shareTargetId) {
+      recordedShareAuthInterruptionRef.current = shareTargetId;
+      void recordShareTargetEvent(shareTargetId, 'auth_interruption').catch(() => undefined);
+    }
+  }, [authLoading, user, session]);
 
   useEffect(() => {
     if (authLoading) {

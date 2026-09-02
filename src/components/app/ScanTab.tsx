@@ -13,6 +13,23 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { consumeReceiptSectionCaptureRequest } from '../../lib/receiptCaptureUtils';
+import {
+  clearShareTargetLocation,
+  getShareTargetErrorCode,
+  getShareTargetIntentId,
+  readPendingShareTarget,
+  recordShareTargetEvent,
+  removePendingShareTarget,
+  SHARE_TARGET_MAX_FILES,
+  SHARE_TARGET_MAX_TOTAL_BYTES,
+  type ShareTargetEvent,
+} from '../../lib/shareTargetInbox';
+import {
+  computeSharedTextHash,
+  createSharedTextEvidenceFile,
+  isLikelyPurchaseText,
+  normaliseSharedImageFile,
+} from '../../lib/sharedReceiptEvidence';
 
 type ScanState = 'idle' | 'review' | 'uploading' | 'processing' | 'error';
 
@@ -162,6 +179,7 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedImageFiles, setSelectedImageFiles] = useState<File[]>([]);
   const [isCombiningImages, setIsCombiningImages] = useState(false);
+  const [isSharedReceipt, setIsSharedReceipt] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [errorTitle, setErrorTitle] = useState<string>('Couldn’t add receipt');
@@ -175,6 +193,14 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
   const handledQuickScanRequestRef = useRef(0);
   const activeScanTokenRef = useRef(0);
   const pendingReceiptIdRef = useRef<string | null>(null);
+  const pendingShareTargetIdRef = useRef<string | null>(null);
+  const handledShareTargetIdRef = useRef<string | null>(null);
+  const startScanRef = useRef<(
+    file: File,
+    uploadKind: ReceiptUploadKind,
+    scanToken: number,
+    precomputedFileHash?: string,
+  ) => Promise<void>>(async () => undefined);
 
   const clearScanningStorage = () => {
     localStorage.removeItem('isScanning');
@@ -182,6 +208,31 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
   };
 
   const isScanActive = (scanToken: number) => activeScanTokenRef.current === scanToken;
+
+  const recordPendingShareFailure = (detailCode: string) => {
+    const shareTargetId = pendingShareTargetIdRef.current;
+    if (!shareTargetId) return;
+    handledShareTargetIdRef.current = null;
+    void recordShareTargetEvent(shareTargetId, 'upload_failed', detailCode).catch(() => undefined);
+  };
+
+  const completePendingShare = async (event: ShareTargetEvent, detailCode?: string) => {
+    const shareTargetId = pendingShareTargetIdRef.current;
+    if (!shareTargetId) return;
+
+    try {
+      if (event === 'processing_handoff') {
+        await recordShareTargetEvent(shareTargetId, 'ingestion_started');
+      }
+      await recordShareTargetEvent(shareTargetId, event, detailCode);
+      await removePendingShareTarget(shareTargetId);
+    } catch {
+      // The receipt handoff itself remains authoritative. Local share diagnostics
+      // must never turn a successful receipt into a user-visible failure.
+    }
+    pendingShareTargetIdRef.current = null;
+    clearShareTargetLocation();
+  };
 
   const removeUploadedReceiptFile = async (storagePath: string) => {
     const { error } = await supabase.storage.from('receipts').remove([storagePath]);
@@ -560,6 +611,7 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
               : 'This exact file is already in your Wallet.'
           );
 
+          await completePendingShare('duplicate_detected');
           isScanningRef.current = false;
           clearScanningStorage();
           resetScan();
@@ -591,6 +643,7 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
 
       if (uploadError) {
         if (isScanActive(scanToken)) {
+          recordPendingShareFailure('storage_upload_failed');
           setErrorMessage('We couldn’t upload this file. Please try again.');
           setScanState('error');
           clearScanningStorage();
@@ -650,6 +703,7 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
             console.error('[ScanTab] Failed to remove uploaded file after record creation failed:', cleanupError);
           }
           if (isScanActive(scanToken)) {
+            recordPendingShareFailure('receipt_row_failed');
             setErrorMessage('We couldn’t start processing this file. Please try again.');
             setScanState('error');
             clearScanningStorage();
@@ -664,6 +718,7 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
             console.error('[ScanTab] Failed to remove uploaded file after record verification failed:', cleanupError);
           }
           if (isScanActive(scanToken)) {
+            recordPendingShareFailure('receipt_row_missing');
             setErrorMessage('We couldn’t start processing this file. Please try again.');
             setScanState('error');
             clearScanningStorage();
@@ -693,6 +748,7 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
         // owner-scoped processing row has been committed. Scanner Dispatch is
         // database-triggered, so processing is now server-owned and survives the
         // Scan screen, a backgrounded phone, or a closed browser.
+        await completePendingShare('processing_handoff');
         showToast('Receipt added', 'Processing in the background.');
         isScanningRef.current = false;
         clearScanningStorage();
@@ -710,6 +766,7 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
     } catch (error) {
       console.error('[ScanTab] Error during scan:', error);
       if (isScanActive(scanToken)) {
+        recordPendingShareFailure('receipt_handoff_failed');
         setErrorMessage('We couldn’t process this file. Please try again.');
         setErrorTitle('Couldn’t add receipt');
         setFailedReceiptSaved(Boolean(pendingReceiptIdRef.current));
@@ -729,6 +786,7 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
     setSelectedFile(null);
     setSelectedImageFiles([]);
     setIsCombiningImages(false);
+    setIsSharedReceipt(false);
     setSectionCaptureMode(false);
     setErrorTitle('Couldn’t add receipt');
     setFailedReceiptSaved(false);
@@ -745,10 +803,238 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
     clearScanningStorage();
   };
 
+  startScanRef.current = startScan;
+
+  useEffect(() => {
+    const shareTargetId = getShareTargetIntentId();
+    const shareErrorCode = getShareTargetErrorCode();
+    if (!user || scanState !== 'idle') return;
+
+    if (!shareTargetId) {
+      if (shareErrorCode && handledShareTargetIdRef.current !== `error:${shareErrorCode}`) {
+        handledShareTargetIdRef.current = `error:${shareErrorCode}`;
+        setErrorTitle('Couldn’t add shared receipt');
+        setErrorMessage('The shared item could not be received. Open it again and share it to receiptIt.');
+        setFailedReceiptSaved(false);
+        setScanState('error');
+        clearShareTargetLocation();
+      }
+      return;
+    }
+
+    if (handledShareTargetIdRef.current === shareTargetId) return;
+    handledShareTargetIdRef.current = shareTargetId;
+    pendingShareTargetIdRef.current = shareTargetId;
+    setIsSharedReceipt(true);
+
+    let cancelled = false;
+
+    const rejectShare = async (
+      message: string,
+      event: ShareTargetEvent,
+      detailCode: string,
+    ) => {
+      if (cancelled) return;
+      try {
+        await recordShareTargetEvent(shareTargetId, event, detailCode);
+        await removePendingShareTarget(shareTargetId);
+      } catch {
+        // A local diagnostics failure must not obscure the useful next action.
+      }
+      pendingShareTargetIdRef.current = null;
+      clearShareTargetLocation();
+      if (cancelled) return;
+      setErrorTitle('Couldn’t add shared receipt');
+      setErrorMessage(message);
+      setFailedReceiptSaved(false);
+      setScanState('error');
+      isScanningRef.current = false;
+    };
+
+    const beginSharedFile = (file: File, kind: ReceiptUploadKind, fileHash?: string) => {
+      if (cancelled) return;
+      const scanToken = activeScanTokenRef.current + 1;
+      activeScanTokenRef.current = scanToken;
+      pendingReceiptIdRef.current = null;
+      isScanningRef.current = true;
+      setSelectedFile(file);
+      setSelectedImageFiles([]);
+      setPreviewUrl(kind === 'image' ? URL.createObjectURL(file) : null);
+      setErrorMessage('');
+      setErrorTitle('Couldn’t add receipt');
+      setFailedReceiptSaved(false);
+      setScanState('uploading');
+      window.setTimeout(() => void startScanRef.current(file, kind, scanToken, fileHash), 0);
+    };
+
+    const run = async () => {
+      const pending = await readPendingShareTarget(shareTargetId);
+      if (cancelled) return;
+      if (!pending) {
+        await rejectShare('This shared receipt has expired. Share it to receiptIt again.', 'validation_failed', 'share_expired');
+        return;
+      }
+
+      await recordShareTargetEvent(shareTargetId, 'payload_opened');
+      if (cancelled) return;
+
+      if (pending.errorCode) {
+        const messageByCode: Record<string, string> = {
+          too_many_files: `Share up to ${SHARE_TARGET_MAX_FILES} images for one receipt.`,
+          file_too_large: 'One of these files is too large. The limit is 10MB per file.',
+          share_too_large: 'These images are too large together. Choose up to 30MB in total.',
+          text_too_large: 'This shared message is too long to add safely.',
+          empty_share: 'There was no receipt or purchase information to add.',
+        };
+        await rejectShare(
+          messageByCode[pending.errorCode] || 'This shared item is not supported. Share a JPG, PNG, WebP or PDF receipt instead.',
+          'validation_failed',
+          pending.errorCode,
+        );
+        return;
+      }
+
+      if (pending.files.length > 0) {
+        if (pending.files.length > SHARE_TARGET_MAX_FILES) {
+          await rejectShare(`Share up to ${SHARE_TARGET_MAX_FILES} images for one receipt.`, 'validation_failed', 'too_many_files');
+          return;
+        }
+
+        const files = await Promise.all(pending.files.map(async (sharedFile, index) => {
+          const extensionByType: Record<string, string> = {
+            'application/pdf': 'pdf',
+            'image/jpeg': 'jpg',
+            'image/png': 'png',
+            'image/webp': 'webp',
+          };
+          const sharedName = sharedFile.name.trim();
+          const fileExtension = sharedName.includes('.') ? sharedName.split('.').pop()?.toLowerCase() : null;
+          const fallbackExtension = extensionByType[sharedFile.type] || 'bin';
+          const fileName = fileExtension
+            ? sharedName
+            : `shared-receipt-${index + 1}.${fallbackExtension}`;
+          const file = new window.File([sharedFile.blob], fileName, {
+            type: sharedFile.type || sharedFile.blob.type,
+            lastModified: sharedFile.lastModified,
+          });
+          return normaliseSharedImageFile(file);
+        }));
+
+        if (files.reduce((total, file) => total + file.size, 0) > SHARE_TARGET_MAX_TOTAL_BYTES) {
+          await rejectShare('These images are too large together. Choose up to 30MB in total.', 'validation_failed', 'share_too_large');
+          return;
+        }
+
+        if (files.length > 1 && files.some(isPdfSelection)) {
+          await rejectShare('Upload one PDF at a time.', 'validation_failed', 'multiple_pdf_share');
+          return;
+        }
+
+        const validations = await Promise.all(files.map((file) => validateReceiptUpload(file)));
+        const invalidValidation = validations.find((validation) => !validation.valid);
+        if (invalidValidation && !invalidValidation.valid) {
+          await rejectShare(invalidValidation.message, 'validation_failed', invalidValidation.errorReason);
+          return;
+        }
+
+        if (files.length === 1) {
+          const validation = validations[0];
+          if (!validation.valid) return;
+          beginSharedFile(files[0], validation.kind);
+          return;
+        }
+
+        const sourcePixels = validations.reduce((total, validation) => {
+          if (!validation.valid || !validation.dimensions) return total;
+          return total + validation.dimensions.width * validation.dimensions.height;
+        }, 0);
+        if (sourcePixels > MAX_MULTI_RECEIPT_SOURCE_PIXELS) {
+          await rejectShare('These images are too high-resolution together. Choose clearer or smaller images and try again.', 'validation_failed', 'image_dimension_limit');
+          return;
+        }
+
+        setIsCombiningImages(true);
+        const [fileHash, combinedFile] = await Promise.all([
+          computeMultiImageHash(files),
+          combineReceiptImages(files),
+        ]);
+        const combinedValidation = await validateReceiptUpload(combinedFile);
+        setIsCombiningImages(false);
+        if (!combinedValidation.valid || combinedValidation.kind !== 'image') {
+          await rejectShare(
+            !combinedValidation.valid ? combinedValidation.message : 'These images could not be prepared as one receipt.',
+            'validation_failed',
+            !combinedValidation.valid ? combinedValidation.errorReason : 'combined_image_invalid',
+          );
+          return;
+        }
+
+        beginSharedFile(combinedFile, 'image', fileHash);
+        return;
+      }
+
+      const textParts = [pending.title.trim(), pending.text.trim()].filter(Boolean);
+      if (pending.url.trim() && !textParts.some((part) => part.includes(pending.url.trim()))) {
+        textParts.push(pending.url.trim());
+      }
+      const sharedText = textParts.join('\n').trim();
+
+      if (!isLikelyPurchaseText(sharedText)) {
+        if (pending.url.trim()) {
+          await rejectShare(
+            'For now, save or screenshot the receipt, then share the image or PDF.',
+            'unsupported_url',
+            'url_import_not_enabled',
+          );
+        } else {
+          await rejectShare(
+            'We couldn’t find enough purchase information in this message. Share a receipt image, PDF or clear order message.',
+            'unsupported_content',
+            'text_not_purchase_related',
+          );
+        }
+        return;
+      }
+
+      const [evidenceFile, fileHash] = await Promise.all([
+        createSharedTextEvidenceFile(sharedText),
+        computeSharedTextHash(sharedText),
+      ]);
+      const validation = await validateReceiptUpload(evidenceFile);
+      if (!validation.valid || validation.kind !== 'image') {
+        await rejectShare(
+          !validation.valid ? validation.message : 'This shared message could not be prepared safely.',
+          'validation_failed',
+          !validation.valid ? validation.errorReason : 'text_evidence_invalid',
+        );
+        return;
+      }
+      beginSharedFile(evidenceFile, 'image', fileHash);
+    };
+
+    void run().catch((error: unknown) => {
+      const candidate = error instanceof Error ? error.message : '';
+      const message = /^(This shared|These images|Your browser)/.test(candidate)
+        ? candidate
+        : 'This shared receipt could not be prepared. Open it again and try once more.';
+      void rejectShare(message, 'validation_failed', 'share_preparation_failed');
+    });
+
+    return () => {
+      cancelled = true;
+      if (handledShareTargetIdRef.current === shareTargetId && pendingShareTargetIdRef.current === shareTargetId) {
+        handledShareTargetIdRef.current = null;
+      }
+    };
+  }, [scanState, user]);
+
   const handleCancel = () => {
     console.log('[ScanTab] User cancelled scan');
     const pendingReceiptId = pendingReceiptIdRef.current;
     const currentUserId = user?.id;
+    if (pendingShareTargetIdRef.current) {
+      void completePendingShare('upload_failed', 'user_cancelled');
+    }
 
     resetScan();
 
@@ -928,11 +1214,19 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
                   </div>
 
                   <h2 className="text-2xl font-bold text-white mb-2">
-                    {isCombiningImages ? 'Putting your receipt together...' : scanState === 'uploading' ? 'Uploading Receipt...' : 'Preparing your receipt...'}
+                    {isCombiningImages
+                      ? 'Putting your receipt together...'
+                      : isSharedReceipt
+                      ? 'Adding shared receipt...'
+                      : scanState === 'uploading'
+                      ? 'Uploading receipt...'
+                      : 'Preparing your receipt...'}
                   </h2>
                   <p className="text-gray-400 mb-6">
                     {isCombiningImages
                       ? 'Keeping your selected images together in one receipt'
+                      : isSharedReceipt
+                      ? 'Saving it privately before processing begins'
                       : scanState === 'uploading'
                       ? 'Uploading your receipt to secure storage'
                       : 'Getting everything ready for scanning'
