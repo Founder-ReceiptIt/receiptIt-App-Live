@@ -171,6 +171,7 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
   const pickerModeRef = useRef<ReceiptPickerMode>('files');
   const isScanningRef = useRef(false);
   const restoredPickerRef = useRef(false);
+  const pickerOpenedThisMountRef = useRef(false);
   const handledQuickScanRequestRef = useRef(0);
   const activeScanTokenRef = useRef(0);
   const pendingReceiptIdRef = useRef<string | null>(null);
@@ -227,7 +228,7 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
   // ANDROID FIX: Restore scanning state after page reload (Android kills tab when camera opens)
   useEffect(() => {
     const isScanning = localStorage.getItem('isScanning');
-    if (isScanning === 'true') {
+    if (isScanning === 'true' && !pickerOpenedThisMountRef.current) {
       console.log('[ScanTab] Restored scanning state from localStorage after reload');
       // Show waiting state - the file picker should still deliver the file
       setScanState('uploading');
@@ -298,6 +299,7 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
   };
 
   const openCameraPicker = useCallback(() => {
+    pickerOpenedThisMountRef.current = true;
     pickerModeRef.current = 'camera';
     localStorage.setItem('isScanning', 'true');
     localStorage.setItem('scanningSource', 'camera');
