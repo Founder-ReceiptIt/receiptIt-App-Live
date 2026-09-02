@@ -6,7 +6,9 @@ const files = Object.fromEntries(await Promise.all([
   'src/components/app/BottomNav.tsx',
   'src/components/app/AliasTab.tsx',
   'src/components/app/ReceiptModal.tsx',
+  'src/components/app/ScanTab.tsx',
   'src/components/app/WalletTab.tsx',
+  'public/manifest.webmanifest',
   'src/components/auth/AlphaGatekeeper.tsx',
   'src/components/auth/AuthForm.tsx',
   'src/components/auth/AliasSetupModal.tsx',
@@ -52,6 +54,14 @@ check(!receiptModal.includes('<Pencil'), 'scattered receipt-field pencil actions
 const wallet = files['src/components/app/WalletTab.tsx'];
 check(wallet.includes('aria-label="Scan receipt"'), 'Wallet must retain the one-tap Scan receipt shortcut');
 check(wallet.includes('onClick={onNavigateToScan}'), 'Wallet Quick Scan must reuse the existing Scan route');
+
+const scan = files['src/components/app/ScanTab.tsx'];
+check(scan.includes("showToast('Receipt added', 'Processing in the background.')"), 'Scan must release the user after the durable processing handoff');
+check(!scan.includes('receipt-status-'), 'Scan must not wait for AI extraction after the durable handoff');
+check(scan.includes("status: 'processing'"), 'Scan must commit a processing receipt before confirming it was added');
+
+const manifest = JSON.parse(files['public/manifest.webmanifest']);
+check(manifest.shortcuts?.some((shortcut) => shortcut.name === 'Scan receipt' && shortcut.url === '/#scan'), 'PWA manifest must expose the Scan receipt shortcut');
 
 check(!files['src/components/app/AliasTab.tsx'].includes('whitespace-nowrap'), 'long purchase addresses must be allowed to wrap');
 check(files['src/components/auth/AuthForm.tsx'].includes('ri-auth-page'), 'authentication must use the scroll-safe page layout');

@@ -28,5 +28,20 @@
       "type": "image/png",
       "purpose": "maskable"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Scan receipt",
+      "short_name": "Scan receipt",
+      "description": "Open receipt capture",
+      "url": "/#scan",
+      "icons": [
+        {
+          "src": "/pwa-icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
   ]
 }

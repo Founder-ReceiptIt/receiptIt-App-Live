@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, X, Camera, CheckCircle, Loader2, FileImage, File, Clock } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
+import { Upload, X, Camera, Loader2, FileImage, File } from 'lucide-react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { flushSync } from 'react-dom';
 import { supabase } from '../../lib/supabase';
 import {
@@ -13,12 +13,13 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { consumeReceiptSectionCaptureRequest } from '../../lib/receiptCaptureUtils';
-import { getReceiptFailureDetails } from '../../lib/receiptUiUtils';
 
-type ScanState = 'idle' | 'review' | 'uploading' | 'processing' | 'pending' | 'success' | 'error';
+type ScanState = 'idle' | 'review' | 'uploading' | 'processing' | 'error';
 
 interface ScanTabProps {
   onNavigateToWallet: () => void;
+  quickScanRequestId?: number;
+  onQuickScanHandled?: () => void;
 }
 
 /**
@@ -154,7 +155,7 @@ const combineReceiptImages = async (files: File[]): Promise<File> => {
   throw new Error('These images are too detailed to combine safely. Choose clearer or smaller images and try again.');
 };
 
-export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
+export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickScanHandled }: ScanTabProps) {
   const { user } = useAuth();
   const { showToast } = useToast();
   const [scanState, setScanState] = useState<ScanState>('idle');
@@ -170,86 +171,13 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
   const pickerModeRef = useRef<ReceiptPickerMode>('files');
   const isScanningRef = useRef(false);
   const restoredPickerRef = useRef(false);
+  const handledQuickScanRequestRef = useRef(0);
   const activeScanTokenRef = useRef(0);
   const pendingReceiptIdRef = useRef<string | null>(null);
-  const statusChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const statusFallbackTimeoutRef = useRef<number | null>(null);
 
   const clearScanningStorage = () => {
     localStorage.removeItem('isScanning');
     localStorage.removeItem('scanningSource');
-  };
-
-  const cleanupReceiptStatusWatcher = () => {
-    if (statusFallbackTimeoutRef.current !== null) {
-      window.clearTimeout(statusFallbackTimeoutRef.current);
-      statusFallbackTimeoutRef.current = null;
-    }
-
-    if (statusChannelRef.current) {
-      supabase.removeChannel(statusChannelRef.current);
-      statusChannelRef.current = null;
-    }
-  };
-
-  const resolveScanSuccess = (scanToken: number) => {
-    if (!isScanActive(scanToken)) {
-      return;
-    }
-
-    cleanupReceiptStatusWatcher();
-    setErrorMessage('');
-    setScanState('success');
-    clearScanningStorage();
-    isScanningRef.current = false;
-
-    window.setTimeout(() => {
-      if (!isScanActive(scanToken)) return;
-
-      resetScan();
-      onNavigateToWallet();
-    }, 1500);
-  };
-
-  const resolveScanPending = (scanToken: number) => {
-    if (!isScanActive(scanToken)) {
-      return;
-    }
-
-    cleanupReceiptStatusWatcher();
-    clearScanningStorage();
-    isScanningRef.current = false;
-    setScanState('pending');
-  };
-
-  const resolveScanFailure = (
-    scanToken: number,
-    status: string,
-    errorReason?: string | null,
-    createdAt?: string | null,
-    processingAttemptStartedAt?: string | null,
-  ) => {
-    if (!isScanActive(scanToken)) {
-      return;
-    }
-
-    cleanupReceiptStatusWatcher();
-    const failureDetails = getReceiptFailureDetails({
-      status,
-      errorReason,
-      createdAt,
-      processingAttemptStartedAt,
-    });
-    setErrorTitle(failureDetails?.title || 'Couldn’t process receipt');
-    setErrorMessage(
-      failureDetails
-        ? [failureDetails.reason, failureDetails.advice].filter(Boolean).join(' ')
-        : 'We couldn’t read enough of this receipt. Try again from your Wallet.'
-    );
-    setFailedReceiptSaved(true);
-    setScanState('error');
-    isScanningRef.current = false;
-    clearScanningStorage();
   };
 
   const isScanActive = (scanToken: number) => activeScanTokenRef.current === scanToken;
@@ -324,12 +252,6 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     }
   }, []);
 
-  useEffect(() => {
-    return () => {
-      cleanupReceiptStatusWatcher();
-    };
-  }, []);
-
   const showSelectionError = (message: string) => {
     setErrorTitle('Couldn’t add receipt');
     setErrorMessage(message);
@@ -375,7 +297,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     return true;
   };
 
-  const openCameraPicker = () => {
+  const openCameraPicker = useCallback(() => {
     pickerModeRef.current = 'camera';
     localStorage.setItem('isScanning', 'true');
     localStorage.setItem('scanningSource', 'camera');
@@ -392,7 +314,7 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
         fileInputRef.current.setAttribute('multiple', '');
       }
     }, 100);
-  };
+  }, []);
 
   const openFilePicker = () => {
     pickerModeRef.current = 'files';
@@ -401,6 +323,24 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     fileInputRef.current?.setAttribute('multiple', '');
     fileInputRef.current?.click();
   };
+
+  useLayoutEffect(() => {
+    if (!quickScanRequestId || handledQuickScanRequestRef.current === quickScanRequestId || scanState !== 'idle') {
+      return;
+    }
+
+    handledQuickScanRequestRef.current = quickScanRequestId;
+    onQuickScanHandled?.();
+
+    // A Wallet Quick Scan originates from a real user tap. Reuse that short-lived
+    // browser activation when the platform still exposes it; otherwise leave the
+    // normal Scan screen visible rather than attempting a fragile camera hack.
+    if (navigator.userActivation && !navigator.userActivation.isActive) {
+      return;
+    }
+
+    openCameraPicker();
+  }, [onQuickScanHandled, openCameraPicker, quickScanRequestId, scanState]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     // CRITICAL: Prevent any default browser behavior
@@ -657,6 +597,11 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
       }
 
       if (!isScanActive(scanToken)) {
+        try {
+          await removeUploadedReceiptFile(uploadData.path);
+        } catch (cleanupError) {
+          console.error('[ScanTab] Failed to remove the canceled upload:', cleanupError);
+        }
         return;
       }
 
@@ -726,7 +671,6 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
         console.log('Receipt created successfully:', insertData);
 
-        const merchant = insertData[0]?.merchant || undefined;
         const receiptId = insertData[0]?.id;
         if (receiptId) {
           pendingReceiptIdRef.current = receiptId;
@@ -743,96 +687,16 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
           return;
         }
 
-        showToast('New receipt received', merchant !== 'Analyzing...' ? merchant : undefined);
-
-        const receiptStatusChannel = supabase
-          .channel(`receipt-status-${receiptId}`)
-          .on(
-            'postgres_changes',
-            {
-              event: 'UPDATE',
-              schema: 'public',
-              table: 'receipts',
-              filter: `id=eq.${receiptId}`,
-            },
-            (payload) => {
-              const updatedStatus = payload.new?.status as string | undefined;
-
-              if (!updatedStatus || !isScanActive(scanToken)) {
-                return;
-              }
-
-              if (updatedStatus === 'completed' || updatedStatus === 'parsed') {
-                console.log('[ScanTab] Receipt status resolved to success:', updatedStatus);
-                resolveScanSuccess(scanToken);
-                return;
-              }
-
-              if (updatedStatus === 'failed' || updatedStatus === 'error' || updatedStatus === 'needs_input' || updatedStatus === 'needs_review' || updatedStatus === 'rejected') {
-                console.log('[ScanTab] Receipt status resolved to error:', updatedStatus);
-                resolveScanFailure(
-                  scanToken,
-                  updatedStatus,
-                  payload.new?.error_reason,
-                  payload.new?.created_at,
-                  payload.new?.processing_attempt_started_at,
-                );
-              }
-            }
-          )
-          .subscribe();
-
-        statusChannelRef.current = receiptStatusChannel;
-
-        statusFallbackTimeoutRef.current = window.setTimeout(() => {
-          void (async () => {
-            if (!isScanActive(scanToken)) {
-              return;
-            }
-
-            // Realtime is a fast-path, not the source of truth. A mobile tab can
-            // briefly lose its channel while the processor still completes. Read
-            // the owner-scoped row once before showing the recoverable pending
-            // state so a successfully parsed receipt never looks stuck.
-            const { data: latestReceipt, error: latestReceiptError } = await supabase
-              .from('receipts')
-              .select('status, error_reason, created_at, processing_attempt_started_at')
-              .eq('id', receiptId)
-              .eq('user_id', user.id)
-              .maybeSingle();
-
-            if (!isScanActive(scanToken)) {
-              return;
-            }
-
-            if (!latestReceiptError && latestReceipt) {
-              const latestStatus = latestReceipt.status as string | undefined;
-
-              if (latestStatus === 'completed' || latestStatus === 'parsed') {
-                console.log('[ScanTab] Receipt completed without a realtime event:', latestStatus);
-                resolveScanSuccess(scanToken);
-                return;
-              }
-
-              if (latestStatus && ['failed', 'error', 'needs_input', 'needs_review', 'rejected'].includes(latestStatus)) {
-                console.log('[ScanTab] Receipt failure resolved by status check:', latestStatus);
-                resolveScanFailure(
-                  scanToken,
-                  latestStatus,
-                  latestReceipt.error_reason,
-                  latestReceipt.created_at,
-                  latestReceipt.processing_attempt_started_at,
-                );
-                return;
-              }
-            } else if (latestReceiptError) {
-              console.warn('[ScanTab] Could not confirm receipt status after realtime timeout:', latestReceiptError);
-            }
-
-            console.log('[ScanTab] Receipt status has not resolved after 30 seconds. Keeping it visible as pending.');
-            resolveScanPending(scanToken);
-          })();
-        }, 30000);
+        // This is the safe handoff boundary: the private original exists and the
+        // owner-scoped processing row has been committed. Scanner Dispatch is
+        // database-triggered, so processing is now server-owned and survives the
+        // Scan screen, a backgrounded phone, or a closed browser.
+        showToast('Receipt added', 'Processing in the background.');
+        isScanningRef.current = false;
+        clearScanningStorage();
+        resetScan();
+        onNavigateToWallet();
+        return;
       } catch (err) {
         console.error('Scan error:', err);
         throw err;
@@ -857,7 +721,6 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
 
   const resetScan = () => {
     console.log('[ScanTab] Resetting scan state');
-    cleanupReceiptStatusWatcher();
     activeScanTokenRef.current += 1;
     isScanningRef.current = false;
     setScanState('idle');
@@ -885,7 +748,6 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
     const pendingReceiptId = pendingReceiptIdRef.current;
     const currentUserId = user?.id;
 
-    cleanupReceiptStatusWatcher();
     resetScan();
 
     if (!pendingReceiptId || !currentUserId) {
@@ -1102,69 +964,6 @@ export function ScanTab({ onNavigateToWallet }: ScanTabProps) {
                       <X className="w-4 h-4 text-red-400" />
                       <span className="font-semibold text-red-400">Cancel</span>
                     </div>
-                  </button>
-                </div>
-              </motion.div>
-            )}
-
-            {scanState === 'success' && (
-              <motion.div
-                key="success"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.3 }}
-                className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-xl sm:p-8"
-              >
-                <div className="text-center">
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                  >
-                    <CheckCircle className="w-20 h-20 text-green-400 mx-auto mb-4" strokeWidth={1.5} />
-                  </motion.div>
-
-                  <h2 className="text-2xl font-bold text-white mb-2">Receipt uploaded</h2>
-                  <p className="text-gray-400 mb-6">We’re now scanning your receipt</p>
-
-                  <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4 mb-6">
-                    <p className="text-sm text-gray-400">
-                      It will appear in your wallet once your details are ready.
-                    </p>
-                  </div>
-
-                  <p className="text-sm text-green-400 font-semibold">
-                    Taking you to your wallet...
-                  </p>
-                </div>
-              </motion.div>
-            )}
-
-            {scanState === 'pending' && (
-              <motion.div
-                key="pending"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.3 }}
-                className="rounded-2xl border border-amber-400/20 bg-white/5 p-5 backdrop-blur-xl sm:p-8"
-              >
-                <div className="text-center">
-                  <Clock className="w-20 h-20 text-amber-300 mx-auto mb-4" strokeWidth={1.5} />
-                  <h2 className="text-2xl font-bold text-white mb-2">Receipt is still processing</h2>
-                  <p className="text-gray-400 mb-6">
-                    Your receipt was safely uploaded. It is taking longer than usual, so you can check its live status in your Wallet.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      resetScan();
-                      onNavigateToWallet();
-                    }}
-                    className="w-full backdrop-blur-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/30 rounded-xl py-3 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
-                  >
-                    <span className="font-semibold text-teal-400">View Wallet</span>
                   </button>
                 </div>
               </motion.div>

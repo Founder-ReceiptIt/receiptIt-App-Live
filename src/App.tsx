@@ -33,6 +33,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<AppTab>(() => getTabFromLocation());
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [quickScanRequestId, setQuickScanRequestId] = useState(0);
   const isAuthenticated = Boolean(user && session);
   const shouldShowBootSplash = authLoading || (isAuthenticated && !needsAliasSetup && !showApp);
 
@@ -54,6 +55,15 @@ function App() {
 
       return receipts.find((receipt) => receipt.id === currentReceipt.id) || null;
     });
+  }, []);
+
+  const handleQuickScan = useCallback(() => {
+    setQuickScanRequestId((currentRequestId) => currentRequestId + 1);
+    handleTabChange('scan');
+  }, [handleTabChange]);
+
+  const handleQuickScanHandled = useCallback(() => {
+    setQuickScanRequestId(0);
   }, []);
 
   useEffect(() => {
@@ -166,7 +176,7 @@ function App() {
                       key={refreshKey}
                       onReceiptClick={setSelectedReceipt}
                       onReceiptsChange={handleWalletReceiptsChange}
-                      onNavigateToScan={() => handleTabChange('scan')}
+                      onNavigateToScan={handleQuickScan}
                       onNavigateToAlias={() => handleTabChange('alias')}
                     />
                   </motion.div>
@@ -192,7 +202,11 @@ function App() {
                     exit={{ opacity: 0, x: 20 }}
                     transition={{ duration: 0.3 }}
                   >
-                    <ScanTab onNavigateToWallet={() => handleTabChange('wallet')} />
+                    <ScanTab
+                      onNavigateToWallet={() => handleTabChange('wallet')}
+                      quickScanRequestId={quickScanRequestId}
+                      onQuickScanHandled={handleQuickScanHandled}
+                    />
                   </motion.div>
                 )}
 
