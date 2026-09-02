@@ -3,6 +3,7 @@ import ts from 'typescript';
 
 const workspaceUrl = new URL('../', import.meta.url);
 const amountStateSource = await readFile(new URL('src/lib/receiptAmountState.ts', workspaceUrl), 'utf8');
+const receiptModalSource = await readFile(new URL('src/components/app/ReceiptModal.tsx', workspaceUrl), 'utf8');
 const transpiled = ts.transpileModule(amountStateSource, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 }).outputText;
@@ -21,6 +22,7 @@ assert(!amountState.isReceiptAmountKnown({ amount: 0, status: 'needs_review', me
 assert(amountState.isReceiptAmountKnown({ amount: 0, status: 'parsed', merchant: 'Free Sample Counter' }), 'genuine parsed zero must remain visible');
 assert(amountState.isReceiptAmountKnown({ amount: 0, status: 'needs_review', merchant: 'Transport for London' }), 'explicit review zero must remain visible');
 assert(amountState.isReceiptAmountKnown({ amount: 50, status: 'needs_review', merchant: 'Transport for London' }), 'extracted review amount must remain visible');
+assert(receiptModalSource.includes("if (isDocumentReview) onClose();"), 'keeping a reviewed purchase must close stale review UI');
 
 const blueprint = JSON.parse(await readFile(
   new URL('tmp/async-document-review/RECEIPTIT V2 - IMAGE PROCESSOR.document-review-data.blueprint.json', workspaceUrl),

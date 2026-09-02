@@ -102,4 +102,4 @@ await mkdir(dirname(outputPath), { recursive: true });
 await writeFile(outputPath, `${JSON.stringify(imageBlueprint, null, 2)}\n`);
 
 console.log(outputPath);
-console.log('Module 76 now preserves classified Document Review parent fields using the proven PDF upsert pattern.');
+console.log('Module 76 now preserves Document Review fields without changing the proven Image extraction prompts.');

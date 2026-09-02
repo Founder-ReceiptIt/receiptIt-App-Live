@@ -441,6 +441,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
     setItemDisplayNameDrafts({});
     setIsEditMode(false);
     showToast(isDocumentReview ? 'Purchase kept' : 'Receipt updated');
+    if (isDocumentReview) onClose();
   };
 
   if (!receipt) return null;
