@@ -8,6 +8,7 @@ const files = Object.fromEntries(await Promise.all([
   'src/components/app/ReceiptModal.tsx',
   'src/components/app/ScanTab.tsx',
   'src/components/app/WalletTab.tsx',
+  'src/lib/receiptAmountState.ts',
   'public/manifest.webmanifest',
   'src/components/auth/AlphaGatekeeper.tsx',
   'src/components/auth/AuthForm.tsx',
@@ -45,15 +46,19 @@ check(bottomNav.includes('ri-bottom-safe'), 'bottom navigation must respect the 
 
 const receiptModal = files['src/components/app/ReceiptModal.tsx'];
 check(receiptModal.includes('overflow-x-hidden overflow-y-auto'), 'receipt details must never require horizontal scrolling');
-check(receiptModal.includes('<span>View receipt</span>'), 'the signed-original action must retain its explicit label');
+check(receiptModal.includes("const originalActionLabel = isDocumentReview ? 'View original' : 'View receipt'"), 'the signed-original action must use an explicit document-appropriate label');
 check(receiptModal.includes('Receipt actions'), 'secondary receipt actions must remain in the compact action menu');
 check(receiptModal.includes('absolute right-3 top-full'), 'the receipt action menu must anchor to the modal edge on narrow screens');
 check(receiptModal.includes('isEditMode'), 'receipt details must retain a single receipt-wide edit mode');
 check(!receiptModal.includes('<Pencil'), 'scattered receipt-field pencil actions must not return');
 
 const wallet = files['src/components/app/WalletTab.tsx'];
+const receiptAmountState = files['src/lib/receiptAmountState.ts'];
 check(wallet.includes('aria-label="Scan receipt"'), 'Wallet must retain the one-tap Scan receipt shortcut');
 check(wallet.includes('onClick={onNavigateToScan}'), 'Wallet Quick Scan must reuse the existing Scan route');
+check(receiptAmountState.includes("if (status === 'processing') return false"), 'active processing must remain excluded from actionable Wallet counts');
+check(wallet.includes('Amount not found'), 'unknown receipt amounts must not be rendered as zero');
+check(wallet.includes('Review details'), 'purchase documents must retain a clear review action');
 
 const scan = files['src/components/app/ScanTab.tsx'];
 check(scan.includes("showToast('Receipt added', 'Processing in the background.')"), 'Scan must release the user after the durable processing handoff');

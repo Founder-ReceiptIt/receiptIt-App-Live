@@ -459,10 +459,10 @@ export interface Receipt {
   merchant_address: string | null;
   merchant_vat_number: string | null;
   merchant_company_number: string | null;
-  amount: number;
+  amount: number | null;
   amount_gbp: number | null;
-  subtotal: number;
-  vat_amount: number;
+  subtotal: string | number | null;
+  vat_amount: number | null;
   discount_amount: number | null;
   currency: string;
   transaction_date: string;

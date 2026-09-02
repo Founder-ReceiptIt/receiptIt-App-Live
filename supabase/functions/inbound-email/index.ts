@@ -288,7 +288,7 @@ Deno.serve(async (request) => {
     const { data: receipt, error: receiptError } = await admin.from("receipts").insert({
       user_id: alias.user_id, source: "email", storage_path: storagePath, image_url: storagePath,
       file_hash: fileHash, status: "processing", processing_attempt_started_at: new Date().toISOString(),
-      merchant: "Analyzing...", amount: 0, subtotal: 0, vat_amount: 0, currency: "GBP", category: "Other",
+      merchant: "Analyzing...", amount: null, subtotal: null, vat_amount: null, currency: "GBP", category: "Other",
       reference_number: `EMAIL-${messageId.slice(0, 8)}`,
     }).select("id").single();
     if (receiptError || !receipt) {

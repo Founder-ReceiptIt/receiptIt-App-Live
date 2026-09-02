@@ -146,6 +146,8 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
   const [isEditMode, setIsEditMode] = useState(false);
   const [displayMerchant, setDisplayMerchant] = useState(receipt?.merchant || '');
   const [merchantDraft, setMerchantDraft] = useState(receipt?.merchant || '');
+  const [displayAmount, setDisplayAmount] = useState<number | null>(receipt?.amountKnown ? receipt.amount : null);
+  const [amountDraft, setAmountDraft] = useState(receipt?.amountKnown ? receipt.amount.toFixed(2) : '');
   const [itemDisplayNameDrafts, setItemDisplayNameDrafts] = useState<Record<string, string>>({});
   const [isSavingReceiptEdits, setIsSavingReceiptEdits] = useState(false);
 
@@ -158,8 +160,10 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
     setIsEditMode(false);
     setDisplayMerchant(receipt?.merchant || '');
     setMerchantDraft(receipt?.merchant || '');
+    setDisplayAmount(receipt?.amountKnown ? receipt.amount : null);
+    setAmountDraft(receipt?.amountKnown ? receipt.amount.toFixed(2) : '');
     setItemDisplayNameDrafts({});
-  }, [receipt?.id, receipt?.merchant]);
+  }, [receipt?.id, receipt?.merchant, receipt?.amount, receipt?.amountKnown]);
 
   useEffect(() => {
     setProcessingAttemptStartedAt(receipt?.processingAttemptStartedAt || null);
@@ -329,6 +333,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
 
   const startEditingReceipt = () => {
     setMerchantDraft(displayMerchant);
+    setAmountDraft(displayAmount !== null ? displayAmount.toFixed(2) : '');
     setItemDisplayNameDrafts(Object.fromEntries(
       receiptItems
         .filter((item) => item.id)
@@ -340,6 +345,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
 
   const cancelEditingReceipt = () => {
     setMerchantDraft(displayMerchant);
+    setAmountDraft(displayAmount !== null ? displayAmount.toFixed(2) : '');
     setItemDisplayNameDrafts({});
     setIsEditMode(false);
   };
@@ -350,6 +356,13 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
     const nextMerchant = merchantDraft.trim();
     if (!nextMerchant || nextMerchant.length > 160) {
       showToast('Receipt not updated', 'Use a store name between 1 and 160 characters.');
+      return;
+    }
+
+    const isDocumentReview = receipt.status === 'needs_review';
+    const nextAmount = isDocumentReview && amountDraft.trim() !== '' ? Number(amountDraft) : displayAmount;
+    if (isDocumentReview && (nextAmount === null || !Number.isFinite(nextAmount) || nextAmount < 0 || nextAmount > 1_000_000)) {
+      showToast('Purchase not kept', 'Enter the amount shown on the original purchase document.');
       return;
     }
 
@@ -368,15 +381,23 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
 
     setIsSavingReceiptEdits(true);
     const merchantChanged = nextMerchant !== displayMerchant;
-    const merchantResult = merchantChanged
+    const amountChanged = isDocumentReview && nextAmount !== displayAmount;
+    const receiptResult = merchantChanged || amountChanged || isDocumentReview
       ? await supabase
           .from('receipts')
-          .update({ merchant: nextMerchant })
+          .update({
+            merchant: nextMerchant,
+            ...(isDocumentReview ? {
+              amount: nextAmount,
+              status: 'parsed',
+              error_reason: null,
+            } : {}),
+          })
           .eq('id', receipt.id)
           .eq('user_id', receipt.userId)
-          .select('merchant')
+          .select('merchant, amount, status')
           .single()
-      : { data: { merchant: displayMerchant }, error: null };
+      : { data: { merchant: displayMerchant, amount: displayAmount, status: receipt.status }, error: null };
 
     const itemResults = await Promise.all(changedItems.map(async ({ item, nextDisplayName }) => {
       const result = await supabase
@@ -392,16 +413,17 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
 
     setIsSavingReceiptEdits(false);
 
-    if (merchantResult.error || itemResults.some((result) => result.error)) {
+    if (receiptResult.error || itemResults.some((result) => result.error)) {
       console.error('[ReceiptModal] Receipt correction failed:', {
-        merchantError: merchantResult.error,
+        receiptError: receiptResult.error,
         itemErrors: itemResults.filter((result) => result.error).map((result) => result.error),
       });
       showToast('Receipt not fully updated', 'Please check your changes and try again.');
       return;
     }
 
-    const savedMerchant = getNonEmptyString(merchantResult.data?.merchant) || nextMerchant;
+    const savedMerchant = getNonEmptyString(receiptResult.data?.merchant) || nextMerchant;
+    const savedAmount = getNullableNumber(receiptResult.data?.amount) ?? nextAmount;
     const savedItemNames = new Map(itemResults.map((result) => [
       result.itemId,
       getNonEmptyString(result.data?.display_name),
@@ -409,6 +431,8 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
 
     setDisplayMerchant(savedMerchant);
     setMerchantDraft(savedMerchant);
+    setDisplayAmount(savedAmount);
+    setAmountDraft(savedAmount !== null ? savedAmount.toFixed(2) : '');
     setReceiptItems((currentItems) => currentItems.map((item) => (
       savedItemNames.has(item.id)
         ? { ...item, displayName: savedItemNames.get(item.id) || null }
@@ -416,7 +440,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
     )));
     setItemDisplayNameDrafts({});
     setIsEditMode(false);
-    showToast('Receipt updated');
+    showToast(isDocumentReview ? 'Purchase kept' : 'Receipt updated');
   };
 
   if (!receipt) return null;
@@ -460,12 +484,10 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
   const subtotal = getValidMoneyValue(receipt.subtotal);
   const vatAmount = getValidMoneyValue(receipt.vatAmount);
   const discountAmount = getValidMoneyValue(receipt.discountAmount);
-  const originalTotal = getValidMoneyValue(receipt.amount);
-  const gbpAmount = getValidMoneyValue(receipt.amount_gbp);
-  const displayOriginalTotal = originalTotal ?? gbpAmount ?? 0;
+  const originalTotal = getValidMoneyValue(displayAmount);
+  const displayOriginalTotal = originalTotal ?? 0;
   const displayOriginalCurrencySymbol = originalTotal !== null || receiptCurrencyCode === 'GBP' ? receiptCurrencySymbol : '£';
-  const hasMeaningfulOriginalTotal = (originalTotal !== null && Math.abs(originalTotal) > 0)
-    || (gbpAmount !== null && Math.abs(gbpAmount) > 0);
+  const hasKnownOriginalTotal = originalTotal !== null;
   const getReceiptItemGroup = (item: NonNullable<Receipt['items']>[number]) => {
     const normalizedType = item.itemType?.trim().toLowerCase();
 
@@ -535,7 +557,8 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
     : receiptFailureDetails?.primaryAction === 'replace'
       ? 'Choose another file'
       : 'Try again';
-  const isCompactFailedReceipt = Boolean(receiptFailureDetails) && !requiresCurrencyConfirmation && !isFreshProcessing;
+  const isDocumentReview = receipt.status === 'needs_review';
+  const isCompactFailedReceipt = Boolean(receiptFailureDetails) && !requiresCurrencyConfirmation && !isFreshProcessing && !isDocumentReview;
   const hasReceiptItems = displayReceiptItems.length > 0;
   const showItemsLoadingState = !isCurrentReceiptDetails || itemsLoading || !itemsLoaded;
   const receiptItemSections = [
@@ -620,18 +643,21 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
   const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
 
   const hasOriginalReceipt = hasReceiptOriginal(receipt);
+  const originalActionLabel = isDocumentReview ? 'View original' : 'View receipt';
   const shouldHideBreakdownSection = isCompactFailedReceipt || (
     isNonFinalReceipt
     && !showItemsLoadingState
     && !hasReceiptItems
     && visibleSummaryRows.length === 0
     && activeReceiptPayments.length === 0
-    && !hasMeaningfulOriginalTotal
+    && !hasKnownOriginalTotal
   );
   const shouldShowReceiptBreakdown = !shouldHideBreakdownSection;
-  const shouldShowHeroAmount = !isCompactFailedReceipt && (!isNonFinalReceipt || hasMeaningfulOriginalTotal);
+  const shouldShowHeroAmount = !isCompactFailedReceipt && (!isNonFinalReceipt || hasKnownOriginalTotal || isDocumentReview);
   const heroAmountDisplay = shouldShowHeroAmount
-    ? formatMoney(displayOriginalCurrencySymbol, displayOriginalTotal)
+    ? hasKnownOriginalTotal
+      ? formatMoney(displayOriginalCurrencySymbol, displayOriginalTotal)
+      : 'Amount not found'
     : '—';
 
   const handleDownloadClick = async (e: React.MouseEvent) => {
@@ -698,11 +724,11 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
                     onClick={(event) => void handleDownloadClick(event)}
                     whileTap={{ scale: 0.985 }}
                     className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 text-xs font-semibold text-gray-200 transition-colors hover:border-teal-400/30 hover:text-teal-300 sm:gap-2 sm:px-4 sm:text-sm"
-                    title="View receipt"
-                    aria-label="View receipt"
+                    title={originalActionLabel}
+                    aria-label={originalActionLabel}
                   >
                     <FileText className="h-4 w-4 shrink-0" />
-                    <span>View receipt</span>
+                    <span>{originalActionLabel}</span>
                   </motion.button>
                 )}
                 <div className="shrink-0">
@@ -765,7 +791,21 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
                         className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-gray-200 transition-colors hover:bg-white/5"
                       >
                         <FileText className="h-4 w-4 text-teal-300" />
-                        Edit receipt
+                        {isDocumentReview ? 'Review details' : 'Edit receipt'}
+                      </button>
+                    )}
+                    {isDocumentReview && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setIsActionMenuOpen(false);
+                          setShowReportProblemDialog(true);
+                        }}
+                        className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-gray-300 transition-colors hover:bg-white/5"
+                      >
+                        <FileText className="h-4 w-4 text-gray-400" />
+                        Report a problem
                       </button>
                     )}
                     <button
@@ -851,8 +891,8 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
               {isEditMode && (
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-teal-400/25 bg-teal-400/10 px-3 py-3 sm:px-4">
                   <div className="min-w-0">
-                    <p className="font-semibold text-teal-100">Edit receipt</p>
-                    <p className="mt-0.5 text-xs text-teal-100/65">Changes update your saved details, not the original receipt.</p>
+                    <p className="font-semibold text-teal-100">{isDocumentReview ? 'Review purchase details' : 'Edit receipt'}</p>
+                    <p className="mt-0.5 text-xs text-teal-100/65">Changes update your saved details, not the original.</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <button
@@ -869,7 +909,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
                       disabled={isSavingReceiptEdits}
                       className="inline-flex min-h-10 items-center justify-center rounded-lg bg-teal-400 px-3 text-sm font-bold text-black transition-colors hover:bg-teal-300 disabled:opacity-50"
                     >
-                      {isSavingReceiptEdits ? 'Saving...' : 'Save changes'}
+                      {isSavingReceiptEdits ? 'Saving...' : isDocumentReview ? 'Keep purchase' : 'Save changes'}
                     </button>
                   </div>
                 </div>
@@ -923,13 +963,33 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
                     )}
                   </div>
                     <div className="col-span-2 min-w-0 justify-self-end text-right sm:col-span-1 sm:row-start-1">
-                      <div className="break-words text-3xl font-bold text-white [overflow-wrap:anywhere]">
-                      {heroAmountDisplay}
+                    {isEditMode && isDocumentReview ? (
+                      <div className="ml-auto w-full max-w-52 text-left sm:text-right">
+                        <label htmlFor={`receipt-amount-${receipt.id}`} className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-500">
+                          Purchase amount ({receiptCurrencyCode})
+                        </label>
+                        <input
+                          id={`receipt-amount-${receipt.id}`}
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          max="1000000"
+                          step="0.01"
+                          value={amountDraft}
+                          onChange={(event) => setAmountDraft(event.target.value)}
+                          aria-label="Purchase amount"
+                          className="w-full min-w-0 rounded-lg border border-teal-400/40 bg-black/30 px-3 py-2 text-right text-xl font-bold text-white outline-none focus:border-teal-300"
+                        />
                       </div>
+                    ) : (
+                      <div className={`break-words font-bold text-white [overflow-wrap:anywhere] ${hasKnownOriginalTotal ? 'text-3xl' : 'max-w-48 text-base leading-tight'}`}>
+                        {heroAmountDisplay}
+                      </div>
+                    )}
                     {['AUD', 'USD', 'CAD', 'NZD'].includes(receiptCurrencyCode) ? (
                       <div className="pt-1 text-xs font-semibold text-gray-500">{receiptCurrencyCode}</div>
                     ) : null}
-                    {isNonFinalReceipt && !hasMeaningfulOriginalTotal && !isCompactFailedReceipt && (
+                    {isNonFinalReceipt && !hasKnownOriginalTotal && !isCompactFailedReceipt && !isDocumentReview && (
                       <div className="text-sm pt-1 text-gray-500">
                         Still analyzing
                       </div>
@@ -993,7 +1053,16 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
                 {receipt.status === 'needs_review' && (
                   <div className="mt-4 rounded-xl border border-sky-400/25 bg-sky-400/10 px-4 py-3 text-sm text-sky-100">
                     <p className="font-semibold">Document review</p>
-                    <p className="mt-1 text-xs text-sky-100/75">This looks like a purchase document rather than a standard receipt. Keep it if it is useful to you.</p>
+                    <p className="mt-1 text-xs text-sky-100/75">This looks like purchase evidence rather than a standard receipt. Check the details, then keep it if it is useful to you.</p>
+                    {!isEditMode && (
+                      <button
+                        type="button"
+                        onClick={startEditingReceipt}
+                        className="mt-3 rounded-lg bg-sky-200 px-3 py-1.5 text-sm font-bold text-slate-950 transition-colors hover:bg-white"
+                      >
+                        Review details
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -1261,7 +1330,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
                     </div>
                   ) : null}
 
-                  {(visibleSummaryRows.length > 0 || hasMeaningfulOriginalTotal) && (
+                  {(visibleSummaryRows.length > 0 || hasKnownOriginalTotal) && (
                     <div className="space-y-2">
                       {visibleSummaryRows.map((row) => (
                         <div
@@ -1276,7 +1345,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
                           </span>
                         </div>
                       ))}
-                      {hasMeaningfulOriginalTotal && (
+                      {hasKnownOriginalTotal && (
                         <div className="flex min-w-0 items-start justify-between gap-3 border-t border-white/10 pt-2 text-lg font-bold text-white">
                           <span>Total</span>
                           <span className="min-w-0 break-words text-right [overflow-wrap:anywhere]">{formatMoney(displayOriginalCurrencySymbol, displayOriginalTotal)}</span>

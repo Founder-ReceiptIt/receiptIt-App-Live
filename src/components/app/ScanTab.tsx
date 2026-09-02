@@ -685,9 +685,12 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
             status: 'processing',
             processing_attempt_started_at: new Date().toISOString(),
             merchant: 'Analyzing...',
-            amount: 0,
-            subtotal: 0,
-            vat_amount: 0,
+            // Unknown extraction values stay null. A genuine extracted zero is
+            // stored later by the processor and remains distinguishable from
+            // the upload placeholder state.
+            amount: null,
+            subtotal: null,
+            vat_amount: null,
             currency: 'GBP',
             transaction_date: null,
             category: 'Other',

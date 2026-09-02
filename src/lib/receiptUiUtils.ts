@@ -29,7 +29,7 @@ export type ReceiptFailureReasonCode =
   | 'non_purchase_document'
   | 'processing_failed';
 
-export type ReceiptFailurePrimaryAction = 'retry' | 'rescan' | 'scan_sections' | 'replace';
+export type ReceiptFailurePrimaryAction = 'retry' | 'rescan' | 'scan_sections' | 'replace' | 'review';
 
 export interface ReceiptFailureDetails {
   code: ReceiptFailureReasonCode;
@@ -99,7 +99,7 @@ const getFailureCopy = (code: ReceiptFailureReasonCode): ReceiptFailureDetails =
     case 'encrypted_pdf':
       return { code, title: 'PDF is protected', reason: 'This PDF is password-protected.', advice: 'Remove the password and upload it again.', primaryAction: 'replace' };
     case 'non_standard_purchase_document':
-      return { code, title: 'Document review', reason: 'This looks like purchase evidence rather than a standard receipt.', advice: 'Review it and keep it if it is useful to you.', primaryAction: 'retry' };
+      return { code, title: 'Document review', reason: 'This looks like purchase evidence rather than a standard receipt.', advice: 'Check the details, then keep it if it is useful to you.', primaryAction: 'review' };
     case 'non_purchase_document':
       return { code, title: 'Not a purchase document', reason: 'This doesn’t appear to be a purchase document.', advice: 'Try a receipt, invoice, order confirmation or payment confirmation instead.', primaryAction: 'replace' };
     default:

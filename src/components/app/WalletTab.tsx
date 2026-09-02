@@ -27,6 +27,7 @@ import { requestReceiptSectionCapture } from '../../lib/receiptCaptureUtils';
 import { getReceiptMilestone } from '../../lib/receiptMilestones';
 import { useToast } from '../../contexts/ToastContext';
 import { convertReceiptAmounts, formatCurrency, getCurrencyConfig } from '../../lib/currency';
+import { isReceiptAmountKnown, isReceiptStatusActionable } from '../../lib/receiptAmountState';
 
 interface WalletTabProps {
   onReceiptClick: (receipt: Receipt) => void;
@@ -224,6 +225,11 @@ const getNullableNumber = (value: unknown): number | null => {
   return null;
 };
 
+const isReceiptActionable = (receipt: Receipt): boolean => {
+  if (isReceiptStatusActionable(receipt.status)) return true;
+  return getReturnWindowStatus(receipt.returnDate).status === 'urgent';
+};
+
 const getNonEmptyString = (value: unknown): string | undefined => (
   typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
 );
@@ -276,7 +282,7 @@ const buildReceiptSearchText = ({
   invoiceNumber?: string;
   referenceNumber: string;
   customerNumber?: string;
-  amount: number;
+  amount: number | null;
   amountGbp: number | null;
   date?: string;
   itemDescriptions: string[];
@@ -302,7 +308,9 @@ const mapReceiptRowToWalletReceipt = (
   row: SupabaseReceiptRow,
   itemDescriptions: string[] = []
 ): Receipt => {
-  const total = getNullableNumber(row.amount) ?? 0;
+  const extractedTotal = getNullableNumber(row.amount);
+  const total = extractedTotal ?? 0;
+  const amountKnown = isReceiptAmountKnown(row);
   const totalGbp = getNullableNumber(row.amount_gbp);
   const subtotal = getNullableNumber(row.subtotal);
   const vatAmount = getNullableNumber(row.vat_amount);
@@ -326,6 +334,7 @@ const mapReceiptRowToWalletReceipt = (
     merchantVatNumber: getNonEmptyString(row.merchant_vat_number),
     merchantCompanyNumber: getNonEmptyString(row.merchant_company_number),
     amount: total,
+    amountKnown,
     amount_gbp: totalGbp,
     subtotal: subtotal ?? undefined,
     vatAmount: vatAmount ?? undefined,
@@ -355,7 +364,7 @@ const mapReceiptRowToWalletReceipt = (
       invoiceNumber: row.invoice_number || undefined,
       referenceNumber,
       customerNumber: row.customer_number || undefined,
-      amount: total,
+      amount: amountKnown ? total : null,
       amountGbp: totalGbp,
       date,
       itemDescriptions,
@@ -398,6 +407,7 @@ export interface Receipt {
   merchantVatNumber?: string;
   merchantCompanyNumber?: string;
   amount: number;
+  amountKnown: boolean;
   amount_gbp: number | null;
   subtotal?: number;
   vatAmount?: number;
@@ -720,7 +730,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
       setConvertedAmounts(new Map());
       setExcludedConversionIds(new Set());
       const receiptsForConversion = filterVisibleWalletReceipts(dedupeWalletReceipts(receipts))
-        .filter((receipt) => isFinalizedReceiptStatus(receipt.status));
+        .filter((receipt) => isFinalizedReceiptStatus(receipt.status) && receipt.amountKnown);
       const converted = await convertReceiptAmounts(receiptsForConversion.map((receipt) => ({
         id: receipt.id,
         amount: receipt.amount,
@@ -748,9 +758,12 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
     : null;
   const budgetUsed = monthlyBudget ? (spentThisMonth / monthlyBudget) * 100 : 0;
   const budgetProgress = Math.min(budgetUsed, 100);
-  const actionReceipts = visibleReceipts.flatMap((receipt) => {
-    if (receipt.status === 'needs_review') return [{ receipt, label: 'Review needed', detail: `Review ${receipt.merchant || 'this document'}` }];
-    if (receipt.status === 'failed') return [{ receipt, label: 'Try again', detail: `We could not finish ${receipt.merchant || 'this receipt'}` }];
+  const actionReceipts = visibleReceipts.filter(isReceiptActionable).flatMap((receipt) => {
+    const hasNamedMerchant = receipt.merchant && receipt.merchant.trim().toLowerCase() !== 'analyzing...';
+    if (receipt.status === 'needs_review') return [{ receipt, label: 'Review needed', detail: `Review ${hasNamedMerchant ? receipt.merchant : 'this purchase document'}` }];
+    if (['failed', 'error'].includes(receipt.status || '')) return [{ receipt, label: 'Try again', detail: `We could not finish ${hasNamedMerchant ? receipt.merchant : 'this receipt'}` }];
+    if (receipt.status === 'needs_input') return [{ receipt, label: 'Details needed', detail: 'One receipt needs a quick check' }];
+    if (receipt.status === 'rejected') return [{ receipt, label: 'Check document', detail: 'One file was not recognised as purchase evidence' }];
     const returnStatus = getReturnWindowStatus(receipt.returnDate);
     if (returnStatus.status === 'urgent') return [{ receipt, label: '1 thing needs you', detail: returnStatus.message }];
     return [];
@@ -1332,6 +1345,8 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
                 );
                 const isFreshProcessing = isProcessing && !isStaleProcessing;
                 const isNeedsInput = receipt.status === 'needs_input';
+                const isDocumentReview = receipt.status === 'needs_review';
+                const hasDisplayMerchant = receipt.merchant.trim().toLowerCase() !== 'analyzing...';
                 const isNonFinalReceipt = isProcessing || isNeedsInput || receipt.status === 'needs_review' || receipt.status === 'rejected' || receipt.status === 'failed' || receipt.status === 'error';
                 const requiresCurrencyConfirmation = needsCurrencyConfirmation(receipt.status, receipt.errorReason);
                 const isConfirmingCurrency = currencyConfirmationState?.receiptId === receipt.id;
@@ -1381,6 +1396,8 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
                         ? 'bg-red-500/5 border-red-500/30'
                         : requiresCurrencyConfirmation
                         ? 'bg-amber-400/5 border-amber-400/30'
+                        : isDocumentReview
+                        ? 'bg-sky-400/5 border-sky-400/25 hover:bg-sky-400/10 hover:border-sky-300/35'
                         : showIssueHeading
                         ? 'bg-red-500/5 border-red-500/20 hover:bg-red-500/10 hover:border-red-500/30'
                         : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-teal-400/30'
@@ -1414,6 +1431,8 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
                               ? 'bg-red-500/10 border-red-500/30'
                               : requiresCurrencyConfirmation
                               ? 'bg-amber-400/10 border-amber-400/30'
+                              : isDocumentReview
+                              ? 'bg-sky-400/10 border-sky-400/25'
                               : showIssueHeading
                               ? 'bg-red-500/10 border-red-500/20'
                               : 'bg-gradient-to-br from-white/10 to-white/5 border-white/10'
@@ -1428,7 +1447,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
                         <div className="flex-1 min-w-0">
                           {isFreshProcessing ? (
                             <motion.h3 className="text-lg font-bold mb-1 text-teal-400">
-                              Processing<motion.span
+                              Processing receipt<motion.span
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: [0, 1, 1, 0] }}
                                 transition={{ duration: 1.5, repeat: Infinity }}
@@ -1450,6 +1469,12 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
                                 .
                               </motion.span>
                             </motion.h3>
+                          ) : isDocumentReview ? (
+                            <>
+                              <h3 className="mb-1 break-words text-lg font-bold text-white">{hasDisplayMerchant ? receipt.merchant : 'Purchase document'}</h3>
+                              <p className="text-sm font-semibold text-sky-200">Document review</p>
+                              <p className="mt-1 text-xs text-gray-400">This looks like purchase evidence rather than a standard receipt.</p>
+                            </>
                           ) : showIssueHeading ? (
                             <>
                               <h3 className="text-lg font-bold mb-1 text-red-400">{receiptFailureDetails?.title}</h3>
@@ -1483,14 +1508,18 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
                         </div>
                         {!isFreshProcessing && (
                           <div className="max-w-[46%] shrink-0 text-right">
-                            <div className="break-words text-xl font-bold text-white sm:text-2xl">
-                              {requiresCurrencyConfirmation || isStaleProcessing
-                                ? receipt.amount.toFixed(2)
-                                : hasPreferredCurrencyConversion && preferredCurrencyAmount !== undefined
-                                  ? formatCurrency(preferredCurrencyAmount, accountCurrency.preferredCurrency)
-                                  : formatCurrencyAmount(receipt.currency, receipt.amount)}
-                            </div>
-                            {hasPreferredCurrencyConversion ? (
+                            {receipt.amountKnown ? (
+                              <div className="break-words text-xl font-bold text-white sm:text-2xl">
+                                {requiresCurrencyConfirmation || isStaleProcessing
+                                  ? receipt.amount.toFixed(2)
+                                  : hasPreferredCurrencyConversion && preferredCurrencyAmount !== undefined
+                                    ? formatCurrency(preferredCurrencyAmount, accountCurrency.preferredCurrency)
+                                    : formatCurrencyAmount(receipt.currency, receipt.amount)}
+                              </div>
+                            ) : (
+                              <div className="max-w-32 text-sm font-semibold leading-tight text-gray-400">Amount not found</div>
+                            )}
+                            {receipt.amountKnown && hasPreferredCurrencyConversion ? (
                               <div className="break-words pt-1 text-[11px] text-gray-400 sm:text-xs">
                                 {formatCurrencyAmount(receipt.currency, receipt.amount)} {receipt.currency.toUpperCase()} original
                               </div>
@@ -1508,7 +1537,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
                       <div className="flex items-center gap-2 flex-wrap">
                           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border backdrop-blur-md text-teal-400 bg-teal-400/10 border-teal-400/30">
                             <Loader2 className="w-3 h-3 animate-spin" />
-                            Processing...
+                            Processing in the background
                           </div>
                       </div>
                       )}
@@ -1528,12 +1557,34 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
                           className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 transition-colors hover:text-teal-300"
                         >
                           <Download className="w-3.5 h-3.5" />
-                          Open original receipt
+                          {isDocumentReview ? 'View original' : 'View receipt'}
                         </button>
                       </div>
                     )}
 
-                    {showFailedReceiptActions && (
+                    {isDocumentReview && (
+                      <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-sky-400/25 bg-sky-400/10 px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => onReceiptClick(receipt)}
+                          className="rounded-lg bg-sky-200 px-3 py-1.5 text-sm font-bold text-slate-950 transition-colors hover:bg-white"
+                        >
+                          Review details
+                        </button>
+                        {!receipt.amountKnown && (
+                          <button
+                            type="button"
+                            onClick={() => void handleRetryReceipt(receipt.id)}
+                            disabled={isDeleting || isConfirmingCurrency}
+                            className="rounded-lg border border-sky-200/25 bg-black/20 px-3 py-1.5 text-sm font-semibold text-sky-100 transition-colors hover:bg-sky-300/10 disabled:opacity-50"
+                          >
+                            Try again
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {showFailedReceiptActions && !isDocumentReview && (
                       <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3">
                         <div className="flex flex-wrap items-center gap-2">
                           <button

@@ -119,7 +119,8 @@ canvas {
 }
 
 .ri-mobile-page {
-  padding-bottom: calc(8rem + var(--ri-safe-bottom));
+  padding-bottom: calc(9.5rem + var(--ri-safe-bottom));
+  scroll-padding-bottom: calc(9.5rem + var(--ri-safe-bottom));
 }
 
 .ri-app-content {
@@ -156,6 +157,13 @@ canvas {
   .ri-mobile-page {
     padding-right: 1rem;
     padding-left: 1rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .ri-mobile-page {
+    padding-bottom: 3rem;
+    scroll-padding-bottom: 3rem;
   }
 }
 
