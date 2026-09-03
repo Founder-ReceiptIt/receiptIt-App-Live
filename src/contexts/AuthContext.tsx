@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- This compatibility layer normalises several historical live profile/error shapes. */
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import { User, Session } from '@supabase/supabase-js';
 import {
@@ -12,6 +12,7 @@ import {
   normalizeSupportedCurrency,
   SupportedCurrencyCode,
 } from '../lib/currency';
+import { clearShareTargetInbox } from '../lib/shareTargetInbox';
 
 interface NotificationPreferences {
   receiptCaptured: boolean;
@@ -179,6 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profileSettings, setProfileSettings] = useState<ProfileSettings>(defaultProfileSettings);
   const [accountCurrency, setAccountCurrency] = useState<AccountCurrencySettings>(defaultAccountCurrency);
   const [isSigningUp, setIsSigningUp] = useState(false);
+  const activeIdentityRef = useRef<string | null>(null);
   // `settings` is deliberately not requested here: older live profiles do not
   // have that optional column, and selecting a missing column makes Supabase
   // reject the entire profile read (which previously looked like a login loop).
@@ -251,13 +253,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const ensureInboxAlias = async () => {
+  const ensureInboxAlias = async (expectedUserId?: string) => {
     const { error: opaqueError } = await supabase.rpc('ensure_active_email_alias');
+    if (expectedUserId && activeIdentityRef.current !== expectedUserId) {
+      return { alias: '', error: new Error('Authenticated identity changed') };
+    }
     if (opaqueError) {
       console.warn('[AuthContext] Internal inbox alias is not available yet:', opaqueError.message);
       return { alias: '', error: opaqueError };
     }
     const { data, error } = await supabase.rpc('ensure_friendly_email_alias');
+    if (expectedUserId && activeIdentityRef.current !== expectedUserId) {
+      return { alias: '', error: new Error('Authenticated identity changed') };
+    }
     if (error) {
       console.warn('[AuthContext] Private inbox alias is not available yet:', error.message);
       return { alias: '', error };
@@ -278,12 +286,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    const expectedUserId = user.id;
+
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', user.id)
+        .eq('id', expectedUserId)
         .maybeSingle();
+
+      if (activeIdentityRef.current !== expectedUserId) return;
 
       if (error) {
         console.warn('[AuthContext] Failed to load profile settings:', error.message);
@@ -373,6 +385,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const normalizedCurrency = preferredCurrency.toUpperCase() as SupportedCurrencyCode;
+    const expectedUserId = user.id;
     const nextSettings: AccountCurrencySettings = {
       preferredCurrency: normalizedCurrency,
       monthlyBudgetAmount,
@@ -389,9 +402,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         currency_setup_completed: completeSetup,
         legacy_budget_migration_completed: true,
       })
-      .eq('id', user.id);
+      .eq('id', expectedUserId);
 
-    if (!error) {
+    if (!error && activeIdentityRef.current === expectedUserId) {
       setAccountCurrency(nextSettings);
       setNeedsCurrencySetup(!completeSetup);
       clearLegacyMonthlyBudget();
@@ -424,8 +437,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setNeedsCurrencySetup(false);
   };
 
+  const clearAccountScopedClientState = () => {
+    localStorage.removeItem('isScanning');
+    localStorage.removeItem('scanningSource');
+    sessionStorage.removeItem('receiptit:scan-sections-intent');
+    clearLegacyMonthlyBudget();
+    void clearShareTargetInbox().catch((error) => {
+      console.warn('[AuthContext] Shared receipt inbox could not be cleared:', error);
+    });
+  };
+
+  const prepareForIdentity = (nextUserId: string | null) => {
+    if (activeIdentityRef.current === nextUserId) return;
+
+    // Clear user-derived state before exposing the next identity to the app.
+    // This prevents the previous Wallet/profile from rendering during the
+    // asynchronous profile and receipt reload on a shared browser profile.
+    clearProfileState();
+    setNeedsProfileRecovery(false);
+    setProfileLoading(Boolean(nextUserId));
+    clearAccountScopedClientState();
+    activeIdentityRef.current = nextUserId;
+  };
+
   const fetchProfile = async (userId: string) => {
-    console.log('[fetchProfile] Fetching profile for id:', userId);
+    console.log('[fetchProfile] Fetching profile');
 
     if (isSigningUp) {
       console.log('[fetchProfile] Skipping fetchProfile during signup - will be handled by signUp');
@@ -436,8 +472,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const userExists = await validateUserExists();
+      if (activeIdentityRef.current !== userId) return;
       if (!userExists) {
         console.warn('[fetchProfile] User was deleted - signing out');
+        prepareForIdentity(null);
         setUser(null);
         setSession(null);
         setUsername('');
@@ -453,6 +491,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const { data, error } = await profileQueryForUser(userId);
+      if (activeIdentityRef.current !== userId) return;
 
       if (error) {
         console.error('[fetchProfile] Profile fetch error:', error);
@@ -464,28 +503,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (data) {
-        console.log('[fetchProfile] PROFILE DATA:', data);
-        console.log('[fetchProfile] email_alias value:', data.email_alias, 'type:', typeof data.email_alias);
-        console.log('[fetchProfile] username value:', data.username, 'type:', typeof data.username);
-
         applyProfileState(data);
-        const { alias } = await ensureInboxAlias();
+        const { alias } = await ensureInboxAlias(userId);
+        if (activeIdentityRef.current !== userId) return;
         if (!alias) setNeedsAliasSetup(true);
-        console.log('[fetchProfile] State set - username:', data.username || '', 'hasFriendlyAlias:', Boolean(alias));
+        console.log('[fetchProfile] Profile state ready; friendly alias available:', Boolean(alias));
       } else {
-        console.error('[fetchProfile] No profile found for authenticated user:', userId);
+        console.error('[fetchProfile] No profile found for authenticated user');
         clearProfileState();
         setNeedsProfileRecovery(true);
       }
     } finally {
-      setProfileLoading(false);
+      if (activeIdentityRef.current === userId) setProfileLoading(false);
     }
   };
 
   useEffect(() => {
 
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      console.log('[Auth] Session retrieved:', session?.user?.id);
+      console.log('[Auth] Session retrieved:', Boolean(session?.user));
 
       if (session?.user) {
         try {
@@ -495,6 +531,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const { data: { user: authUser }, error } = await supabase.auth.getUser();
           if (error || !authUser) {
             console.warn('[Auth] Session exists but user not found in auth - clearing stale session');
+            prepareForIdentity(null);
             setSession(null);
             setUser(null);
             setUsername('');
@@ -508,12 +545,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return;
           }
 
+          prepareForIdentity(authUser.id);
           setSession(session);
           setUser(authUser);
-          console.log('[Auth] Session validated, calling fetchProfile for user:', authUser.id);
+          console.log('[Auth] Session validated; loading profile');
           await fetchProfile(authUser.id);
         } catch (err) {
           console.error('[Auth] Error validating session:', err);
+          prepareForIdentity(null);
           setSession(null);
           setUser(null);
           setUsername('');
@@ -525,6 +564,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } else {
         console.log('[Auth] No session user found');
+        prepareForIdentity(null);
         setSession(null);
         setUser(null);
       }
@@ -546,7 +586,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Defer profile/RPC work so sign-in and signup cannot deadlock while the
       // callback tries to make another authenticated request.
       window.setTimeout(() => { void (async () => {
-        console.log('[onAuthStateChange] Auth state changed, event:', _event, 'user:', session?.user?.id);
+        console.log('[onAuthStateChange] Auth state changed:', _event);
+        prepareForIdentity(session?.user?.id ?? null);
         setSession(session);
         setUser(session?.user ?? null);
         if (_event === 'PASSWORD_RECOVERY') {
@@ -554,7 +595,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         if (session?.user) {
-          console.log('[onAuthStateChange] Auth state change - calling fetchProfile for user:', session.user.id);
+          console.log('[onAuthStateChange] Auth state change - loading profile');
           await fetchProfile(session.user.id);
         } else {
           console.log('[onAuthStateChange] Auth state change - no user, clearing profile data');
@@ -606,7 +647,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, password: string, fullName: string, aliasLocalPart: string) => {
     try {
-      console.log('[signUp] Starting new account creation for email:', email);
+      console.log('[signUp] Starting new account creation');
       setIsSigningUp(true);
 
       const { data: createdAccount, error: invokeError } = await supabase.functions.invoke('create-account', {
@@ -655,7 +696,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const displayName = fullName || signInData.user.email?.split('@')[0] || 'user';
+      prepareForIdentity(signInData.user.id);
       const { data: profileData, error: fetchError } = await waitForProfile(signInData.user.id);
+
+      if (activeIdentityRef.current !== signInData.user.id) {
+        return { error: new Error('Authenticated identity changed during account setup') };
+      }
 
       if (fetchError || !profileData) {
         console.error('[signUp] Profile verification error:', fetchError);
@@ -663,7 +709,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       applyProfileState(profileData, displayName);
-      await ensureInboxAlias();
+      await ensureInboxAlias(signInData.user.id);
 
       console.log('[signUp] Account created successfully');
       return { error: null };
@@ -677,7 +723,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     try {
-      console.log('[signIn] Attempting sign-in for email:', email);
+      console.log('[signIn] Attempting sign-in');
 
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -694,9 +740,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: new Error('Sign-in failed') };
       }
 
-      console.log('[signIn] Auth successful for user:', data.user.id);
+      console.log('[signIn] Auth successful');
+      prepareForIdentity(data.user.id);
 
       const { data: profileData, error: profileError } = await profileQueryForUser(data.user.id);
+
+      if (activeIdentityRef.current !== data.user.id) {
+        return { error: new Error('Authenticated identity changed during sign-in') };
+      }
 
       if (profileError) {
         console.error('[signIn] Profile fetch error:', profileError);
@@ -717,7 +768,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       applyProfileState(profileData);
-      const { alias } = await ensureInboxAlias();
+      const { alias } = await ensureInboxAlias(data.user.id);
       if (!alias) setNeedsAliasSetup(true);
 
       return { error: null };
@@ -753,6 +804,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (error || !authUser) {
       console.log('[forceRefresh] No valid user on force refresh - signing out');
+      prepareForIdentity(null);
       setUser(null);
       setSession(null);
       setUsername('');
@@ -766,7 +818,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    console.log('[forceRefresh] Force refresh - fetching profile for user:', authUser.id);
+    console.log('[forceRefresh] Force refresh - loading profile');
     await fetchProfile(authUser.id);
   };
 
@@ -776,7 +828,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      console.log('[recoverProfile] Creating profile for authenticated user:', user.id);
+      console.log('[recoverProfile] Creating profile for authenticated user');
 
       const { error: insertError } = await supabase
         .from('profiles')
@@ -797,13 +849,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const { data: profileData, error: fetchError } = await profileQueryForUser(user.id);
 
+      if (activeIdentityRef.current !== user.id) {
+        return { error: new Error('Authenticated identity changed during profile recovery') };
+      }
+
       if (fetchError || !profileData) {
         console.error('[recoverProfile] Profile verification error:', fetchError);
         return { error: new Error('Failed to verify recovered profile') };
       }
 
       applyProfileState(profileData, fullName);
-      await ensureInboxAlias();
+      await ensureInboxAlias(user.id);
 
       console.log('[recoverProfile] Profile recovered successfully');
       return { error: null };
@@ -818,12 +874,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: new Error('No authenticated user') };
     }
 
-    console.log('[createAlias] Provisioning private inbox alias for authenticated user:', user.id);
+    console.log('[createAlias] Provisioning private inbox alias for authenticated user');
 
-    const { alias, error } = await ensureInboxAlias();
+    const { alias, error } = await ensureInboxAlias(user.id);
     if (error || !alias) return { error: error || new Error('Could not create a private inbox address') };
 
     const { data: profileData, error: fetchError } = await profileQueryForUser(user.id);
+
+    if (activeIdentityRef.current !== user.id) {
+      return { error: new Error('Authenticated identity changed while creating the private address') };
+    }
 
     if (fetchError || !profileData) {
       console.error('[createAlias] Profile fetch error:', fetchError);
@@ -839,6 +899,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    prepareForIdentity(null);
     setUser(null);
     setSession(null);
     setUsername('');
@@ -850,8 +911,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPasswordRecoveryActive(false);
     setProfileSettings(defaultProfileSettings);
     setAccountCurrency(defaultAccountCurrency);
-    localStorage.removeItem('isScanning');
-    localStorage.removeItem('scanningSource');
     await supabase.auth.signOut();
   };
 
@@ -861,7 +920,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      console.log('[deleteAccount] Starting account deletion for user:', user.id);
+      console.log('[deleteAccount] Starting account deletion');
 
       const { data, error: invokeError } = await supabase.functions.invoke(
         'delete-account',
@@ -901,7 +960,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
       }
 
-      console.log('[deleteAccount] Delete account success:', data);
+      console.log('[deleteAccount] Delete account succeeded');
       await signOut();
       return { error: null };
     } catch (err: any) {
@@ -942,7 +1001,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Debug: log whenever context value changes
   useEffect(() => {
-    console.log('[AuthContext] Value updated - username:', username, 'emailAlias:', emailAlias);
+    console.log('[AuthContext] Profile state updated');
   }, [username, emailAlias]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -240,7 +240,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
 
     setIsDeleting(true);
     try {
-      console.log('[Delete] Deleting receipt:', receipt.id);
+      console.log('[Delete] Deleting receipt');
       const { error: dbError } = await deleteReceiptRecord({
         receiptId: receipt.id,
         storagePath: receipt.storagePath,

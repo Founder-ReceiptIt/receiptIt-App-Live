@@ -498,6 +498,20 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
   useEffect(() => {
     if (!user) return;
 
+    let active = true;
+    const userId = user.id;
+
+    // Never retain the previous identity's Wallet while the new user's query
+    // is in flight. RLS remains authoritative; this closes the client-side
+    // shared-browser rendering window as well.
+    setReceipts([]);
+    setLoading(true);
+    setSelectedReceipts(new Set());
+    setSelectMode(false);
+    setConvertedAmounts(new Map());
+    setExcludedConversionIds(new Set());
+    setProcessingAttemptStartedAtByReceiptId({});
+
     successfulReceiptIdsRef.current = new Set();
     isMilestoneTrackingReadyRef.current = false;
 
@@ -522,16 +536,18 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
 
     const fetchReceipts = async () => {
       try {
-        console.log('[WalletTab] Fetching receipts for user:', user?.id);
+        console.log('[WalletTab] Fetching receipts');
 
         const { data, error } = await supabase
           .from('receipts')
           .select('*')
-          .eq('user_id', user.id)
+          .eq('user_id', userId)
           .in('status', [...WALLET_RECEIPT_STATUSES])
           .order('transaction_date', { ascending: false });
 
-        console.log('[WalletTab] Query result:', { data, error, dataLength: data?.length });
+        if (!active) return;
+
+        console.log('[WalletTab] Receipt query completed:', { hasError: Boolean(error), dataLength: data?.length });
 
         if (error) {
           console.error('[WalletTab] Query error:', error);
@@ -557,6 +573,8 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
             .from('receipt_items')
             .select('receipt_id, description, raw_description, display_name, brand_name')
             .in('receipt_id', visibleDedupedRows.map((row) => row.id));
+
+          if (!active) return;
 
           if (receiptItemsError) {
             console.error('[WalletTab] receipt_items search query error:', receiptItemsError);
@@ -585,10 +603,9 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
           }
         }
 
-        const formattedReceipts: Receipt[] = visibleDedupedRows.map((row) => {
-          console.log('[WalletTab] Processing row:', row);
-          return mapReceiptRowToWalletReceipt(row, itemDescriptionsByReceipt.get(row.id) || []);
-        });
+        const formattedReceipts: Receipt[] = visibleDedupedRows.map((row) => (
+          mapReceiptRowToWalletReceipt(row, itemDescriptionsByReceipt.get(row.id) || [])
+        ));
 
         const safeReceipts = getSafeWalletReceipts(formattedReceipts);
 
@@ -614,6 +631,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
             });
         }
       } catch (error) {
+        if (!active) return;
         console.error('[WalletTab] Unexpected error fetching receipts:', error);
         setReceipts([]);
         setLoading(false);
@@ -624,24 +642,25 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
     fetchReceipts();
 
     // Set up realtime subscription
-    console.log('[WalletTab] Setting up realtime subscription for user:', user.id);
+    console.log('[WalletTab] Setting up receipt realtime subscription');
 
     const channel = supabase
-      .channel('receipts-changes')
+      .channel(`receipts-changes-${userId}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'receipts',
-          filter: `user_id=eq.${user.id}`,
+          filter: `user_id=eq.${userId}`,
         },
         (payload) => {
-          console.log('[WalletTab] Realtime event received:', payload.eventType, payload);
+          if (!active) return;
+          console.log('[WalletTab] Realtime event received:', payload.eventType);
 
           if (payload.eventType === 'INSERT') {
             const newRow = payload.new as Partial<SupabaseReceiptRow>;
-            console.log('[WalletTab] New receipt inserted:', newRow);
+            console.log('[WalletTab] New receipt inserted');
 
             if (newRow.status === 'duplicate') {
               const merchantDescription = newRow.merchant && newRow.merchant.trim()
@@ -665,7 +684,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
             const updatedRow = payload.new as Partial<SupabaseReceiptRow>;
             const oldRow = payload.old as Partial<SupabaseReceiptRow>;
 
-            console.log('[WalletTab] Receipt updated:', { old: oldRow, new: updatedRow });
+            console.log('[WalletTab] Receipt updated');
 
             if (updatedRow.status === 'duplicate') {
               const merchantDescription = updatedRow.merchant && updatedRow.merchant.trim()
@@ -711,6 +730,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
 
     // Clean up subscription on unmount
     return () => {
+      active = false;
       console.log('[WalletTab] Cleaning up realtime subscription');
       supabase.removeChannel(channel);
     };

@@ -96,6 +96,28 @@ export const removePendingShareTarget = async (id: string): Promise<void> => {
   await withStore<undefined>(PENDING_STORE, 'readwrite', (store) => store.delete(id));
 };
 
+/**
+ * Shared payloads are intentionally short-lived, but they are not owned by a
+ * Supabase user until ingestion begins. Clear both stores whenever the auth
+ * identity changes so a payload opened by one account cannot be resumed by a
+ * different account on the same browser profile.
+ */
+export const clearShareTargetInbox = async (): Promise<void> => {
+  const database = await openDatabase();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction([PENDING_STORE, EVENT_STORE], 'readwrite');
+      transaction.objectStore(PENDING_STORE).clear();
+      transaction.objectStore(EVENT_STORE).clear();
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error || new Error('Shared-receipt storage could not be cleared.'));
+      transaction.onabort = () => reject(transaction.error || new Error('Shared-receipt storage clearing was interrupted.'));
+    });
+  } finally {
+    database.close();
+  }
+};
+
 export const recordShareTargetEvent = async (
   shareId: string,
   event: ShareTargetEvent,

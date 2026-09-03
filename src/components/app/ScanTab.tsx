@@ -412,7 +412,7 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
       return;
     }
 
-    console.log('[ScanTab] File selected:', file.name, file.type, file.size, 'count:', files.length);
+    console.log('[ScanTab] File selection accepted:', { type: file.type, size: file.size, count: files.length });
     restoredPickerRef.current = false;
     clearScanningStorage();
 
@@ -729,7 +729,7 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
           return;
         }
 
-        console.log('Receipt created successfully:', insertData);
+        console.log('Receipt created successfully');
 
         const receiptId = insertData[0]?.id;
         if (receiptId) {

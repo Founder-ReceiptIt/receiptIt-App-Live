@@ -29,7 +29,7 @@ const getTabFromLocation = (): AppTab => {
 };
 
 function App() {
-  const { user, session, loading: authLoading, needsAliasSetup, needsCurrencySetup, needsProfileRecovery, passwordRecoveryActive } = useAuth();
+  const { user, session, loading: authLoading, profileLoading, needsAliasSetup, needsCurrencySetup, needsProfileRecovery, passwordRecoveryActive } = useAuth();
   const [showApp, setShowApp] = useState(false);
   const [activeTab, setActiveTab] = useState<AppTab>(() => getTabFromLocation());
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
@@ -37,7 +37,7 @@ function App() {
   const [quickScanRequestId, setQuickScanRequestId] = useState(0);
   const recordedShareAuthInterruptionRef = useRef<string | null>(null);
   const isAuthenticated = Boolean(user && session);
-  const shouldShowBootSplash = authLoading || (isAuthenticated && !needsAliasSetup && !showApp);
+  const shouldShowBootSplash = authLoading || profileLoading || (isAuthenticated && !needsAliasSetup && !showApp);
 
   const handleTabChange = useCallback((tab: string) => {
     if (!APP_TABS.includes(tab as AppTab)) return;
@@ -128,6 +128,12 @@ function App() {
     }
   }, [authLoading, isAuthenticated, needsAliasSetup, showApp, user, session]);
 
+  useEffect(() => {
+    // A selected receipt belongs to the current authenticated identity only.
+    setSelectedReceipt(null);
+    setRefreshKey((currentKey) => currentKey + 1);
+  }, [user?.id]);
+
   if (passwordRecoveryActive && user && session) {
     return <ResetPasswordForm />;
   }
@@ -171,7 +177,7 @@ function App() {
           </motion.div>
         ) : (
           <motion.div
-            key="app"
+            key={`app-${user.id}`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
@@ -255,7 +261,7 @@ function App() {
 
             <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
             <ReceiptModal
-              receipt={selectedReceipt}
+              receipt={selectedReceipt?.userId === user.id ? selectedReceipt : null}
               onClose={() => setSelectedReceipt(null)}
               onDelete={() => setRefreshKey(prev => prev + 1)}
               onCaptureAgain={(inSections) => {

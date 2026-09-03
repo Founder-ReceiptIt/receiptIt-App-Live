@@ -11,6 +11,7 @@
     "test:responsive": "node scripts/check-responsive-guard.mjs",
     "test:async-review": "node scripts/check-async-document-review.mjs",
     "test:share-target": "node scripts/check-share-target.mjs",
+    "test:account-isolation": "node scripts/check-account-session-isolation.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
   },
   "dependencies": {
