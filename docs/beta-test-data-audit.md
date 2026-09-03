@@ -11,6 +11,11 @@ This is a non-destructive inventory of controlled fixtures and the receipts visi
 | Harbour Market — £30.20 (two records) | Controlled two- and three-image receipt checks. | Keep only in the dedicated test account, or delete manually before using this account as a beta participant. |
 | Not a purchase document — £0.00 | Deliberately unreadable multi-image failure-path check. | Delete manually before using this account as a beta participant. |
 | Lewis beta account: controlled Harbour Market, capture-quality, PDF and Briar Lane fixtures | Production QA was accidentally run through the normal Scan flow while Lewis's session was active. The app correctly assigned the rows to the authenticated account; the testing process selected the wrong owner. | Preserve until Lewis/Nicholas approve cleanup. Do not use this account for further production fixtures. |
+| Founder-controlled QA: Harbour Market email receipt (`052c63bb-c5de-4b57-b67c-a0464c19d7cf`) | Post-fix direct attachment, child-data, signed-original and dedupe regression. | Keep in the dedicated QA account or remove during a later approved QA cleanup. |
+| Founder-controlled QA: Bayview Home order confirmation (`0f7c0808-8ae7-4da8-9b48-beb2427cdc68`) | Post-fix purchase-document / Document Review regression. | Keep in the dedicated QA account or remove during a later approved QA cleanup. |
+| Founder-controlled QA: hostile document (`eee779f3-54f3-4417-a17a-a4232e6b443f`) | Post-fix prompt-injection rejection regression. | Keep in the dedicated QA account or remove during a later approved QA cleanup. |
+| Founder-controlled QA: Briar Lane image (`0960eb6a-4c4b-4308-aa85-cd3f3f4106b2`) | Post-fix normal Image Processor regression. | Keep in the dedicated QA account or remove during a later approved QA cleanup. |
+| Founder-controlled QA: Parkside Grocer PDF (`ccc573c0-3fd7-4b38-9586-fa8f561e05f4`) | Post-fix normal PDF Processor regression. | Keep in the dedicated QA account or remove during a later approved QA cleanup. |
 
 ## Local-only fixtures
 

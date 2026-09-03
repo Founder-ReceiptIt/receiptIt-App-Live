@@ -61,3 +61,76 @@ The first failed boundary was the webhook's attachment loop. The message itself 
 - A server-owned production-test allowlist and ?qa=1#scan guard prevent controlled fixtures from inheriting an arbitrary beta session.
 
 No raw email body, credential, signed URL or full sender address is recorded in this report.
+
+## Production deployment
+
+The fix was published to `main` in commit `719c7c239b093f5cb8cd736be2eb5f097ae2302d`
+(`Protect beta accounts and process body-only purchase emails`). The production
+Vercel deployment completed successfully, the production QA allowlist migration
+was applied, and the `inbound-email` Edge Function was deployed with the existing
+Resend and Supabase secrets. No credential was committed or recorded here.
+
+## Live replay result
+
+After deployment, the original Resend event was replayed once through the signed
+production webhook. The same ReceiptIt inbound message was reused and the body was
+converted to one private PDF evidence object. The result was:
+
+- owner: Lewis's existing user ID;
+- receipt: `4c628c00-344c-4bd0-a52b-dc9bc6d5c21d`;
+- source: `email`;
+- classification: `order_confirmation`;
+- status: `needs_review`;
+- reason: `non_standard_purchase_document`;
+- merchant: eufy AU;
+- amount: AUD 71.85;
+- private original: present.
+
+This is the intended Document Review outcome for an order confirmation. It did
+not enter the standard receipt Finalise path and did not create receipt item or
+payment child rows. The message no longer disappears.
+
+## Alias regression matrix
+
+All controlled regression data below was directed to the server-approved
+`nicholas47c` QA identity unless the case explicitly concerned Lewis's own
+reported message.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Friendly Alias ownership | PASS | `calmfox78` resolves to Lewis; `nicholas47c` resolves to the approved QA user. |
+| Opaque Alias ownership | PASS | Each active opaque Alias resolves to the same owner as its friendly Alias. Authenticated clients retain SELECT-only, own-row access. |
+| Forwarded body-only email | PASS | Lewis's original message produced private evidence and the Document Review result above. |
+| Direct attachment email | PASS | A signed QA event produced receipt `052c63bb-c5de-4b57-b67c-a0464c19d7cf`, Harbour Market, GBP 5.80, three items, one card payment, status `parsed`. |
+| Exact attachment duplicate | PASS | A separate email containing the identical PDF ended `duplicate` / `exact_duplicate`; it created no receipt and its temporary object was removed. |
+| Same webhook replay | PASS | Replaying the same event returned `replayed: true` and retained exactly one message, evidence row, receipt and object. |
+| Marketing email | PASS | The message ended `ignored` with no evidence, receipt or Storage object. |
+| Purchase-related document | PASS | A controlled order confirmation produced Bayview Home, GBP 37.00, `order_confirmation` / `needs_review`. |
+| Hostile document content | PASS | The hostile PDF ended `non_purchase_document` / `rejected`, with no child rows and its private original preserved. |
+| Unknown Alias | PASS | The endpoint returned the same generic accepted response, recorded only a hashed-recipient `unknown_or_disabled_alias` rejection, and created no inbound message. |
+| Invalid signature | PASS | A current invalid-signature request returned HTTP 401 before Alias or provider processing. |
+| Signed original | PASS | The QA email receipt opened successfully through the normal short-lived signed private URL flow. |
+
+## Core regression and isolation evidence
+
+- A fresh QA image receipt completed as Briar Lane Market, GBP 8.00,
+  `receipt` / `parsed`.
+- A fresh QA text PDF completed as Parkside Grocer, GBP 17.00,
+  `receipt` / `parsed`.
+- The QA Wallet displayed the QA Alias fixtures and did not display Lewis's eufy
+  order. Lewis's private evidence object remained under Lewis's owner folder.
+- ReceiptIt's account/session, responsive, asynchronous-review and share-target
+  guards passed. TypeScript passed; ESLint completed with zero errors and three
+  pre-existing warnings; the production build completed successfully.
+- No RLS, Storage, Scanner Dispatch, processor, Finalise or duplicate-security
+  rule was weakened for this fix.
+
+## Impact conclusion
+
+No further beta-user data was found to be affected. The controlled fixture rows
+listed above are the complete proven set placed in Lewis's account, and they remain
+preserved pending explicit cleanup approval. All post-fix controlled data was
+confined to the approved QA account. The failure was a test-targeting process flaw
+plus a body-only ingestion gap, not cross-user disclosure.
+
+**Lewis test routing and Alias reliability investigation: CLOSED.**
