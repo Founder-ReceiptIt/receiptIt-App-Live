@@ -34,15 +34,17 @@ Every Harbour Market row visible in the reported account belongs to the same aut
 | `2cd67832-07a5-45ba-9cbb-f5ecaf54827c` | 2026-09-02 17:54 | image | GBP 5.80 | `7e29bd846404` | controlled fixture; reported account owns row |
 | `a98f58d4-c01b-4c76-b6ae-b42f7a10d0bc` | 2026-09-02 17:56 | image | GBP 5.80 | `d2499db836f5` | controlled fixture; reported account owns row |
 
-The account was the disposable fresh-user beta-test identity created for ReceiptIt testing on 28 August. There is no separate Lewis-owned receipt row among the reported Harbour Market data.
+Follow-up ownership evidence established that this was Lewis's real beta account, not a disposable ReceiptIt test identity. The controlled fixtures were uploaded while the shared production browser was still authenticated as Lewis, so the app correctly assigned those rows and private objects to Lewis. No Make route, Alias lookup or database process changed their owner afterwards.
 
 ## First broken boundary and root cause
 
 The first divergence was at **browser authentication/session identity**, before the Wallet query:
 
-1. The browser restored the disposable test account session.
-2. The app accepted that authenticated identity and correctly queried only that identity's data.
-3. The Wallet therefore displayed controlled records that genuinely belonged to the active account, while the tester believed they were using their own account.
+1. The browser restored Lewis's valid beta-account session.
+2. Controlled production fixtures were submitted through the normal Scan flow without first proving an explicitly approved QA identity.
+3. Scan created each private path and receipt row with that authenticated user ID.
+4. Dispatch and Finalise preserved the row owner.
+5. Wallet therefore displayed controlled records that genuinely belonged to Lewis, although Lewis had not submitted those fixtures.
 
 The server did not substitute another user's rows. The production Wallet query was already owner-filtered and database RLS independently enforced ownership.
 
@@ -65,6 +67,7 @@ The audit confirmed:
 
 - The reported account's inbound history contained one Resend message classified as delivery/fulfilment, with no attachment and no generated receipt.
 - No reported Harbour Market row was created through that inbound message.
+- A later forensic trace established that this was Lewis's forwarded purchase email. Resend received it and delivered the signed webhook once with HTTP 200. Alias resolution selected Lewis correctly, but the attachment-only ingestion code had no body-only queue path, leaving the message at received. This was a separate reliability defect, not a cross-user routing defect.
 - A controlled two-user routing test proved unique friendly and opaque aliases, correct friendly-to-opaque owner resolution, unknown-alias fail-closed behaviour, own-only alias visibility and denial of client-side alias reassignment.
 
 ## Separate legacy Storage exposure

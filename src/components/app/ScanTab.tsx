@@ -68,6 +68,7 @@ const MAX_MULTI_RECEIPT_SOURCE_PIXELS = 20_000_000;
 const MULTI_IMAGE_GAP = 18;
 
 type ReceiptPickerMode = 'camera' | 'files';
+type ProductionQaAuthorisation = 'inactive' | 'checking' | 'approved' | 'denied';
 
 const isPdfSelection = (file: File): boolean => (
   file.type.toLowerCase() === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
@@ -175,6 +176,10 @@ const combineReceiptImages = async (files: File[]): Promise<File> => {
 export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickScanHandled }: ScanTabProps) {
   const { user } = useAuth();
   const { showToast } = useToast();
+  const productionQaMode = new URLSearchParams(window.location.search).get('qa') === '1';
+  const [productionQaAuthorisation, setProductionQaAuthorisation] = useState<ProductionQaAuthorisation>(
+    productionQaMode ? 'checking' : 'inactive',
+  );
   const [scanState, setScanState] = useState<ScanState>('idle');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedImageFiles, setSelectedImageFiles] = useState<File[]>([]);
@@ -201,6 +206,27 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
     scanToken: number,
     precomputedFileHash?: string,
   ) => Promise<void>>(async () => undefined);
+
+  useEffect(() => {
+    if (!productionQaMode || !user) {
+      setProductionQaAuthorisation(productionQaMode ? 'denied' : 'inactive');
+      return;
+    }
+
+    let cancelled = false;
+    setProductionQaAuthorisation('checking');
+    void supabase.rpc('current_production_test_authorisation').then(({ data, error }) => {
+      if (cancelled) return;
+      const result = Array.isArray(data) ? data[0] : data;
+      setProductionQaAuthorisation(!error && result?.approved === true ? 'approved' : 'denied');
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [productionQaMode, user]);
+
+  const productionQaBlocked = productionQaMode && productionQaAuthorisation !== 'approved';
 
   const clearScanningStorage = () => {
     localStorage.removeItem('isScanning');
@@ -350,6 +376,11 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
   };
 
   const openCameraPicker = useCallback(() => {
+    if (productionQaBlocked) {
+      showToast('Production test blocked', 'Sign in to the approved QA account before using production fixtures.');
+      return;
+    }
+
     pickerOpenedThisMountRef.current = true;
     pickerModeRef.current = 'camera';
     localStorage.setItem('isScanning', 'true');
@@ -367,9 +398,14 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
         fileInputRef.current.setAttribute('multiple', '');
       }
     }, 100);
-  }, []);
+  }, [productionQaBlocked, showToast]);
 
   const openFilePicker = () => {
+    if (productionQaBlocked) {
+      showToast('Production test blocked', 'Sign in to the approved QA account before using production fixtures.');
+      return;
+    }
+
     pickerModeRef.current = 'files';
     clearScanningStorage();
     fileInputRef.current?.removeAttribute('capture');
@@ -401,6 +437,11 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
     e.stopPropagation();
 
     const files = Array.from(e.target.files || []);
+    if (productionQaBlocked) {
+      e.target.value = '';
+      showToast('Production test blocked', 'This account is not approved for production fixtures.');
+      return;
+    }
     const file = files[0];
     const pickerMode: ReceiptPickerMode = localStorage.getItem('scanningSource') === 'camera'
       ? 'camera'
@@ -555,6 +596,15 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
     if (!user) {
       if (isScanActive(scanToken)) {
         setErrorMessage('Your session has expired. Please sign in and try again.');
+        setScanState('error');
+        clearScanningStorage();
+      }
+      return;
+    }
+
+    if (productionQaBlocked) {
+      if (isScanActive(scanToken)) {
+        setErrorMessage('This account is not approved for production testing.');
         setScanState('error');
         clearScanningStorage();
       }
@@ -1074,6 +1124,22 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
                 transition={{ duration: 0.3 }}
                 className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-xl sm:p-8"
               >
+                {productionQaMode && (
+                  <div
+                    className={`mb-5 rounded-xl border px-4 py-3 text-center text-xs ${
+                      productionQaAuthorisation === 'approved'
+                        ? 'border-teal-400/30 bg-teal-400/10 text-teal-100'
+                        : 'border-amber-300/30 bg-amber-300/10 text-amber-100'
+                    }`}
+                    role="status"
+                  >
+                    {productionQaAuthorisation === 'approved'
+                      ? 'Approved production QA account'
+                      : productionQaAuthorisation === 'checking'
+                        ? 'Checking production QA account…'
+                        : 'Production testing is locked. Sign in to the approved QA account.'}
+                  </div>
+                )}
                 <div className="mb-5 text-center">
                   <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-teal-400/25 bg-teal-400/10"><Camera className="w-7 h-7 text-teal-300" strokeWidth={1.5} /></div>
                 </div>
@@ -1097,8 +1163,9 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
                 <div className="space-y-3">
                   <button
                     type="button"
+                    disabled={productionQaBlocked}
                     onClick={(e) => { e.preventDefault(); openCameraPicker(); }}
-                    className="w-full backdrop-blur-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/30 rounded-xl p-4 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                    className="w-full backdrop-blur-xl bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/30 rounded-xl p-4 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <div className="flex items-center justify-center gap-3">
                       <Camera className="w-5 h-5 text-teal-400" />
@@ -1108,13 +1175,14 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
 
                   <button
                     type="button"
+                    disabled={productionQaBlocked}
                     onClick={(e) => {
                       e.preventDefault();
                       // Gallery selection is not a camera capture and should
                       // never trigger Android's camera-recovery path.
                       openFilePicker();
                     }}
-                    className="w-full backdrop-blur-xl bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl p-4 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                    className="w-full backdrop-blur-xl bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl p-4 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <div className="flex items-center justify-center gap-3">
                       <Upload className="w-5 h-5 text-white" />

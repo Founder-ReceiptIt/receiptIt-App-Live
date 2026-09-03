@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { createEmailBodyPdf } from "./email-body-pdf.ts";
 
 /*
  * ReceiptIt inbound mail endpoint (Resend Receiving).
@@ -97,6 +98,21 @@ const verifyResendWebhook = async (rawBody: string, headers: Headers, secret: st
 const normaliseRecipient = (value: string) => value.trim().toLowerCase().match(/<?([^\s<>@]+@[^\s<>@]+)>?/)?.[1] || "";
 const senderDomain = (value: string | undefined) => normaliseRecipient(value || "").split("@")[1] || null;
 
+const htmlToPlainText = (value: string) => value
+  .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+  .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+  .replace(/<(br|\/p|\/div|\/li|\/tr|\/h[1-6])\b[^>]*>/gi, "\n")
+  .replace(/<[^>]+>/g, " ")
+  .replace(/&nbsp;/gi, " ")
+  .replace(/&amp;/gi, "&")
+  .replace(/&lt;/gi, "<")
+  .replace(/&gt;/gi, ">")
+  .replace(/&quot;/gi, '"')
+  .replace(/&#39;|&apos;/gi, "'")
+  .replace(/[ \t]+\n/g, "\n")
+  .replace(/\n{3,}/g, "\n\n")
+  .trim();
+
 const sanitizeFilename = (filename: string | undefined) => {
   const basename = (filename || "attachment").split(/[\\/]/).pop() || "attachment";
   return basename.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120) || "attachment";
@@ -179,7 +195,13 @@ Deno.serve(async (request) => {
   }
 
   const content = await contentResponse.json() as Record<string, unknown>;
-  const bodyText = typeof content.text === "string" ? content.text.slice(0, MAX_BODY_BYTES) : "";
+  const bodyText = (
+    typeof content.text === "string" && content.text.trim()
+      ? content.text
+      : typeof content.html === "string"
+        ? htmlToPlainText(content.html)
+        : ""
+  ).slice(0, MAX_BODY_BYTES);
   const headers = content.headers && typeof content.headers === "object" ? content.headers as Record<string, unknown> : {};
   const classification = classifyEnvelope(String(content.subject || event.data.subject || ""), bodyText);
   const attachments = (event.data.attachments || []).filter((attachment) => attachment.content_disposition !== "inline").slice(0, MAX_ATTACHMENTS);
@@ -299,6 +321,119 @@ Deno.serve(async (request) => {
     await admin.from("inbound_attachments").upsert({ inbound_message_id: messageId, user_id: alias.user_id, provider_attachment_id: attachment.id, safe_filename: sanitizeFilename(attachment.filename), content_type: detected.contentType, byte_size: bytes.byteLength, sha256: fileHash, storage_path: storagePath, receipt_id: receipt.id, status: "queued", error_reason: null }, { onConflict: "inbound_message_id,provider_attachment_id" });
   }
 
-  await admin.from("inbound_messages").update({ status: attachments.length ? "processed" : "received", processed_at: attachments.length ? new Date().toISOString() : null }).eq("id", messageId);
+  // A legitimate body-only purchase email must not disappear merely because
+  // the sender did not attach a PDF. Render the provider-supplied text as an
+  // inert, deterministic PDF and queue it through the existing private PDF
+  // processor. Document contents remain untrusted evidence throughout.
+  if (attachments.length === 0 && bodyText.trim()) {
+    const providerAttachmentId = "__email_body__";
+    const { data: existingBodyEvidence } = await admin.from("inbound_attachments")
+      .select("status,receipt_id")
+      .eq("inbound_message_id", messageId)
+      .eq("provider_attachment_id", providerAttachmentId)
+      .maybeSingle();
+
+    if (!existingBodyEvidence || !["stored", "queued", "duplicate"].includes(existingBodyEvidence.status)) {
+      const subject = String(content.subject || event.data.subject || "").slice(0, 998);
+      const fromDomain = senderDomain(typeof content.from === "string" ? content.from : event.data.from);
+      const bytes = createEmailBodyPdf({ subject, senderDomain: fromDomain, body: bodyText });
+      const fileHash = await sha256(bytes.buffer);
+      const storagePath = `${alias.user_id}/email/${messageId}/body-${fileHash.slice(0, 20)}.pdf`;
+
+      const { error: uploadError } = await admin.storage.from("receipts").upload(
+        storagePath,
+        bytes,
+        { contentType: "application/pdf", upsert: false },
+      );
+      const uploadedNow = !uploadError;
+      if (uploadError) {
+        const alreadyStored = String(uploadError.message || "").toLowerCase().includes("already exists");
+        if (!alreadyStored) {
+          await admin.from("inbound_attachments").upsert({
+            inbound_message_id: messageId,
+            user_id: alias.user_id,
+            provider_attachment_id: providerAttachmentId,
+            safe_filename: "email-purchase-evidence.pdf",
+            content_type: "application/pdf",
+            byte_size: bytes.byteLength,
+            sha256: fileHash,
+            storage_path: storagePath,
+            status: "failed",
+            error_reason: "private_storage_upload_failed",
+          }, { onConflict: "inbound_message_id,provider_attachment_id" });
+        }
+      }
+
+      if (!uploadError || String(uploadError.message || "").toLowerCase().includes("already exists")) {
+        const { data: receipt, error: receiptError } = await admin.from("receipts").insert({
+          user_id: alias.user_id,
+          source: "email",
+          storage_path: storagePath,
+          image_url: storagePath,
+          file_hash: fileHash,
+          status: "processing",
+          processing_attempt_started_at: new Date().toISOString(),
+          merchant: "Analyzing...",
+          amount: null,
+          subtotal: null,
+          vat_amount: null,
+          currency: "GBP",
+          category: "Other",
+          reference_number: `EMAIL-${messageId.slice(0, 8)}`,
+        }).select("id").single();
+
+        if (receiptError || !receipt) {
+          // The database duplicate trigger is authoritative across provider
+          // replays and across separate emails containing identical evidence.
+          if (uploadedNow) await admin.storage.from("receipts").remove([storagePath]);
+          await admin.from("inbound_attachments").upsert({
+            inbound_message_id: messageId,
+            user_id: alias.user_id,
+            provider_attachment_id: providerAttachmentId,
+            safe_filename: "email-purchase-evidence.pdf",
+            content_type: "application/pdf",
+            byte_size: bytes.byteLength,
+            sha256: fileHash,
+            storage_path: storagePath,
+            status: receiptError?.code === "23505" ? "duplicate" : "failed",
+            error_reason: receiptError?.code === "23505" ? "exact_duplicate" : "receipt_queue_failed",
+          }, { onConflict: "inbound_message_id,provider_attachment_id" });
+        } else {
+          await admin.from("inbound_attachments").upsert({
+            inbound_message_id: messageId,
+            user_id: alias.user_id,
+            provider_attachment_id: providerAttachmentId,
+            safe_filename: "email-purchase-evidence.pdf",
+            content_type: "application/pdf",
+            byte_size: bytes.byteLength,
+            sha256: fileHash,
+            storage_path: storagePath,
+            receipt_id: receipt.id,
+            status: "queued",
+            error_reason: null,
+          }, { onConflict: "inbound_message_id,provider_attachment_id" });
+        }
+      }
+    }
+  }
+
+  const { data: evidenceRows } = await admin.from("inbound_attachments")
+    .select("status")
+    .eq("inbound_message_id", messageId);
+  const evidenceStatuses = new Set((evidenceRows || []).map((row) => row.status));
+  const finalStatus = evidenceStatuses.has("queued") || evidenceStatuses.has("stored")
+    ? "processed"
+    : evidenceStatuses.has("duplicate")
+      ? "duplicate"
+      : evidenceStatuses.has("rejected")
+        ? "rejected"
+        : evidenceStatuses.has("failed")
+          ? "failed"
+          : "received";
+  await admin.from("inbound_messages").update({
+    status: finalStatus,
+    error_reason: finalStatus === "received" ? "no_processable_evidence" : null,
+    processed_at: finalStatus === "received" ? null : new Date().toISOString(),
+  }).eq("id", messageId);
   return json({ accepted: true, ...(existingMessage ? { replayed: true } : {}) });
 });
