@@ -146,3 +146,15 @@ Recommended immediate owner action: complete the ICO self-assessment today using
 ## Closure criteria
 
 Technical closure requires the identity-transition fix and legacy-bucket migration to be committed, deployed to production, and verified against the deployed commit. The formal breach-risk decision is an accountable-owner/legal task and remains separately time-sensitive even after technical containment.
+
+## Final technical closure
+
+- Fix/containment commit: `e31efde9f9d8eb70c00acb6d8291317533ae052a`
+- Remote `main`: verified at the same commit
+- Vercel production status: successful (`Deployment has completed`)
+- Production origin: HTTP 200; the live bundle contains the per-user realtime channel scoping from the containment fix
+- Legacy bucket: verified private after deployment
+- Temporary local evidence copies: removed after the sanitised facts above were recorded
+- Controlled users, rows and objects: removed; no incident-control records remain
+
+**P0 cross-user technical incident status: CLOSED.**
