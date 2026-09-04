@@ -1,8 +1,8 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Shield, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Undo2, ChevronDown, MoreHorizontal } from 'lucide-react';
+import { X, Shield, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Undo2, ChevronDown, MoreHorizontal, ImagePlus } from 'lucide-react';
 import { Receipt } from './WalletTab';
 import { ReportProblemDialog } from './ReportProblemDialog';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   confirmReceiptCurrency,
   deleteReceiptRecord,
@@ -13,6 +13,7 @@ import {
   RECEIPT_CURRENCY_CONFIRMATION_OPTIONS,
   RECEIPT_PRIMARY_CURRENCY_CONFIRMATION_OPTION,
   retryReceiptProcessing,
+  addClearerReceiptPhoto,
   generateProofPack,
   recordReceiptOriginalView,
   supabase,
@@ -24,6 +25,8 @@ import { getReceiptFailureDetails, getReceiptPurchaseDateDisplay } from '../../l
 import { useToast } from '../../contexts/ToastContext';
 import { getCurrencyConfig } from '../../lib/currency';
 import { useAuth } from '../../contexts/AuthContext';
+import { RECEIPT_CATEGORIES, isReceiptCategory } from '../../lib/receiptCategories';
+import { validateReceiptUpload } from '../../lib/uploadValidation';
 
 const getCurrencySymbol = (currencyCode: string): string => {
   return getCurrencyConfig(currencyCode || 'GBP').symbol;
@@ -146,10 +149,14 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
   const [isEditMode, setIsEditMode] = useState(false);
   const [displayMerchant, setDisplayMerchant] = useState(receipt?.merchant || '');
   const [merchantDraft, setMerchantDraft] = useState(receipt?.merchant || '');
+  const [displayCategory, setDisplayCategory] = useState(receipt?.category || 'Other');
+  const [categoryDraft, setCategoryDraft] = useState(receipt?.category || 'Other');
   const [displayAmount, setDisplayAmount] = useState<number | null>(receipt?.amountKnown ? receipt.amount : null);
   const [amountDraft, setAmountDraft] = useState(receipt?.amountKnown ? receipt.amount.toFixed(2) : '');
   const [itemDisplayNameDrafts, setItemDisplayNameDrafts] = useState<Record<string, string>>({});
   const [isSavingReceiptEdits, setIsSavingReceiptEdits] = useState(false);
+  const [isAddingClearerPhoto, setIsAddingClearerPhoto] = useState(false);
+  const clearerPhotoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setShowMoreDetails(false);
@@ -160,10 +167,12 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
     setIsEditMode(false);
     setDisplayMerchant(receipt?.merchant || '');
     setMerchantDraft(receipt?.merchant || '');
+    setDisplayCategory(receipt?.category || 'Other');
+    setCategoryDraft(receipt?.category || 'Other');
     setDisplayAmount(receipt?.amountKnown ? receipt.amount : null);
     setAmountDraft(receipt?.amountKnown ? receipt.amount.toFixed(2) : '');
     setItemDisplayNameDrafts({});
-  }, [receipt?.id, receipt?.merchant, receipt?.amount, receipt?.amountKnown]);
+  }, [receipt?.id, receipt?.merchant, receipt?.category, receipt?.amount, receipt?.amountKnown]);
 
   useEffect(() => {
     setProcessingAttemptStartedAt(receipt?.processingAttemptStartedAt || null);
@@ -324,6 +333,55 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
     }
   };
 
+  const handleClearerPhotoSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null;
+    event.target.value = '';
+    if (!file || !receipt || !receipt.userId || isAddingClearerPhoto) return;
+
+    const validation = await validateReceiptUpload(file);
+    if (!validation.valid || validation.kind !== 'image') {
+      showToast('Photo not added', validation.valid ? 'Choose a JPG or PNG image.' : validation.message);
+      return;
+    }
+
+    setIsAddingClearerPhoto(true);
+    let uploadedPath: string | null = null;
+
+    try {
+      const fileBytes = await file.arrayBuffer();
+      const hashBuffer = await crypto.subtle.digest('SHA-256', fileBytes);
+      const fileHash = Array.from(new Uint8Array(hashBuffer))
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join('');
+      const extension = file.type === 'image/png' ? 'png' : 'jpg';
+      uploadedPath = `${receipt.userId}/${crypto.randomUUID()}_${Date.now()}.${extension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('receipts')
+        .upload(uploadedPath, file, { cacheControl: '3600', upsert: false });
+      if (uploadError) throw uploadError;
+
+      const { error: recoveryError } = await addClearerReceiptPhoto({
+        receiptId: receipt.id,
+        storagePath: uploadedPath,
+        fileHash,
+      });
+      if (recoveryError) throw recoveryError;
+
+      showToast('Clearer photo added', 'We’re improving this receipt in the background.');
+      onClose();
+    } catch (error) {
+      console.error('[ReceiptModal] Clearer photo recovery failed:', error);
+      if (uploadedPath) {
+        const { error: cleanupError } = await supabase.storage.from('receipts').remove([uploadedPath]);
+        if (cleanupError) console.warn('[ReceiptModal] Clearer photo cleanup failed:', cleanupError);
+      }
+      showToast('Photo not added', 'Please choose another clear photo and try again.');
+    } finally {
+      setIsAddingClearerPhoto(false);
+    }
+  };
+
   const getEditableItemName = (item: ReceiptModalItem) => (
     item.displayName?.trim()
     || item.rawDescription?.trim()
@@ -333,6 +391,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
 
   const startEditingReceipt = () => {
     setMerchantDraft(displayMerchant);
+    setCategoryDraft(displayCategory);
     setAmountDraft(displayAmount !== null ? displayAmount.toFixed(2) : '');
     setItemDisplayNameDrafts(Object.fromEntries(
       receiptItems
@@ -345,6 +404,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
 
   const cancelEditingReceipt = () => {
     setMerchantDraft(displayMerchant);
+    setCategoryDraft(displayCategory);
     setAmountDraft(displayAmount !== null ? displayAmount.toFixed(2) : '');
     setItemDisplayNameDrafts({});
     setIsEditMode(false);
@@ -356,6 +416,11 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
     const nextMerchant = merchantDraft.trim();
     if (!nextMerchant || nextMerchant.length > 160) {
       showToast('Receipt not updated', 'Use a store name between 1 and 160 characters.');
+      return;
+    }
+
+    if (!isReceiptCategory(categoryDraft)) {
+      showToast('Receipt not updated', 'Choose one of the available categories.');
       return;
     }
 
@@ -381,12 +446,14 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
 
     setIsSavingReceiptEdits(true);
     const merchantChanged = nextMerchant !== displayMerchant;
+    const categoryChanged = categoryDraft !== displayCategory;
     const amountChanged = isDocumentReview && nextAmount !== displayAmount;
-    const receiptResult = merchantChanged || amountChanged || isDocumentReview
+    const receiptResult = merchantChanged || categoryChanged || amountChanged || isDocumentReview
       ? await supabase
           .from('receipts')
           .update({
             merchant: nextMerchant,
+            category: categoryDraft,
             ...(isDocumentReview ? {
               amount: nextAmount,
               status: 'parsed',
@@ -395,9 +462,9 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
           })
           .eq('id', receipt.id)
           .eq('user_id', receipt.userId)
-          .select('merchant, amount, status')
+          .select('merchant, amount, category, status')
           .single()
-      : { data: { merchant: displayMerchant, amount: displayAmount, status: receipt.status }, error: null };
+      : { data: { merchant: displayMerchant, amount: displayAmount, category: displayCategory, status: receipt.status }, error: null };
 
     const itemResults = await Promise.all(changedItems.map(async ({ item, nextDisplayName }) => {
       const result = await supabase
@@ -423,6 +490,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
     }
 
     const savedMerchant = getNonEmptyString(receiptResult.data?.merchant) || nextMerchant;
+    const savedCategory = isReceiptCategory(receiptResult.data?.category) ? receiptResult.data.category : categoryDraft;
     const savedAmount = getNullableNumber(receiptResult.data?.amount) ?? nextAmount;
     const savedItemNames = new Map(itemResults.map((result) => [
       result.itemId,
@@ -431,6 +499,8 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
 
     setDisplayMerchant(savedMerchant);
     setMerchantDraft(savedMerchant);
+    setDisplayCategory(savedCategory);
+    setCategoryDraft(savedCategory);
     setDisplayAmount(savedAmount);
     setAmountDraft(savedAmount !== null ? savedAmount.toFixed(2) : '');
     setReceiptItems((currentItems) => currentItems.map((item) => (
@@ -644,6 +714,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
   const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
 
   const hasOriginalReceipt = hasReceiptOriginal(receipt);
+  const hasImageOriginal = receipt.source === 'image' || /\.(jpe?g|png)(?:$|\?)/i.test(receipt.storagePath || receipt.imageUrl || '');
   const originalActionLabel = isDocumentReview ? 'View original' : 'View receipt';
   const shouldHideBreakdownSection = isCompactFailedReceipt || (
     isNonFinalReceipt
@@ -992,17 +1063,31 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
                     ) : null}
                     {isNonFinalReceipt && !hasKnownOriginalTotal && !isCompactFailedReceipt && !isDocumentReview && (
                       <div className="text-sm pt-1 text-gray-500">
-                        Still analyzing
+                        Still analysing
                       </div>
                     )}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
-                  <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md ${receipt.tagColor || 'bg-white/5 border-white/10 text-gray-400'}`}>
-                    <Tag className="w-4 h-4" />
-                    {receipt.category || 'Receipt'}
-                  </div>
+                  {isEditMode ? (
+                    <label className="min-w-0 sm:min-w-52">
+                      <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500">Category</span>
+                      <select
+                        value={categoryDraft}
+                        onChange={(event) => setCategoryDraft(event.target.value)}
+                        aria-label="Receipt category"
+                        className="min-h-10 w-full rounded-lg border border-teal-400/40 bg-neutral-950 px-3 text-sm font-semibold text-white outline-none focus:border-teal-300"
+                      >
+                        {RECEIPT_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+                      </select>
+                    </label>
+                  ) : (
+                    <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border backdrop-blur-md ${receipt.tagColor || 'bg-white/5 border-white/10 text-gray-400'}`}>
+                      <Tag className="w-4 h-4" />
+                      {displayCategory || 'Receipt'}
+                    </div>
+                  )}
                   {heroMetadataChips.map((chip) => {
                     const Icon = chip.icon;
 
@@ -1326,8 +1411,31 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
                       <div className="h-px bg-white/10" />
                     </div>
                   ) : itemsLoaded && !isNonFinalReceipt ? (
-                    <div className="mb-4 rounded-lg bg-white/5 p-4 text-sm text-gray-400">
-                      Detailed items unavailable for this receipt
+                    <div className="mb-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                      <p className="text-sm font-semibold text-gray-300">Detailed items unavailable for this receipt</p>
+                      {hasImageOriginal ? (
+                        <>
+                          <p className="mt-1 text-sm leading-6 text-gray-400">If the text was difficult to read, add a clearer photo to improve this receipt.</p>
+                          <input
+                            ref={clearerPhotoInputRef}
+                            type="file"
+                            accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+                            onChange={(event) => void handleClearerPhotoSelected(event)}
+                            className="hidden"
+                            aria-hidden="true"
+                            tabIndex={-1}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => clearerPhotoInputRef.current?.click()}
+                            disabled={isAddingClearerPhoto}
+                            className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-lg border border-teal-300/30 bg-teal-400/15 px-3 py-2 text-sm font-semibold text-teal-100 transition-colors hover:bg-teal-400/25 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {isAddingClearerPhoto ? <Clock className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+                            {isAddingClearerPhoto ? 'Adding photo...' : 'Add a clearer photo'}
+                          </button>
+                        </>
+                      ) : null}
                     </div>
                   ) : null}
 

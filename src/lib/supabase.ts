@@ -256,6 +256,20 @@ export const retryReceiptProcessing = async (
   })
   .eq('id', receiptId);
 
+export const addClearerReceiptPhoto = async ({
+  receiptId,
+  storagePath,
+  fileHash,
+}: {
+  receiptId: string;
+  storagePath: string;
+  fileHash: string;
+}) => supabase.rpc('add_clearer_receipt_photo', {
+  p_receipt_id: receiptId,
+  p_storage_path: storagePath,
+  p_file_hash: fileHash,
+});
+
 export const markReceiptProcessingTimedOut = async (receiptId: string) => supabase
   .from('receipts')
   .update({
@@ -276,14 +290,32 @@ export const deleteReceiptRecord = async ({
 }) => {
   const removableStoragePath = getReceiptOriginalStoragePath({ storagePath, imageUrl });
 
-  if (removableStoragePath) {
+  const { data: evidenceRows, error: evidenceError } = await supabase
+    .from('receipt_evidence_versions')
+    .select('storage_path')
+    .eq('receipt_id', receiptId);
+
+  if (evidenceError) {
+    console.warn('[DeleteReceiptRecord] Evidence history lookup failed; receipt retained:', evidenceError);
+    return { data: null, error: evidenceError };
+  }
+
+  const removableStoragePaths = Array.from(new Set([
+    removableStoragePath,
+    ...(evidenceRows || []).map((row) => (
+      typeof row.storage_path === 'string' ? row.storage_path : null
+    )),
+  ].filter((path): path is string => Boolean(path))));
+
+  if (removableStoragePaths.length > 0) {
     const { error: storageError } = await supabase
       .storage
       .from('receipts')
-      .remove([removableStoragePath]);
+      .remove(removableStoragePaths);
 
     if (storageError) {
-      console.warn('[DeleteReceiptRecord] Storage deletion failed (non-critical):', storageError);
+      console.warn('[DeleteReceiptRecord] Storage deletion failed; receipt retained:', storageError);
+      return { data: null, error: storageError };
     }
   }
 

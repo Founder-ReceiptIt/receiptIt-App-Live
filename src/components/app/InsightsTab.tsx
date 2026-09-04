@@ -106,7 +106,37 @@ export function InsightsTab() {
         {receipts.length === 0 ? <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.045] p-10 text-center"><BarChart3 className="mx-auto h-8 w-8 text-teal-300" /><p className="mt-4 text-gray-300">Your insights will appear as you add receipts.</p></div> : <>
           {excludedCount > 0 ? <p className="mt-6 rounded-xl border border-amber-300/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">{excludedCount === 1 ? 'One purchase couldn’t be included in these totals.' : `${excludedCount} purchases couldn’t be included in these totals.`}</p> : null}
           <section className="mt-8"><h2 className="text-lg font-bold text-white">Summary</h2><div className="mt-3 grid gap-3 sm:grid-cols-3"><Stat label="Total spent" value={formatMoney(summary.total)} /><Stat label="This month" value={formatMoney(summary.thisMonth)} /><Stat label="Average purchase" value={formatMoney(summary.average)} /></div></section>
-          {meaningfulChart ? <section className="mt-8 rounded-2xl border border-white/10 bg-white/[0.045] p-5 sm:p-6"><h2 className="text-lg font-bold text-white">Spending over time</h2><div className="mt-7 flex h-48 items-end gap-3">{summary.months.map((month) => <div key={month.label} className="flex min-w-0 flex-1 flex-col items-center gap-2"><span className="text-[11px] text-gray-500">{month.amount ? formatMoney(month.amount) : ''}</span><motion.div initial={{ height: 0 }} animate={{ height: `${Math.max(4, (month.amount / maxMonth) * 100)}%` }} transition={{ duration: 0.22 }} className="w-full rounded-t-lg bg-gradient-to-t from-teal-500/60 to-teal-300/25" /><span className="text-xs text-gray-400">{month.label}</span></div>)}</div></section> : <p className="mt-8 text-sm text-gray-400">More insights will appear as you add receipts.</p>}
+          {meaningfulChart ? (
+            <section className="mt-8 rounded-2xl border border-white/10 bg-white/[0.045] p-5 sm:p-6">
+              <h2 className="text-lg font-bold text-white">Spending over time</h2>
+              <div className="mt-7 grid grid-cols-6 gap-2 sm:gap-3" role="img" aria-label="Spending over the last six months">
+                {summary.months.map((month) => {
+                  const barHeight = month.amount > 0 ? Math.max(8, (month.amount / maxMonth) * 100) : 0;
+
+                  return (
+                    <div key={month.label} className="flex min-w-0 flex-col items-center gap-2">
+                      <span className="h-4 max-w-full truncate text-[10px] font-medium text-gray-400 sm:text-[11px]" title={month.amount ? formatMoney(month.amount) : undefined}>
+                        {month.amount ? formatMoney(month.amount) : ''}
+                      </span>
+                      <div className="relative h-36 w-full overflow-hidden rounded-t-lg border-x border-t border-white/[0.04] bg-white/[0.035]">
+                        {month.amount > 0 ? (
+                          <motion.div
+                            initial={{ height: 0 }}
+                            animate={{ height: `${barHeight}%` }}
+                            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                            className="absolute inset-x-0 bottom-0 min-h-2 rounded-t-lg bg-gradient-to-t from-teal-500 to-teal-300 shadow-[0_-6px_18px_rgba(45,212,191,0.18)]"
+                          />
+                        ) : (
+                          <span className="absolute inset-x-1 bottom-0 h-px bg-white/10" />
+                        )}
+                      </div>
+                      <span className="text-[11px] text-gray-400 sm:text-xs">{month.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ) : <p className="mt-8 text-sm text-gray-400">More insights will appear as you add receipts.</p>}
           <div className="mt-8 grid gap-5 lg:grid-cols-2"><section className="rounded-2xl border border-white/10 bg-white/[0.045] p-5 sm:p-6"><h2 className="flex items-center gap-2 text-lg font-bold text-white"><Tag className="h-4 w-4 text-teal-300" />By category</h2><div className="mt-5 space-y-4">{summary.byCategory.map(([category, amount]) => <div key={category}><div className="flex justify-between gap-4 text-sm"><span className="text-gray-300">{category}</span><span className="font-semibold text-white">{formatMoney(amount)}</span></div><div className="mt-2 h-1.5 rounded-full bg-white/10"><div className="h-full rounded-full bg-teal-400/70" style={{ width: `${(amount / maxCategory) * 100}%` }} /></div></div>)}</div></section><section className="rounded-2xl border border-white/10 bg-white/[0.045] p-5 sm:p-6"><h2 className="flex items-center gap-2 text-lg font-bold text-white"><Store className="h-4 w-4 text-teal-300" />Top stores</h2><div className="mt-4 divide-y divide-white/10">{summary.byMerchant.map(([merchant, amount]) => <div key={merchant} className="flex items-center justify-between gap-4 py-3 text-sm"><span className="truncate text-gray-300">{merchant}</span><span className="shrink-0 font-semibold text-white">{formatMoney(amount)}</span></div>)}</div></section></div>
         </>}
       </motion.div>

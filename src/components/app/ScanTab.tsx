@@ -636,13 +636,7 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
 
       if (fileHash) {
         const { data: existingReceipts, error: existingReceiptError } = await supabase
-          .from('receipts')
-          .select('id, status, merchant')
-          .eq('user_id', user.id)
-          .eq('file_hash', fileHash)
-          .in('status', ['processing', 'parsed', 'completed', 'needs_review', 'needs_input', 'duplicate'])
-          .order('created_at', { ascending: false })
-          .limit(1);
+          .rpc('find_existing_receipt_by_file_hash', { p_file_hash: fileHash });
 
         if (existingReceiptError) {
           // Do not stop a valid upload merely because the optional early

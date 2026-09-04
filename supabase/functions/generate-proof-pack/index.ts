@@ -1,7 +1,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
+import { degrees, PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
 import { corsHeadersFor, isTrustedOrigin } from "../_shared/security.ts";
+import { getProofImagePlacement, readJpegExifOrientation } from "./image-orientation.ts";
 
 type ReceiptRow = {
   id: string;
@@ -115,14 +116,27 @@ const createProofPdf = async (inputLines: Array<{ text: string; strong?: boolean
         const copiedPages = await document.copyPages(originalDocument, originalDocument.getPageIndices());
         copiedPages.forEach((page) => document.addPage(page));
       } else {
-        const image = original[0] === 0xff && original[1] === 0xd8
-          ? await document.embedJpg(original)
-          : await document.embedPng(original);
-        const page = document.addPage([595, 842]);
-        const scale = Math.min(499 / image.width, 746 / image.height);
-        const width = image.width * scale;
-        const height = image.height * scale;
-        page.drawImage(image, { x: (595 - width) / 2, y: (842 - height) / 2, width, height });
+        const isJpeg = original[0] === 0xff && original[1] === 0xd8;
+        const image = isJpeg ? await document.embedJpg(original) : await document.embedPng(original);
+        const pageWidth = 595;
+        const pageHeight = 842;
+        const page = document.addPage([pageWidth, pageHeight]);
+        const placement = getProofImagePlacement({
+          sourceWidth: image.width,
+          sourceHeight: image.height,
+          orientation: isJpeg ? readJpegExifOrientation(original) : 1,
+          pageWidth,
+          pageHeight,
+          maxWidth: 499,
+          maxHeight: 746,
+        });
+        page.drawImage(image, {
+          x: placement.x,
+          y: placement.y,
+          width: placement.width,
+          height: placement.height,
+          rotate: degrees(placement.rotation),
+        });
       }
     } catch (error) {
       console.warn("[generate-proof-pack] Original could not be appended", { name: error instanceof Error ? error.name : "unknown" });

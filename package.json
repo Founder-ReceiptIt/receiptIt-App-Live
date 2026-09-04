@@ -12,6 +12,7 @@
     "test:async-review": "node scripts/check-async-document-review.mjs",
     "test:share-target": "node scripts/check-share-target.mjs",
     "test:account-isolation": "node scripts/check-account-session-isolation.mjs",
+    "test:lewis-ux": "node --experimental-strip-types scripts/check-lewis-beta-ux.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
   },
   "dependencies": {
