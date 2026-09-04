@@ -264,6 +264,7 @@ function App() {
               receipt={selectedReceipt?.userId === user.id ? selectedReceipt : null}
               onClose={() => setSelectedReceipt(null)}
               onDelete={() => setRefreshKey(prev => prev + 1)}
+              onUpdate={() => setRefreshKey(prev => prev + 1)}
               onCaptureAgain={(inSections) => {
                 if (inSections) requestReceiptSectionCapture();
                 setSelectedReceipt(null);

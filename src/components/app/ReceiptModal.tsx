@@ -116,10 +116,11 @@ interface ReceiptModalProps {
   receipt: Receipt | null;
   onClose: () => void;
   onDelete?: () => void;
+  onUpdate?: () => void;
   onCaptureAgain?: (inSections: boolean) => void;
 }
 
-export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: ReceiptModalProps) {
+export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAgain }: ReceiptModalProps) {
   const { showToast } = useToast();
   const { accountCurrency } = useAuth();
   const preferredReceiptCurrency: ReceiptCurrencyConfirmationOption = isReceiptCurrencyConfirmationOption(accountCurrency.preferredCurrency)
@@ -510,6 +511,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
     )));
     setItemDisplayNameDrafts({});
     setIsEditMode(false);
+    onUpdate?.();
     showToast(isDocumentReview ? 'Purchase kept' : 'Receipt updated');
     if (isDocumentReview) onClose();
   };
@@ -746,13 +748,24 @@ export function ReceiptModal({ receipt, onClose, onDelete, onCaptureAgain }: Rec
 
   const handleProofPack = async () => {
     if (!receipt) return;
+    // Open synchronously while the menu click still carries user activation.
+    // Waiting for the Edge Function before opening was treated as an unsolicited
+    // pop-up by mobile and desktop browsers.
+    const proofWindow = window.open('about:blank', '_blank');
+    if (proofWindow) {
+      proofWindow.opener = null;
+      proofWindow.document.title = 'Preparing proof of purchase…';
+      proofWindow.document.body.textContent = 'Preparing proof of purchase…';
+    }
     setIsGeneratingProofPack(true);
     try {
       const { data, error } = await generateProofPack(receipt.id);
       if (error || !data?.downloadUrl) throw error || new Error('Proof of purchase could not be generated');
-      window.open(data.downloadUrl, '_blank', 'noopener,noreferrer');
+      if (!proofWindow) throw new Error('The proof of purchase viewer was blocked');
+      proofWindow.location.replace(data.downloadUrl);
       showToast('Proof of purchase ready', 'Opened in a new tab.');
     } catch (error) {
+      proofWindow?.close();
       console.error('[ReceiptModal] Proof of purchase error:', error);
       showToast('Proof of purchase unavailable', 'Please try again in a moment.');
     } finally {

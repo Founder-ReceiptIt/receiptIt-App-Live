@@ -44,7 +44,8 @@ const landscape = getProofImagePlacement({
 assert.equal(landscape.rotation, 0);
 assert.ok(landscape.width > landscape.height);
 
-const [insights, modal, migration, proofPack] = await Promise.all([
+const [app, insights, modal, migration, proofPack] = await Promise.all([
+  readFile(new URL('../src/App.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/app/InsightsTab.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/app/ReceiptModal.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../supabase/migrations/20260904120000_add_category_and_receipt_evidence_recovery.sql', import.meta.url), 'utf8'),
@@ -57,6 +58,10 @@ assert.match(insights, /month\.amount > 0/);
 assert.match(modal, /aria-label="Receipt category"/);
 assert.match(modal, /Add a clearer photo/);
 assert.match(modal, /addClearerReceiptPhoto/);
+assert.match(modal, /onUpdate\?\.\(\)/);
+assert.match(modal, /window\.open\('about:blank', '_blank'\)/);
+assert.match(modal, /proofWindow\.location\.replace/);
+assert.match(app, /onUpdate=\{\(\) => setRefreshKey/);
 assert.doesNotMatch(modal, /Still analyzing/);
 assert.match(migration, /receipt_evidence_versions/);
 assert.match(migration, /receiptit_receipt_evidence_versions_select_own/);
