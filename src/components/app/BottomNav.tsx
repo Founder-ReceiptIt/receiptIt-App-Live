@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Wallet, AtSign, ScanLine, TrendingUp, Settings } from 'lucide-react';
+import { Wallet, AtSign, ScanLine, TrendingUp, Settings, Activity } from 'lucide-react';
 
 interface BottomNavProps {
   activeTab: string;
@@ -12,6 +12,7 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
     { id: 'alias', icon: AtSign, label: 'Alias' },
     { id: 'scan', icon: ScanLine, label: 'Scan' },
     { id: 'insights', icon: TrendingUp, label: 'Insights' },
+    { id: 'activity', icon: Activity, label: 'Activity' },
     { id: 'settings', icon: Settings, label: 'Settings' },
   ];
 
@@ -40,14 +41,14 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
                 )}
 
                 <tab.icon
-                  className={`w-6 h-6 relative z-10 transition-colors ${
+                  className={`relative z-10 h-5 w-5 transition-colors sm:h-6 sm:w-6 ${
                     activeTab === tab.id ? 'text-teal-400' : 'text-gray-400 group-hover:text-gray-300'
                   }`}
                   strokeWidth={1.5}
                 />
 
                 <span
-                  className={`relative z-10 max-w-full truncate text-[10px] font-semibold transition-colors sm:text-xs ${
+                  className={`relative z-10 max-w-full truncate text-[9px] font-semibold transition-colors min-[380px]:text-[10px] sm:text-xs ${
                     activeTab === tab.id ? 'text-teal-400' : 'text-gray-500 group-hover:text-gray-400'
                   }`}
                 >

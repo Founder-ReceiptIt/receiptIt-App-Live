@@ -227,6 +227,12 @@ export const isFinalizedReceiptStatus = (
 ): status is typeof FINALIZED_RECEIPT_STATUSES[number] =>
   typeof status === 'string' && FINALIZED_RECEIPT_STATUSES.includes(status as typeof FINALIZED_RECEIPT_STATUSES[number]);
 
+export const recordExactDuplicateActivity = async (receiptId: string) => supabase
+  .rpc('record_exact_duplicate_activity', { p_receipt_id: receiptId });
+
+export const keepPossibleDuplicate = async (receiptId: string) => supabase
+  .rpc('keep_possible_duplicate', { p_receipt_id: receiptId });
+
 export const needsCurrencyConfirmation = (
   status: unknown,
   errorReason: unknown

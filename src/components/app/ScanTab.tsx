@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, X, Camera, Loader2, FileImage, File } from 'lucide-react';
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { flushSync } from 'react-dom';
-import { supabase } from '../../lib/supabase';
+import { recordExactDuplicateActivity, supabase } from '../../lib/supabase';
 import {
   MAX_RECEIPT_IMAGE_DIMENSION,
   MAX_RECEIPT_IMAGE_PIXELS,
@@ -654,6 +654,13 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
               ? 'We are already reading this exact file. You can follow its progress in your Wallet.'
               : 'This exact file is already in your Wallet.'
           );
+
+          // This records only the owner-visible fact that an exact duplicate
+          // was stopped. It never stores the selected file or exposes it to
+          // another user, and failures do not weaken the hash guard.
+          void recordExactDuplicateActivity(existingReceipt.id).then(({ error }) => {
+            if (error) console.warn('[ScanTab] Could not record duplicate activity:', error);
+          });
 
           await completePendingShare('duplicate_detected');
           isScanningRef.current = false;

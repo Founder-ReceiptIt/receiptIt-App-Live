@@ -9,6 +9,7 @@ import { ScanTab } from './components/app/ScanTab';
 import { ReceiptModal } from './components/app/ReceiptModal';
 import { InsightsTab } from './components/app/InsightsTab';
 import { SettingsTab } from './components/app/SettingsTab';
+import { ActivityTab } from './components/app/ActivityTab';
 import { AuthForm } from './components/auth/AuthForm';
 import { AliasSetupModal } from './components/auth/AliasSetupModal';
 import { ProfileRecoveryModal } from './components/auth/ProfileRecoveryModal';
@@ -20,7 +21,7 @@ import { useAuth } from './contexts/AuthContext';
 import { requestReceiptSectionCapture } from './lib/receiptCaptureUtils';
 import { getShareTargetIntentId, recordShareTargetEvent } from './lib/shareTargetInbox';
 
-const APP_TABS = ['wallet', 'alias', 'scan', 'insights', 'settings'] as const;
+const APP_TABS = ['wallet', 'alias', 'scan', 'insights', 'activity', 'settings'] as const;
 type AppTab = typeof APP_TABS[number];
 
 const getTabFromLocation = (): AppTab => {
@@ -35,6 +36,7 @@ function App() {
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [quickScanRequestId, setQuickScanRequestId] = useState(0);
+  const [requestedReceiptId, setRequestedReceiptId] = useState<string | null>(null);
   const recordedShareAuthInterruptionRef = useRef<string | null>(null);
   const isAuthenticated = Boolean(user && session);
   const shouldShowBootSplash = authLoading || profileLoading || (isAuthenticated && !needsAliasSetup && !showApp);
@@ -66,6 +68,15 @@ function App() {
 
   const handleQuickScanHandled = useCallback(() => {
     setQuickScanRequestId(0);
+  }, []);
+
+  const handleOpenReceiptFromActivity = useCallback((receiptId: string) => {
+    setRequestedReceiptId(receiptId);
+    handleTabChange('wallet');
+  }, [handleTabChange]);
+
+  const handleRequestedReceiptHandled = useCallback(() => {
+    setRequestedReceiptId(null);
   }, []);
 
   useEffect(() => {
@@ -201,6 +212,8 @@ function App() {
                       onReceiptsChange={handleWalletReceiptsChange}
                       onNavigateToScan={handleQuickScan}
                       onNavigateToAlias={() => handleTabChange('alias')}
+                      requestedReceiptId={requestedReceiptId}
+                      onRequestedReceiptHandled={handleRequestedReceiptHandled}
                     />
                   </motion.div>
                 )}
@@ -254,6 +267,18 @@ function App() {
                     transition={{ duration: 0.3 }}
                   >
                     <SettingsTab />
+                  </motion.div>
+                )}
+
+                {activeTab === 'activity' && (
+                  <motion.div
+                    key="activity"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <ActivityTab onOpenReceipt={handleOpenReceiptFromActivity} />
                   </motion.div>
                 )}
               </AnimatePresence>

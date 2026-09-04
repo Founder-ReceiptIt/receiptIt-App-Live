@@ -83,7 +83,14 @@ export function SettingsTab() {
 
   const handleExport = async () => {
     if (!user) return;
-    const { data: receipts, error } = await supabase.from('receipts').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+    const [receiptResult, activityResult, emailResult, duplicateResult] = await Promise.all([
+      supabase.from('receipts').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+      supabase.from('purchase_activity').select('receipt_id,event_type,created_at').eq('user_id', user.id).order('created_at', { ascending: false }),
+      supabase.from('inbound_messages').select('sender_domain,classification,status,error_reason,received_at,processed_at').eq('user_id', user.id).order('received_at', { ascending: false }),
+      supabase.from('receipt_possible_duplicates').select('receipt_id,possible_duplicate_of,confidence,decision,created_at,resolved_at').eq('user_id', user.id).order('created_at', { ascending: false }),
+    ]);
+    const error = [receiptResult, activityResult, emailResult, duplicateResult].find((result) => result.error)?.error;
+    const receipts = receiptResult.data;
     if (error || !receipts) {
       showToast('Could not prepare your download', 'Please try again in a moment.');
       return;
@@ -97,7 +104,28 @@ export function SettingsTab() {
     const settingsRow = [accountCurrency.preferredCurrency, accountCurrency.monthlyBudgetAmount, accountCurrency.monthlyBudgetCurrency];
     const headers = ['Status', 'Document type', 'Date', 'Store', 'Amount', 'Currency', 'Category', 'Reference'];
     const rows = receipts.map((receipt) => [receipt.status, receipt.document_type, receipt.transaction_date, receipt.merchant, receipt.amount, receipt.currency, receipt.category, receipt.reference_number]);
-    const exportRows = [settingsHeaders, settingsRow, [], headers, ...rows];
+    const activityHeaders = ['Activity', 'Receipt ID', 'Event', 'Date'];
+    const activityRows = (activityResult.data || []).map((activity) => ['', activity.receipt_id, activity.event_type, activity.created_at]);
+    const emailHeaders = ['Receipt email activity', 'Sender domain', 'Classification', 'Status', 'Reason', 'Received', 'Processed'];
+    const emailRows = (emailResult.data || []).map((message) => ['', message.sender_domain, message.classification, message.status, message.error_reason, message.received_at, message.processed_at]);
+    const duplicateHeaders = ['Possible duplicate review', 'Receipt ID', 'Similar receipt ID', 'Confidence', 'Decision', 'Created', 'Resolved'];
+    const duplicateRows = (duplicateResult.data || []).map((candidate) => ['', candidate.receipt_id, candidate.possible_duplicate_of, candidate.confidence, candidate.decision, candidate.created_at, candidate.resolved_at]);
+    const exportRows = [
+      settingsHeaders,
+      settingsRow,
+      [],
+      headers,
+      ...rows,
+      [],
+      activityHeaders,
+      ...activityRows,
+      [],
+      emailHeaders,
+      ...emailRows,
+      [],
+      duplicateHeaders,
+      ...duplicateRows,
+    ];
     const blob = new Blob([exportRows.map((row) => row.map(csvCell).join(',')).join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

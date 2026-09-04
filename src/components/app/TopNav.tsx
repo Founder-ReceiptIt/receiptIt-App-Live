@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Wallet, AtSign, ScanLine, TrendingUp, Settings, Menu, X } from 'lucide-react';
+import { Wallet, AtSign, ScanLine, TrendingUp, Settings, Menu, X, Activity } from 'lucide-react';
 import { useState } from 'react';
 import { ReceiptItWordmark } from '../ReceiptItWordmark';
 
@@ -16,6 +16,7 @@ export function TopNav({ activeTab, onTabChange }: TopNavProps) {
     { id: 'alias', icon: AtSign, label: 'Alias' },
     { id: 'scan', icon: ScanLine, label: 'Scan' },
     { id: 'insights', icon: TrendingUp, label: 'Insights' },
+    { id: 'activity', icon: Activity, label: 'Activity' },
   ];
 
   const handleTabChange = (tab: string) => {

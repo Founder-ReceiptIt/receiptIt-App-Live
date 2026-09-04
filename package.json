@@ -13,6 +13,7 @@
     "test:share-target": "node scripts/check-share-target.mjs",
     "test:account-isolation": "node scripts/check-account-session-isolation.mjs",
     "test:lewis-ux": "node --experimental-strip-types scripts/check-lewis-beta-ux.mjs",
+    "test:activity": "node scripts/check-possible-duplicates-activity.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
   },
   "dependencies": {

@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Receipt as ReceiptIcon, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Loader2, Car, Home, Plane, Zap, Utensils, Undo2, Trash2, CheckSquare, Square, ChevronDown, Download, AlertCircle, ShieldCheck, AtSign, ScanLine } from 'lucide-react';
+import { Receipt as ReceiptIcon, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Loader2, Car, Home, Plane, Zap, Utensils, Undo2, Trash2, CheckSquare, Square, ChevronDown, Download, AlertCircle, ShieldCheck, AtSign, ScanLine, CopyCheck } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { ReportProblemDialog } from './ReportProblemDialog';
@@ -11,6 +11,7 @@ import {
   markReceiptProcessingTimedOut,
   needsCurrencyConfirmation,
   isFinalizedReceiptStatus,
+  keepPossibleDuplicate,
   RECEIPT_CURRENCY_CONFIRMATION_OPTIONS,
   RECEIPT_PRIMARY_CURRENCY_CONFIRMATION_OPTION,
   retryReceiptProcessing,
@@ -34,6 +35,16 @@ interface WalletTabProps {
   onReceiptsChange?: (receipts: Receipt[]) => void;
   onNavigateToScan: () => void;
   onNavigateToAlias: () => void;
+  requestedReceiptId?: string | null;
+  onRequestedReceiptHandled?: () => void;
+}
+
+interface PossibleDuplicateCandidate {
+  receipt_id: string;
+  possible_duplicate_of: string;
+  confidence: number;
+  signals: string[];
+  created_at: string;
 }
 
 const getCategoryIcon = (category: string): LucideIcon => {
@@ -460,7 +471,14 @@ export interface Receipt {
   groupingKey: string;
 }
 
-export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, onNavigateToAlias }: WalletTabProps) {
+export function WalletTab({
+  onReceiptClick,
+  onReceiptsChange,
+  onNavigateToScan,
+  onNavigateToAlias,
+  requestedReceiptId,
+  onRequestedReceiptHandled,
+}: WalletTabProps) {
   const { user, accountCurrency } = useAuth();
   const { showToast } = useToast();
   const preferredReceiptCurrency: ReceiptCurrencyConfirmationOption = isReceiptCurrencyConfirmationOption(accountCurrency.preferredCurrency)
@@ -491,6 +509,8 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
   const [moveMenuOpen, setMoveMenuOpen] = useState(false);
   const [convertedAmounts, setConvertedAmounts] = useState<Map<string, number>>(new Map());
   const [excludedConversionIds, setExcludedConversionIds] = useState<Set<string>>(new Set());
+  const [possibleDuplicates, setPossibleDuplicates] = useState<PossibleDuplicateCandidate[]>([]);
+  const [resolvingPossibleDuplicateId, setResolvingPossibleDuplicateId] = useState<string | null>(null);
   const previousReceiptIdsRef = useRef<Set<string>>(new Set());
   const successfulReceiptIdsRef = useRef<Set<string>>(new Set());
   const isMilestoneTrackingReadyRef = useRef(false);
@@ -510,6 +530,7 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
     setSelectMode(false);
     setConvertedAmounts(new Map());
     setExcludedConversionIds(new Set());
+    setPossibleDuplicates([]);
     setProcessingAttemptStartedAtByReceiptId({});
 
     successfulReceiptIdsRef.current = new Set();
@@ -557,6 +578,20 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
         }
 
         const rawRows = ((data || []) as SupabaseReceiptRow[]);
+        const { data: possibleDuplicateRows, error: possibleDuplicateError } = await supabase
+          .from('receipt_possible_duplicates')
+          .select('receipt_id,possible_duplicate_of,confidence,signals,created_at')
+          .eq('user_id', userId)
+          .eq('decision', 'pending')
+          .order('created_at', { ascending: false });
+
+        if (!active) return;
+        if (possibleDuplicateError) {
+          console.error('[WalletTab] Could not load possible duplicates:', possibleDuplicateError);
+          setPossibleDuplicates([]);
+        } else {
+          setPossibleDuplicates((possibleDuplicateRows || []) as PossibleDuplicateCandidate[]);
+        }
         successfulReceiptIdsRef.current = new Set(
           rawRows
             .filter((row) => isFinalizedReceiptStatus(row.status))
@@ -809,9 +844,24 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
 
   const filteredReceipts = visibleReceipts.filter(matchesReceiptFilters);
 
+  const possibleDuplicate = possibleDuplicates
+    .map((candidate) => ({
+      candidate,
+      receipt: visibleReceipts.find((receipt) => receipt.id === candidate.receipt_id),
+      existing: visibleReceipts.find((receipt) => receipt.id === candidate.possible_duplicate_of),
+    }))
+    .find((match) => match.receipt && match.existing);
+
   useEffect(() => {
     onReceiptsChange?.(visibleReceipts);
   }, [onReceiptsChange, visibleReceipts]);
+
+  useEffect(() => {
+    if (!requestedReceiptId || loading) return;
+    const requestedReceipt = visibleReceipts.find((receipt) => receipt.id === requestedReceiptId);
+    if (requestedReceipt) onReceiptClick(requestedReceipt);
+    onRequestedReceiptHandled?.();
+  }, [loading, onReceiptClick, onRequestedReceiptHandled, requestedReceiptId, visibleReceipts]);
 
   useEffect(() => {
     setProcessingAttemptStartedAtByReceiptId((currentValue) => {
@@ -1076,6 +1126,20 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
     }
   };
 
+  const handleSavePossibleDuplicateAnyway = async (receiptId: string) => {
+    setResolvingPossibleDuplicateId(receiptId);
+    const { error } = await keepPossibleDuplicate(receiptId);
+    setResolvingPossibleDuplicateId(null);
+    if (error) {
+      console.error('[WalletTab] Could not keep possible duplicate:', error);
+      showToast('Couldn’t save your choice', 'Please try again.');
+      return;
+    }
+
+    setPossibleDuplicates((current) => current.filter((candidate) => candidate.receipt_id !== receiptId));
+    showToast('Saved separately', 'Both purchases remain in your Wallet.');
+  };
+
   return (
     <div className="ri-mobile-page mx-auto min-w-0 max-w-7xl px-4 pt-8 sm:px-6">
       <motion.div
@@ -1101,6 +1165,23 @@ export function WalletTab({ onReceiptClick, onReceiptsChange, onNavigateToScan, 
         </div>
 
         {primaryAction ? <div className="mb-4 rounded-2xl border border-amber-300/25 bg-gradient-to-br from-amber-400/12 to-teal-400/5 p-5"><div className="flex items-start gap-3"><div className="rounded-xl border border-amber-300/25 bg-amber-400/10 p-2.5"><AlertCircle className="h-5 w-5 text-amber-200" /></div><div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-200">{actionHeading}</p><p className="mt-1 text-2xl font-bold text-white">{primaryAction.detail}</p></div></div></div> : null}
+
+        {possibleDuplicate ? (
+          <section className="mb-4 rounded-2xl border border-amber-300/25 bg-gradient-to-br from-amber-400/10 to-white/[0.025] p-5" aria-label="Possible duplicate receipt">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="shrink-0 rounded-xl border border-amber-300/25 bg-amber-400/10 p-2.5"><CopyCheck className="h-5 w-5 text-amber-200" strokeWidth={1.7} /></div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-200">Possible duplicate</p>
+                <h2 className="mt-1 break-words text-lg font-bold text-white">This looks similar to a receipt already saved.</h2>
+                <p className="mt-1 text-sm leading-6 text-gray-400">Nothing has been removed. Compare the existing receipt or keep this as a separate purchase.</p>
+                <div className="mt-4 flex flex-col gap-2 min-[380px]:flex-row">
+                  <button type="button" onClick={() => onReceiptClick(possibleDuplicate.existing!)} className="min-h-11 rounded-xl border border-white/15 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/5">View existing</button>
+                  <button type="button" disabled={resolvingPossibleDuplicateId === possibleDuplicate.receipt!.id} onClick={() => void handleSavePossibleDuplicateAnyway(possibleDuplicate.receipt!.id)} className="min-h-11 rounded-xl bg-teal-400 px-4 py-2.5 text-sm font-bold text-black transition-colors hover:bg-teal-300 disabled:opacity-50">{resolvingPossibleDuplicateId === possibleDuplicate.receipt!.id ? 'Saving…' : 'Save anyway'}</button>
+                </div>
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         <div className="mb-6 rounded-2xl border border-teal-300/25 bg-gradient-to-br from-teal-400/15 to-cyan-400/5 p-5">
           <div className="flex min-w-0 items-start gap-3"><div className="shrink-0 rounded-xl border border-teal-300/20 bg-teal-400/10 p-2.5"><ShieldCheck className="h-5 w-5 text-teal-200" strokeWidth={1.5} /></div><div className="min-w-0 flex-1"><div className="grid min-w-0 grid-cols-1 gap-3 min-[380px]:grid-cols-2"><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-200">This month</p><p className="mt-1 break-words text-2xl font-bold text-white">{formatCurrency(spentThisMonth, accountCurrency.preferredCurrency)} spent</p></div><div className="min-w-0 min-[380px]:text-right"><p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">Average purchase</p><p className="mt-1 break-words text-lg font-bold text-white">{formatCurrency(averagePurchaseThisMonth, accountCurrency.preferredCurrency)}</p></div></div>{monthlyBudget ? <><p className="mt-4 text-sm text-gray-300">of {formatCurrency(monthlyBudget, accountCurrency.preferredCurrency, { maximumFractionDigits: 0, minimumFractionDigits: 0 })} budget</p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-teal-400 transition-[width] duration-300" style={{ width: `${budgetProgress}%` }} /></div><p className="mt-2 text-xs text-gray-400">{budgetUsed.toFixed(1)}% used</p></> : null}{excludedThisMonthCount > 0 ? <p className="mt-3 text-xs text-amber-100">{excludedThisMonthCount === 1 ? 'One purchase couldn’t be included in this total.' : `${excludedThisMonthCount} purchases couldn’t be included in this total.`}</p> : null}</div></div>
