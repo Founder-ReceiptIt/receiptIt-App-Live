@@ -24,6 +24,7 @@ assert.match(wallet, /Possible duplicate/);
 assert.match(wallet, /View existing/);
 assert.match(wallet, /Save anyway/);
 assert.match(wallet, /keepPossibleDuplicate/);
+assert.match(wallet, /table: 'receipt_possible_duplicates'/);
 assert.match(scan, /find_existing_receipt_by_file_hash/);
 assert.match(scan, /recordExactDuplicateActivity/);
 

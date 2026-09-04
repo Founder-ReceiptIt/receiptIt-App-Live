@@ -752,6 +752,19 @@ export function WalletTab({
           }
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'receipt_possible_duplicates',
+          filter: `user_id=eq.${userId}`,
+        },
+        () => {
+          if (!active) return;
+          fetchReceipts();
+        }
+      )
       .subscribe((status) => {
         console.log('[WalletTab] Subscription status:', status);
         if (status === 'SUBSCRIBED') {

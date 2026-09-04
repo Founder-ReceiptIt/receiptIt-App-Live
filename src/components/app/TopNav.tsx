@@ -92,6 +92,7 @@ export function TopNav({ activeTab, onTabChange }: TopNavProps) {
           {/* Mobile Hamburger Menu */}
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            aria-label={isMobileMenuOpen ? 'Close navigation' : 'Open navigation'}
             className="md:hidden p-2 rounded-lg text-gray-400 hover:bg-white/5 hover:text-white transition-colors"
           >
             {isMobileMenuOpen ? (
