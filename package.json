@@ -15,6 +15,7 @@
     "test:lewis-ux": "node --experimental-strip-types scripts/check-lewis-beta-ux.mjs",
     "test:activity": "node scripts/check-possible-duplicates-activity.mjs",
     "test:calm-review": "node scripts/check-calm-wallet-review-assist.mjs",
+    "test:inbound-email": "node --experimental-strip-types scripts/check-inbound-email-classification.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
   },
   "dependencies": {

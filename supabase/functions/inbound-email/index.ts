@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { createEmailBodyPdf } from "./email-body-pdf.ts";
+import { classifyEnvelope } from "./email-classification.ts";
 
 /*
  * ReceiptIt inbound mail endpoint (Resend Receiving).
@@ -125,16 +126,6 @@ const inferredAttachmentType = (bytes: Uint8Array) => {
   return null;
 };
 
-const classifyEnvelope = (subject: string, body: string) => {
-  const sample = `${subject}\n${body}`.slice(0, 12_000).toLowerCase();
-  if (/unsubscribe|view in browser|sale ends|promotional offer|newsletter/.test(sample)) return "marketing";
-  if (/refund|returned|return accepted/.test(sample)) return "return_or_refund";
-  if (/warranty|service booking|repair/.test(sample)) return "warranty_or_service";
-  if (/delivered|out for delivery|tracking number|shipped/.test(sample)) return "delivery_or_fulfilment";
-  if (/receipt|invoice|order confirmation|payment confirmation|thank you for your order|total/.test(sample)) return "purchase_transactional";
-  return "uncertain";
-};
-
 Deno.serve(async (request) => {
   if (request.method !== "POST") return json({ error: "Not found" }, 404);
   const contentLength = Number(request.headers.get("content-length") || "0");
@@ -183,8 +174,8 @@ Deno.serve(async (request) => {
     return json({ accepted: true });
   }
 
-  const { data: existingMessage } = await admin.from("inbound_messages")
-    .select("id").eq("provider", "resend").eq("provider_event_id", providerEventId).maybeSingle();
+  let { data: existingMessage } = await admin.from("inbound_messages")
+    .select("id,status,classification").eq("provider", "resend").eq("provider_event_id", providerEventId).maybeSingle();
 
   const contentResponse = await fetch(`https://api.resend.com/emails/receiving/${encodeURIComponent(event.data.email_id)}`, {
     headers: { Authorization: `Bearer ${resendApiKey}` },
@@ -203,7 +194,20 @@ Deno.serve(async (request) => {
         : ""
   ).slice(0, MAX_BODY_BYTES);
   const headers = content.headers && typeof content.headers === "object" ? content.headers as Record<string, unknown> : {};
-  const classification = classifyEnvelope(String(content.subject || event.data.subject || ""), bodyText);
+  const providerMessageId = typeof content.message_id === "string"
+    ? content.message_id.slice(0, 998)
+    : event.data.message_id || null;
+  if (!existingMessage && providerMessageId) {
+    const existingByProviderMessage = await admin.from("inbound_messages")
+      .select("id,status,classification")
+      .eq("provider", "resend")
+      .eq("provider_message_id", providerMessageId)
+      .maybeSingle();
+    existingMessage = existingByProviderMessage.data;
+  }
+
+  const envelope = classifyEnvelope(String(content.subject || event.data.subject || ""), bodyText);
+  const classification = envelope.classification;
   const attachments = (event.data.attachments || []).filter((attachment) => attachment.content_disposition !== "inline").slice(0, MAX_ATTACHMENTS);
 
   let messageId = existingMessage?.id;
@@ -213,7 +217,7 @@ Deno.serve(async (request) => {
       alias_id: alias.id,
       provider: "resend",
       provider_event_id: providerEventId,
-      provider_message_id: typeof content.message_id === "string" ? content.message_id.slice(0, 998) : event.data.message_id || null,
+      provider_message_id: providerMessageId,
       recipient_address: recipient,
       sender_address: typeof content.from === "string" ? content.from.slice(0, 998) : event.data.from || null,
       reply_to_address: typeof content.reply_to === "string" ? content.reply_to.slice(0, 998) : null,
@@ -228,6 +232,8 @@ Deno.serve(async (request) => {
       attachment_count: attachments.length,
       body_sha256: bodyText ? await sha256(bodyText) : null,
       status: classification === "marketing" ? "ignored" : "processing",
+      error_reason: classification === "marketing" ? envelope.ignoredReason : null,
+      processed_at: classification === "marketing" ? new Date().toISOString() : null,
     }).select("id").single();
     if (messageError || !message) {
       if (messageError?.code === "23505") return json({ accepted: true, duplicate: true });
@@ -235,10 +241,27 @@ Deno.serve(async (request) => {
       return json({ error: "Temporary failure" }, 503);
     }
     messageId = message.id;
+  } else {
+    const wasPreviouslyIgnored = existingMessage.status === "ignored";
+    await admin.from("inbound_messages").update({
+      classification,
+      error_reason: classification === "marketing" ? envelope.ignoredReason : null,
+      ...(classification === "marketing"
+        ? { status: "ignored", processed_at: new Date().toISOString() }
+        : wasPreviouslyIgnored
+          ? { status: "processing", processed_at: null }
+          : {}),
+    }).eq("id", messageId);
   }
 
   await admin.from("email_aliases").update({ last_received_at: new Date().toISOString() }).eq("id", alias.id);
-  if (classification === "marketing") return json({ accepted: true, ignored: true });
+  if (classification === "marketing") {
+    console.info("[inbound-email] Message ignored", {
+      ignored_reason: envelope.ignoredReason,
+      attachment_count: attachments.length,
+    });
+    return json({ accepted: true, ignored: true, ignored_reason: envelope.ignoredReason });
+  }
 
   for (const attachment of attachments) {
     if (!attachment.id) continue;

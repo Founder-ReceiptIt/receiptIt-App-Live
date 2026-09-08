@@ -86,16 +86,29 @@ Envelope-level classifications are:
 - `uncertain`
 
 Obvious marketing is recorded as `ignored` and creates no Wallet purchase.
+Every ignored message carries a stable, content-free `ignored_reason` (for
+example `marketing_filter_newsletter`) in both the operational record and the
+webhook response/log. Explicit receipt, invoice, order-confirmation and payment
+form signals take precedence over weak footer boilerplate such as
+`unsubscribe` or `view in browser`; transactional mail commonly contains those
+phrases. Strong marketing-only messages continue to be filtered before any
+receipt row or private object is created.
 Attachments use the frozen Image/PDF canonical document-type routing:
 
 - `receipt` → Ready
 - invoice/order/payment/hotel/EFTPOS/other purchase proof → Document Review
 - non-purchase document → rejected
 
-Plain-text email body extraction is a deliberately separate next implementation
-step. It must use the same strict canonical schema and hostile-input rules as
-the image and PDF extractors. Until it exists, body-only evidence remains in
-minimal inbound metadata rather than being falsely promoted to a Wallet receipt.
+The shared Finalise scenario must continue after an empty payment aggregation:
+invoices and order documents can be valid purchase evidence without an explicit
+payment row. An empty `payments[]` array must therefore produce zero child rows
+and still allow the parent receipt to reach its final state.
+
+Body-only purchase evidence is rendered as an inert, deterministic PDF and sent
+through the same private PDF processor, canonical schema and hostile-input rules
+as an attachment. Provider replays reuse the original inbound-message record;
+failed evidence retrieval remains retryable, while already queued or completed
+evidence is not dispatched twice.
 
 ## Observability
 
@@ -114,7 +127,8 @@ their own aliases/messages/attachments.
 4. Set the two Supabase secrets and invoke one signed test event.
 5. Confirm a PDF, scanned PDF and image attachment become a single private
    receipt; test replay and exact attachment duplicate behavior.
-6. Add the Email Text Processor before advertising body-only receipt support.
+6. Confirm a body-only purchase email is rendered once and processed through
+   the existing private PDF path.
 
 ## Verified v0 acceptance checks
 
