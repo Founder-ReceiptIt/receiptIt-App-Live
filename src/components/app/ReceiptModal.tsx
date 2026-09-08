@@ -625,8 +625,12 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
     createdAt: receipt.createdAt,
     processingAttemptStartedAt,
   });
-  const shouldRetryExistingReceipt = receiptFailureDetails?.primaryAction === 'retry';
-  const failurePrimaryActionLabel = receiptFailureDetails?.primaryAction === 'scan_sections'
+  const isNotReceiptDocument = receipt.documentType === 'non_purchase_document'
+    || (receipt.status === 'rejected' && receipt.errorReason === 'not_purchase_document');
+  const shouldRetryExistingReceipt = !isNotReceiptDocument && receiptFailureDetails?.primaryAction === 'retry';
+  const failurePrimaryActionLabel = isNotReceiptDocument
+    ? 'Try another file'
+    : receiptFailureDetails?.primaryAction === 'scan_sections'
     ? 'Scan in sections'
     : receiptFailureDetails?.primaryAction === 'replace'
       ? 'Choose another file'
@@ -659,7 +663,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
   const heroMetadataChips = [
     receipt.orderNumber ? { label: `Order ${receipt.orderNumber}`, value: receipt.orderNumber, icon: FileText } : null,
     receipt.loyaltyMemberId ? { label: `Member ${receipt.loyaltyMemberId}`, value: receipt.loyaltyMemberId, icon: FileText } : null,
-    receipt.cardLast4 ? { label: `**** ${receipt.cardLast4}`, icon: CreditCard } : null,
+    receipt.cardLast4 ? { label: `•••• ${receipt.cardLast4}`, icon: CreditCard } : null,
   ].filter((chip): chip is { label: string; value?: string; icon: typeof FileText } => chip !== null);
   // Build summary rows dynamically. Only include a discount row when a discount amount
   // exists (non-null and non-zero). This avoids showing an empty Discount line when
@@ -720,7 +724,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
 
   const hasOriginalReceipt = hasReceiptOriginal(receipt);
   const hasImageOriginal = receipt.source === 'image' || /\.(jpe?g|png)(?:$|\?)/i.test(receipt.storagePath || receipt.imageUrl || '');
-  const originalActionLabel = isDocumentReview ? 'View original' : 'View receipt';
+  const originalActionLabel = isNotReceiptDocument ? 'View document' : isDocumentReview ? 'View original' : 'View receipt';
   const shouldHideBreakdownSection = isCompactFailedReceipt || (
     isNonFinalReceipt
     && !showItemsLoadingState
@@ -797,26 +801,26 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: "100%", opacity: 0 }}
           transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-          className="relative mb-[max(0.5rem,var(--ri-safe-bottom))] mx-1 w-full min-w-0 max-w-[calc(100vw-0.5rem)] sm:mx-4 sm:max-w-2xl md:mb-0"
+          className="relative mb-[max(0.5rem,var(--ri-safe-bottom))] mx-1 w-full min-w-0 max-w-[min(42rem,calc(100vw-0.5rem))] sm:mx-4 md:mb-0"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="min-w-0 rounded-3xl border border-white/10 bg-black/90 shadow-[0_0_60px_rgba(45,212,191,0.3)] backdrop-blur-xl">
             
             {/* --- HEADER --- */}
-            <div className="relative flex min-w-0 flex-wrap items-center gap-1.5 border-b border-white/10 p-3 sm:gap-2 sm:p-6">
-              <h2 className="mr-auto shrink-0 text-xl font-bold text-white sm:text-2xl">Receipt</h2>
-              <div className="flex shrink-0 items-center justify-end gap-1.5 sm:gap-2">
+            <div className="relative grid min-w-0 grid-cols-1 items-center gap-2 border-b border-white/10 p-3 min-[380px]:grid-cols-[minmax(0,1fr)_auto] sm:p-6">
+              <h2 className="min-w-0 break-words text-xl font-bold text-white sm:text-2xl">{isNotReceiptDocument ? 'Document' : 'Receipt'}</h2>
+              <div className="flex min-w-0 items-center justify-between gap-1 min-[380px]:justify-end sm:gap-2">
                 {hasOriginalReceipt && (
                   <motion.button
                     type="button"
                     onClick={(event) => void handleDownloadClick(event)}
                     whileTap={{ scale: 0.985 }}
-                    className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 text-xs font-semibold text-gray-200 transition-colors hover:border-teal-400/30 hover:text-teal-300 sm:gap-2 sm:px-4 sm:text-sm"
+                    className="inline-flex h-10 min-w-0 shrink items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2 text-xs font-semibold text-gray-200 transition-colors hover:border-teal-400/30 hover:text-teal-300 min-[380px]:px-2.5 sm:gap-2 sm:px-4 sm:text-sm"
                     title={originalActionLabel}
                     aria-label={originalActionLabel}
                   >
                     <FileText className="h-4 w-4 shrink-0" />
-                    <span>{originalActionLabel}</span>
+                    <span className="min-w-0 whitespace-nowrap">{originalActionLabel}</span>
                   </motion.button>
                 )}
                 <div className="shrink-0">
@@ -907,19 +911,19 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
                       className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-red-300 transition-colors hover:bg-red-400/10 disabled:opacity-50"
                     >
                       {isDeleting ? <Clock className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                      {isDeleting ? 'Deleting...' : 'Delete receipt'}
+                      {isDeleting ? 'Deleting...' : isNotReceiptDocument ? 'Delete document' : 'Delete receipt'}
                     </button>
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
 
-            <div className="ri-dialog-body-height min-w-0 space-y-6 overflow-x-hidden overflow-y-auto p-3 sm:p-6">
+            <div className="ri-dialog-body-height min-w-0 space-y-5 overflow-x-hidden overflow-y-auto p-3 min-[380px]:p-4 sm:space-y-6 sm:p-6">
               {isCompactFailedReceipt ? (
                 <>
-                  <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6">
-                    <div className="flex items-start gap-4">
-                      <div className="w-16 h-16 flex-shrink-0 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-center">
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-xl sm:p-6">
+                    <div className="flex items-start gap-3 sm:gap-4">
+                      <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border border-red-500/30 bg-red-500/10 sm:h-16 sm:w-16">
                         {receipt.merchantIcon ? (
                           <receipt.merchantIcon className="w-8 h-8 text-red-300" strokeWidth={1.5} />
                         ) : (
@@ -927,7 +931,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h3 className="text-2xl font-bold text-white">{receiptFailureDetails?.title}</h3>
+                        <h3 className="break-words text-xl font-bold text-white sm:text-2xl">{receiptFailureDetails?.title}</h3>
                         {receiptFailureDetails?.reason && (
                           <p className="mt-2 text-sm text-red-100/85">{receiptFailureDetails.reason}</p>
                         )}
@@ -948,10 +952,12 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
                             return;
                           }
 
-                          onCaptureAgain?.(receiptFailureDetails?.primaryAction === 'scan_sections');
+                          onCaptureAgain?.(!isNotReceiptDocument && receiptFailureDetails?.primaryAction === 'scan_sections');
                         }}
                         disabled={isDeleting || isConfirmingCurrency}
-                        className="px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className={isNotReceiptDocument
+                          ? 'rounded-lg bg-white px-3 py-1.5 text-sm font-bold text-black transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50'
+                          : 'px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed'}
                       >
                         {isConfirmingCurrency ? 'Trying again...' : failurePrimaryActionLabel}
                       </button>
@@ -967,7 +973,9 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
                         type="button"
                         onClick={() => setShowReportProblemDialog(true)}
                         disabled={isDeleting || isConfirmingCurrency}
-                        className="px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className={isNotReceiptDocument
+                          ? 'px-3 py-1.5 text-sm font-semibold text-gray-500 transition-colors hover:text-gray-300 disabled:cursor-not-allowed disabled:opacity-50'
+                          : 'px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed'}
                       >
                         Report
                       </button>
@@ -1050,7 +1058,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
                       </div>
                     )}
                   </div>
-                    <div className="col-span-2 min-w-0 justify-self-end text-right sm:col-span-1 sm:row-start-1">
+                    <div className="col-span-2 min-w-0 justify-self-end text-right sm:col-span-1 sm:row-start-1 sm:max-w-[42%]">
                     {isEditMode && isDocumentReview ? (
                       <div className="ml-auto w-full max-w-52 text-left sm:text-right">
                         <label htmlFor={`receipt-amount-${receipt.id}`} className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-500">
@@ -1070,7 +1078,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
                         />
                       </div>
                     ) : (
-                      <div className={`break-words font-bold text-white [overflow-wrap:anywhere] ${hasKnownOriginalTotal ? 'text-3xl' : 'max-w-48 text-base leading-tight'}`}>
+                      <div className={`break-words font-bold tabular-nums text-white [overflow-wrap:anywhere] ${hasKnownOriginalTotal ? 'text-3xl' : 'max-w-48 text-base leading-tight'}`}>
                         {heroAmountDisplay}
                       </div>
                     )}
@@ -1325,7 +1333,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
                   initial={{ y: 20, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ delay: 0.2 }}
-                  className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6"
+                  className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-xl sm:p-6"
                 >
                   <h4 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                     <FileText className="w-5 h-5 text-teal-400" />

@@ -12,12 +12,12 @@ const [wallet, modal, supabaseClient, reassessment, reassessmentCleanup, imageBl
   readFile(new URL('tmp/calm-review-assist/RECEIPTIT V2 - PDF PROCESSOR.calm-review.blueprint.json', workspaceUrl), 'utf8'),
 ]);
 
-assert.match(wallet, /type WalletReceiptSection = 'purchases' \| 'attention' \| 'recovery'/);
+assert.match(wallet, /type WalletReceiptSection = 'purchases' \| 'attention' \| 'not_receipts'/);
 assert.match(wallet, /Needs attention/);
-assert.match(wallet, /Files to revisit/);
-assert.match(wallet, /showRecoveryReceipts/);
-assert.match(wallet, /Purchase type/);
-assert.ok(wallet.indexOf('categories.map') < wallet.indexOf('Purchase type'), 'category navigation must precede Work/Personal');
+assert.match(wallet, /Not receipts/);
+assert.match(wallet, /showNonReceipts/);
+assert.doesNotMatch(wallet, /Files to revisit/);
+assert.doesNotMatch(wallet, /Purchase type/);
 assert.match(wallet, /•••• \{receipt\.cardLast4\}/);
 assert.match(wallet, /Amount not found/);
 assert.match(wallet, /Add amount/);
@@ -27,7 +27,6 @@ assert.match(wallet, /setSelectedCategory\(null\)/);
 assert.match(wallet, /min-\[540px\]:grid-cols-2/);
 assert.doesNotMatch(wallet, /THINGS NEED YOU|THING NEEDS YOU/i);
 assert.match(wallet, /flex max-w-full flex-wrap items-center justify-end gap-2/);
-assert.match(wallet, /className="absolute right-0 top-full/);
 
 assert.match(modal, /startInEditMode/);
 assert.match(modal, /setIsEditMode\(Boolean\(receipt\?\.startInEditMode/);

@@ -46,7 +46,8 @@ check(bottomNav.includes('ri-bottom-safe'), 'bottom navigation must respect the 
 
 const receiptModal = files['src/components/app/ReceiptModal.tsx'];
 check(receiptModal.includes('overflow-x-hidden overflow-y-auto'), 'receipt details must never require horizontal scrolling');
-check(receiptModal.includes("const originalActionLabel = isDocumentReview ? 'View original' : 'View receipt'"), 'the signed-original action must use an explicit document-appropriate label');
+check(receiptModal.includes("const originalActionLabel = isNotReceiptDocument ? 'View document' : isDocumentReview ? 'View original' : 'View receipt'"), 'the signed-original action must use an explicit document-appropriate label');
+check(receiptModal.includes('grid-cols-1') && receiptModal.includes('min-[380px]:grid-cols-[minmax(0,1fr)_auto]'), 'receipt details header must stack safely before reserving a shrinkable title column');
 check(receiptModal.includes('Receipt actions'), 'secondary receipt actions must remain in the compact action menu');
 check(receiptModal.includes('absolute right-3 top-full'), 'the receipt action menu must anchor to the modal edge on narrow screens');
 check(receiptModal.includes('isEditMode'), 'receipt details must retain a single receipt-wide edit mode');

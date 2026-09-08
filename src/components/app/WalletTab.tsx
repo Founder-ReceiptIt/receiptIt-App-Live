@@ -29,6 +29,12 @@ import { getReceiptMilestone } from '../../lib/receiptMilestones';
 import { useToast } from '../../contexts/ToastContext';
 import { convertReceiptAmounts, formatCurrency, getCurrencyConfig } from '../../lib/currency';
 import { isReceiptAmountKnown } from '../../lib/receiptAmountState';
+import {
+  getAnalyticsEligibleAmount,
+  getAnalyticsMonthKey,
+  getCurrentCalendarMonthKey,
+  isAnalyticsPurchaseCandidate,
+} from '../../lib/receiptAnalytics';
 
 interface WalletTabProps {
   onReceiptClick: (receipt: Receipt) => void;
@@ -236,10 +242,16 @@ const getNullableNumber = (value: unknown): number | null => {
   return null;
 };
 
-type WalletReceiptSection = 'purchases' | 'attention' | 'recovery';
+type WalletReceiptSection = 'purchases' | 'attention' | 'not_receipts';
+
+const isNotReceiptDocument = (receipt: Pick<Receipt, 'status' | 'errorReason' | 'documentType'>): boolean => (
+  receipt.documentType === 'non_purchase_document'
+  || (receipt.status === 'rejected' && receipt.errorReason === 'not_purchase_document')
+);
 
 const getWalletReceiptSection = (receipt: Receipt): WalletReceiptSection => {
-  if (['failed', 'error', 'rejected'].includes(receipt.status || '')) return 'recovery';
+  if (isNotReceiptDocument(receipt)) return 'not_receipts';
+  if (['failed', 'error'].includes(receipt.status || '')) return 'attention';
   if (receipt.status === 'needs_review' || receipt.status === 'needs_input') return 'attention';
   if (getReturnWindowStatus(receipt.returnDate).status === 'urgent') return 'attention';
   return 'purchases';
@@ -503,7 +515,6 @@ export function WalletTab({
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [selectedFolder, setSelectedFolder] = useState<'all' | 'work' | 'personal'>('all');
   const [warrantyFilterActive, setWarrantyFilterActive] = useState(false);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [loading, setLoading] = useState(true);
@@ -518,12 +529,10 @@ export function WalletTab({
   const [otherCurrencyReceiptId, setOtherCurrencyReceiptId] = useState<string | null>(null);
   const [reportProblemReceipt, setReportProblemReceipt] = useState<{ id: string; merchant: string } | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [moveMenuOpen, setMoveMenuOpen] = useState(false);
   const [convertedAmounts, setConvertedAmounts] = useState<Map<string, number>>(new Map());
-  const [excludedConversionIds, setExcludedConversionIds] = useState<Set<string>>(new Set());
   const [possibleDuplicates, setPossibleDuplicates] = useState<PossibleDuplicateCandidate[]>([]);
   const [resolvingPossibleDuplicateId, setResolvingPossibleDuplicateId] = useState<string | null>(null);
-  const [showRecoveryReceipts, setShowRecoveryReceipts] = useState(false);
+  const [showNonReceipts, setShowNonReceipts] = useState(false);
   const previousReceiptIdsRef = useRef<Set<string>>(new Set());
   const successfulReceiptIdsRef = useRef<Set<string>>(new Set());
   const isMilestoneTrackingReadyRef = useRef(false);
@@ -543,7 +552,6 @@ export function WalletTab({
     setSelectedReceipts(new Set());
     setSelectMode(false);
     setConvertedAmounts(new Map());
-    setExcludedConversionIds(new Set());
     setPossibleDuplicates([]);
     setProcessingAttemptStartedAtByReceiptId({});
 
@@ -810,29 +818,46 @@ export function WalletTab({
     let active = true;
     const loadConvertedAmounts = async () => {
       setConvertedAmounts(new Map());
-      setExcludedConversionIds(new Set());
-      const receiptsForConversion = filterVisibleWalletReceipts(dedupeWalletReceipts(receipts))
-        .filter((receipt) => isFinalizedReceiptStatus(receipt.status) && receipt.amountKnown);
-      const converted = await convertReceiptAmounts(receiptsForConversion.map((receipt) => ({
-        id: receipt.id,
-        amount: receipt.amount,
-        currency: receipt.currency,
-        transactionDate: receipt.date || null,
-      })), accountCurrency.preferredCurrency);
+      const receiptsForConversion = filterVisibleWalletReceipts(dedupeWalletReceipts(receipts)).flatMap((receipt) => {
+        const amount = getAnalyticsEligibleAmount({
+          amount: receipt.amountKnown ? receipt.amount : null,
+          status: receipt.status,
+          errorReason: receipt.errorReason,
+          documentType: receipt.documentType,
+          merchant: receipt.merchant,
+          transactionDate: receipt.date,
+        });
+
+        return amount === null ? [] : [{
+          id: receipt.id,
+          amount,
+          currency: receipt.currency,
+          transactionDate: receipt.date || null,
+        }];
+      });
+      const converted = await convertReceiptAmounts(receiptsForConversion, accountCurrency.preferredCurrency);
       if (!active) return;
       setConvertedAmounts(converted.amounts);
-      setExcludedConversionIds(new Set(converted.excludedReceiptIds));
     };
     void loadConvertedAmounts();
     return () => { active = false; };
   }, [receipts, accountCurrency.preferredCurrency]);
 
-  const currentMonthKey = new Date().toISOString().slice(0, 7);
-  const receiptsThisMonth = finalizedReceipts.filter((receipt) => (
-    (receipt.date || receipt.createdAt || '').slice(0, 7) === currentMonthKey
+  const currentMonthKey = getCurrentCalendarMonthKey();
+  const analyticsCandidatesThisMonth = visibleReceipts.filter((receipt) => (
+    isAnalyticsPurchaseCandidate({ status: receipt.status, documentType: receipt.documentType })
+    && getAnalyticsMonthKey(receipt.date) === currentMonthKey
   ));
+  const receiptsThisMonth = analyticsCandidatesThisMonth.filter((receipt) => getAnalyticsEligibleAmount({
+    amount: receipt.amountKnown ? receipt.amount : null,
+    status: receipt.status,
+    errorReason: receipt.errorReason,
+    documentType: receipt.documentType,
+    merchant: receipt.merchant,
+    transactionDate: receipt.date,
+  }) !== null);
   const includedReceiptsThisMonth = receiptsThisMonth.filter((receipt) => convertedAmounts.has(receipt.id));
-  const excludedThisMonthCount = receiptsThisMonth.filter((receipt) => excludedConversionIds.has(receipt.id)).length;
+  const excludedThisMonthCount = analyticsCandidatesThisMonth.length - includedReceiptsThisMonth.length;
   const spentThisMonth = includedReceiptsThisMonth.reduce((sum, receipt) => sum + (convertedAmounts.get(receipt.id) ?? 0), 0);
   const averagePurchaseThisMonth = includedReceiptsThisMonth.length ? spentThisMonth / includedReceiptsThisMonth.length : 0;
   const monthlyBudget = accountCurrency.monthlyBudgetCurrency === accountCurrency.preferredCurrency
@@ -850,16 +875,19 @@ export function WalletTab({
   const matchesReceiptFilters = (receipt: Receipt) => {
     const matchesSearch = !hasSearchQuery || receipt.searchText.includes(normalizedSearchQuery);
     const matchesCategory = !selectedCategory || selectedCategory === 'All' || receipt.category === selectedCategory;
-    const matchesFolder = selectedFolder === 'all' || receipt.folder === selectedFolder;
     const hasActiveWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) > new Date();
     const matchesWarranty = !warrantyFilterActive || hasActiveWarranty;
-    return matchesSearch && matchesCategory && matchesFolder && matchesWarranty;
+    return matchesSearch && matchesCategory && matchesWarranty;
   };
 
   const filteredReceipts = visibleReceipts.filter(matchesReceiptFilters);
-  const filteredRecoveryReceipts = filteredReceipts.filter((receipt) => getWalletReceiptSection(receipt) === 'recovery');
+  const filteredNotReceipts = filteredReceipts.filter((receipt) => getWalletReceiptSection(receipt) === 'not_receipts');
+  const filteredSavedPurchases = filteredReceipts.filter((receipt) => isAnalyticsPurchaseCandidate({
+    status: receipt.status,
+    documentType: receipt.documentType,
+  }));
   const displayReceipts = filteredReceipts
-    .filter((receipt) => showRecoveryReceipts || getWalletReceiptSection(receipt) !== 'recovery')
+    .filter((receipt) => showNonReceipts || getWalletReceiptSection(receipt) !== 'not_receipts')
     .sort((first, second) => getWalletSectionRank(first) - getWalletSectionRank(second));
 
   const possibleDuplicate = possibleDuplicates
@@ -873,7 +901,6 @@ export function WalletTab({
   const showNeedsAttention = () => {
     setSearchQuery('');
     setSelectedCategory(null);
-    setSelectedFolder('all');
     setWarrantyFilterActive(false);
     window.requestAnimationFrame(() => {
       needsAttentionSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -947,48 +974,6 @@ export function WalletTab({
     } catch (error) {
       console.error('[WalletTab] Unexpected error during delete:', error);
       showToast('Failed to delete receipts', 'error');
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  const handleBulkMove = async (targetFolder: 'work' | 'personal' | null) => {
-    if (selectedReceipts.size === 0 || !user?.id) return;
-
-    setIsDeleting(true);
-    try {
-      const receiptIds = Array.from(selectedReceipts);
-      const { error } = await supabase
-        .from('receipts')
-        .update({ folder: targetFolder })
-        .eq('user_id', user.id)
-        .in('id', receiptIds);
-
-      if (error) {
-        console.error('[WalletTab] Move error while updating receipts.folder:', {
-          error,
-          targetFolder,
-          receiptIds,
-          userId: user.id,
-        });
-        showToast('Failed to move receipts', 'error');
-        setIsDeleting(false);
-        return;
-      }
-
-      const updatedReceipts = receipts.map(r =>
-        selectedReceipts.has(r.id) ? { ...r, folder: targetFolder } : r
-      );
-      setReceipts(updatedReceipts);
-      setSelectedReceipts(new Set());
-      setSelectMode(false);
-      setMoveMenuOpen(false);
-
-      const folderName = targetFolder === 'work' ? 'Work' : targetFolder === 'personal' ? 'Personal' : 'All';
-      showToast(`Moved ${receiptIds.length} receipt${receiptIds.length > 1 ? 's' : ''} to ${folderName}`, 'success');
-    } catch (error) {
-      console.error('[WalletTab] Unexpected error during move:', error);
-      showToast('Failed to move receipts', 'error');
     } finally {
       setIsDeleting(false);
     }
@@ -1294,39 +1279,20 @@ export function WalletTab({
             ))}
           </div>
 
-          <div className="mt-3 flex min-w-0 items-center gap-2 text-xs text-gray-500">
-            <span className="shrink-0 font-semibold">Purchase type</span>
-            <div className="inline-flex min-w-0 rounded-lg border border-white/10 bg-black/20 p-0.5">
-              {[
-                { value: 'all', label: 'All' },
-                { value: 'personal', label: 'Personal' },
-                { value: 'work', label: 'Work' },
-              ].map((option) => (
-                <button
-                  type="button"
-                  key={option.value}
-                  onClick={() => setSelectedFolder(option.value as 'all' | 'work' | 'personal')}
-                  className={`rounded-md px-2.5 py-1.5 font-semibold transition-colors ${selectedFolder === option.value ? 'bg-white/10 text-gray-100' : 'text-gray-500 hover:text-gray-300'}`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
 
         <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-2">
           <h2 className="text-xl font-bold text-white">
             {selectedReceipts.size > 0
               ? `${selectedReceipts.size} selected`
-              : `${filteredReceipts.length} ${filteredReceipts.length === 1 ? 'purchase' : 'purchases'}`}
+              : `${filteredSavedPurchases.length} saved ${filteredSavedPurchases.length === 1 ? 'purchase' : 'purchases'}`}
           </h2>
           <div className="relative flex max-w-full flex-wrap items-center justify-end gap-2">
             {selectMode && (
               <button
                 type="button"
-                onClick={() => setSelectedReceipts(new Set(filteredReceipts.map((receipt) => receipt.id)))}
-                disabled={filteredReceipts.length === 0}
+                onClick={() => setSelectedReceipts(new Set(filteredSavedPurchases.map((receipt) => receipt.id)))}
+                disabled={filteredSavedPurchases.length === 0}
                 className={`min-h-9 px-2.5 py-1.5 rounded-lg border border-white/10 bg-white/5 text-xs font-semibold text-gray-200 transition-colors hover:border-teal-400/35 hover:text-teal-200 disabled:opacity-50 sm:px-3 sm:text-sm ${selectedReceipts.size > 0 ? 'hidden min-[380px]:inline-flex' : ''}`}
               >
                 Select all
@@ -1334,59 +1300,6 @@ export function WalletTab({
             )}
             {selectedReceipts.size > 0 && (
               <>
-                <motion.button
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  onClick={() => setMoveMenuOpen(!moveMenuOpen)}
-                  disabled={isDeleting}
-                  className="flex min-h-9 items-center gap-1.5 rounded-lg border border-teal-500/50 bg-teal-500/20 px-2.5 py-1.5 text-xs font-semibold text-teal-400 transition-colors hover:bg-teal-500/30 disabled:cursor-not-allowed disabled:opacity-50 sm:px-3 sm:text-sm"
-                  title="Move to folder"
-                >
-                  Move
-                  <ChevronDown className="w-4 h-4" />
-                </motion.button>
-
-                {moveMenuOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="absolute right-0 top-full z-20 mt-2 w-48 overflow-hidden rounded-lg border border-white/10 bg-black/95 shadow-[0_0_30px_rgba(0,0,0,0.5)] backdrop-blur-xl"
-                  >
-                    <button
-                      onClick={() => {
-                        handleBulkMove('work');
-                        setMoveMenuOpen(false);
-                      }}
-                      disabled={isDeleting}
-                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-500/10 transition-colors text-left text-blue-400 hover:text-blue-300 border-b border-white/10 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold"
-                    >
-                      Work
-                    </button>
-                    <button
-                      onClick={() => {
-                        handleBulkMove('personal');
-                        setMoveMenuOpen(false);
-                      }}
-                      disabled={isDeleting}
-                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-purple-500/10 transition-colors text-left text-purple-400 hover:text-purple-300 border-b border-white/10 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold"
-                    >
-                      Personal
-                    </button>
-                    <button
-                      onClick={() => {
-                        handleBulkMove(null);
-                        setMoveMenuOpen(false);
-                      }}
-                      disabled={isDeleting}
-                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-500/10 transition-colors text-left text-gray-400 hover:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold"
-                    >
-                      All
-                    </button>
-                  </motion.div>
-                )}
-
                 <motion.button
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -1430,7 +1343,7 @@ export function WalletTab({
               <h3 className="text-lg font-bold text-white mb-2">Loading receipts...</h3>
               <p className="text-gray-400">Getting your receipts ready</p>
             </motion.div>
-          ) : displayReceipts.length === 0 && filteredRecoveryReceipts.length === 0 ? (
+          ) : displayReceipts.length === 0 && filteredNotReceipts.length === 0 ? (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1477,6 +1390,7 @@ export function WalletTab({
                 const isFreshProcessing = isProcessing && !isStaleProcessing;
                 const isNeedsInput = receipt.status === 'needs_input';
                 const isDocumentReview = receipt.status === 'needs_review';
+                const isNotReceipt = isNotReceiptDocument(receipt);
                 const hasDisplayMerchant = receipt.merchant.trim().toLowerCase() !== 'analyzing...';
                 const isNonFinalReceipt = isProcessing || isNeedsInput || receipt.status === 'needs_review' || receipt.status === 'rejected' || receipt.status === 'failed' || receipt.status === 'error';
                 const requiresCurrencyConfirmation = needsCurrencyConfirmation(receipt.status, receipt.errorReason);
@@ -1497,11 +1411,13 @@ export function WalletTab({
                 const showIssueHeading = Boolean(receiptFailureDetails);
                 const showOpenOriginalReceiptAction = (isNonFinalReceipt || showIssueHeading) && hasReceiptOriginal(receipt);
                 const showFailedReceiptActions = showIssueHeading && !requiresCurrencyConfirmation;
-                const shouldRetryExistingReceipt = receiptFailureDetails?.primaryAction === 'retry';
-                const failurePrimaryActionLabel = receiptFailureDetails?.primaryAction === 'scan_sections'
+                const shouldRetryExistingReceipt = !isNotReceipt && receiptFailureDetails?.primaryAction === 'retry';
+                const failurePrimaryActionLabel = isNotReceipt
+                  ? 'Try another file'
+                  : receiptFailureDetails?.primaryAction === 'scan_sections'
                   ? 'Scan in sections'
                   : receiptFailureDetails?.primaryAction === 'replace'
-                    ? 'Choose another file'
+                    ? 'Try another file'
                     : 'Try again';
                 const receiptCurrencyCode = receipt.currency?.toUpperCase() || '';
                 const hasPreferredCurrencyConversion = (
@@ -1524,9 +1440,9 @@ export function WalletTab({
                         <p className="mt-1 text-xs text-gray-500">Only purchases that need a quick decision appear here.</p>
                       </div>
                     ) : null}
-                    {startsSection && section === 'recovery' ? (
+                    {startsSection && section === 'not_receipts' ? (
                       <div className="pb-1 pt-5">
-                        <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-gray-500">Files to revisit</h2>
+                        <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-gray-500">Not receipts</h2>
                       </div>
                     ) : null}
                   <motion.div
@@ -1648,7 +1564,7 @@ export function WalletTab({
                                   <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${receipt.tagColor}`}>{receipt.category}</span>
                                 ) : null}
                                 {receipt.cardLast4 ? (
-                                  <span className="text-[11px] font-semibold tracking-wide text-gray-500">•••• {receipt.cardLast4}</span>
+                                  <span className="inline-flex rounded-full border border-white/10 bg-white/[0.045] px-2 py-0.5 text-[11px] font-semibold tracking-[0.08em] text-gray-400">•••• {receipt.cardLast4}</span>
                                 ) : null}
                               </div>
                             )}
@@ -1713,7 +1629,7 @@ export function WalletTab({
                           className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 transition-colors hover:text-teal-300"
                         >
                           <Download className="w-3.5 h-3.5" />
-                          {isDocumentReview ? 'View original' : 'View receipt'}
+                          {isNotReceipt ? 'View document' : isDocumentReview ? 'View original' : 'View receipt'}
                         </button>
                       </div>
                     )}
@@ -1751,13 +1667,15 @@ export function WalletTab({
                                 return;
                               }
 
-                              if (receiptFailureDetails?.primaryAction === 'scan_sections') {
+                              if (!isNotReceipt && receiptFailureDetails?.primaryAction === 'scan_sections') {
                                 requestReceiptSectionCapture();
                               }
                               onNavigateToScan();
                             }}
                             disabled={isDeleting || isConfirmingCurrency}
-                            className="px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            className={isNotReceipt
+                              ? 'rounded-lg bg-white px-3 py-1.5 text-sm font-bold text-black transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50'
+                              : 'px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed'}
                           >
                             {isConfirmingCurrency ? 'Trying again...' : failurePrimaryActionLabel}
                           </button>
@@ -1776,7 +1694,9 @@ export function WalletTab({
                               merchant: receipt.merchant,
                             })}
                             disabled={isDeleting || isConfirmingCurrency}
-                            className="px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            className={isNotReceipt
+                              ? 'px-3 py-1.5 text-sm font-semibold text-gray-500 transition-colors hover:text-gray-300 disabled:cursor-not-allowed disabled:opacity-50'
+                              : 'px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed'}
                           >
                             Report
                           </button>
@@ -1853,15 +1773,15 @@ export function WalletTab({
           )}
         </AnimatePresence>
 
-        {filteredRecoveryReceipts.length > 0 ? (
+        {filteredNotReceipts.length > 0 ? (
           <button
             type="button"
-            onClick={() => setShowRecoveryReceipts((current) => !current)}
+            onClick={() => setShowNonReceipts((current) => !current)}
             className="mt-5 flex min-h-11 w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.035] px-4 py-3 text-left text-sm font-semibold text-gray-400 transition-colors hover:bg-white/[0.06] hover:text-gray-200"
-            aria-expanded={showRecoveryReceipts}
+            aria-expanded={showNonReceipts}
           >
-            <span>{filteredRecoveryReceipts.length} {filteredRecoveryReceipts.length === 1 ? 'file' : 'files'} to revisit</span>
-            <ChevronDown className={`h-4 w-4 transition-transform ${showRecoveryReceipts ? 'rotate-180' : ''}`} />
+            <span>Not receipts · {filteredNotReceipts.length}</span>
+            <ChevronDown className={`h-4 w-4 transition-transform ${showNonReceipts ? 'rotate-180' : ''}`} />
           </button>
         ) : null}
 

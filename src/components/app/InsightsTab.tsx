@@ -1,21 +1,18 @@
 import { motion } from 'framer-motion';
 import { BarChart3, RefreshCw, Store, Tag } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { FINALIZED_RECEIPT_STATUSES, supabase } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { convertReceiptAmounts, formatCurrency } from '../../lib/currency';
+import {
+  getAnalyticsEligibleAmount,
+  getAnalyticsMonthKey,
+  getCurrentCalendarMonthKey,
+  isAnalyticsPurchaseCandidate,
+} from '../../lib/receiptAnalytics';
 
-type InsightReceipt = { id: string; amount: number; currency: string; convertedAmount: number | null; category: string; merchant: string; date: string; transactionDate: string | null };
-
-const asNumber = (value: unknown): number | null => {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-};
-const monthKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+type InsightReceipt = { id: string; amount: number; currency: string; convertedAmount: number; category: string; merchant: string; transactionDate: string | null };
+const monthKey = getCurrentCalendarMonthKey;
 
 export function InsightsTab() {
   const { user, accountCurrency } = useAuth();
@@ -24,6 +21,7 @@ export function InsightsTab() {
   const [error, setError] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [excludedCount, setExcludedCount] = useState(0);
+  const [purchaseCandidateCount, setPurchaseCandidateCount] = useState(0);
   const preferredCurrency = accountCurrency.preferredCurrency;
   const formatMoney = (value: number) => formatCurrency(value, preferredCurrency);
 
@@ -33,22 +31,42 @@ export function InsightsTab() {
     const load = async () => {
       setLoading(true);
       setError(false);
-      const { data, error: loadError } = await supabase.from('receipts').select('id, amount, category, merchant, currency, transaction_date, created_at, status').eq('user_id', user.id).in('status', [...FINALIZED_RECEIPT_STATUSES]).order('transaction_date', { ascending: false });
+      const { data, error: loadError } = await supabase
+        .from('receipts')
+        .select('id, amount, category, merchant, currency, transaction_date, status, error_reason, document_type')
+        .eq('user_id', user.id)
+        .in('status', ['parsed', 'completed', 'needs_review'])
+        .order('transaction_date', { ascending: false });
       if (!active) return;
       if (loadError) {
         setError(true);
         setReceipts([]);
+        setPurchaseCandidateCount(0);
       } else {
-        const sourceReceipts = (data || []).map((row) => ({
-          id: String(row.id),
-          amount: asNumber(row.amount) ?? 0,
-          currency: typeof row.currency === 'string' && row.currency.trim() ? row.currency.toUpperCase() : '',
-          convertedAmount: null,
-          category: typeof row.category === 'string' && row.category.trim() ? row.category.trim() : 'Other',
-          merchant: typeof row.merchant === 'string' && row.merchant.trim() ? row.merchant.trim() : 'Store unknown',
-          date: String(row.transaction_date || row.created_at || new Date().toISOString()),
-          transactionDate: row.transaction_date ? String(row.transaction_date) : null,
+        const purchaseCandidates = (data || []).filter((row) => isAnalyticsPurchaseCandidate({
+          status: row.status,
+          documentType: row.document_type,
         }));
+        const sourceReceipts = purchaseCandidates.flatMap((row) => {
+          const amount = getAnalyticsEligibleAmount({
+            amount: row.amount,
+            status: row.status,
+            errorReason: row.error_reason,
+            documentType: row.document_type,
+            merchant: row.merchant,
+            transactionDate: row.transaction_date,
+          });
+          if (amount === null) return [];
+
+          return [{
+            id: String(row.id),
+            amount,
+            currency: typeof row.currency === 'string' && row.currency.trim() ? row.currency.toUpperCase() : '',
+            category: typeof row.category === 'string' && row.category.trim() ? row.category.trim() : 'Other',
+            merchant: typeof row.merchant === 'string' && row.merchant.trim() ? row.merchant.trim() : 'Store unknown',
+            transactionDate: row.transaction_date ? String(row.transaction_date) : null,
+          }];
+        });
         const converted = await convertReceiptAmounts(sourceReceipts.map((receipt) => ({
           id: receipt.id,
           amount: receipt.amount,
@@ -56,11 +74,12 @@ export function InsightsTab() {
           transactionDate: receipt.transactionDate,
         })), preferredCurrency);
         if (!active) return;
-        setExcludedCount(converted.excludedReceiptIds.length);
-        setReceipts(sourceReceipts.map((receipt) => ({
-          ...receipt,
-          convertedAmount: converted.amounts.get(receipt.id) ?? null,
-        })));
+        setPurchaseCandidateCount(purchaseCandidates.length);
+        setExcludedCount(purchaseCandidates.length - converted.amounts.size);
+        setReceipts(sourceReceipts.flatMap((receipt) => {
+          const convertedAmount = converted.amounts.get(receipt.id);
+          return convertedAmount === undefined ? [] : [{ ...receipt, convertedAmount }];
+        }));
       }
       setLoading(false);
     };
@@ -69,17 +88,16 @@ export function InsightsTab() {
   }, [user, refreshKey, preferredCurrency]);
 
   const summary = useMemo(() => {
-    const aggregateReceipts = receipts.filter((receipt) => receipt.convertedAmount !== null);
-    const rollup = (receipt: InsightReceipt) => receipt.convertedAmount ?? 0;
-    const total = aggregateReceipts.reduce((sum, receipt) => sum + rollup(receipt), 0);
+    const rollup = (receipt: InsightReceipt) => receipt.convertedAmount;
+    const total = receipts.reduce((sum, receipt) => sum + rollup(receipt), 0);
     const currentMonth = monthKey(new Date());
-    const monthReceipts = aggregateReceipts.filter((receipt) => receipt.date.slice(0, 7) === currentMonth);
+    const monthReceipts = receipts.filter((receipt) => getAnalyticsMonthKey(receipt.transactionDate) === currentMonth);
     const thisMonth = monthReceipts.reduce((sum, receipt) => sum + rollup(receipt), 0);
-    const byCategory = Object.entries(aggregateReceipts.reduce((all, receipt) => {
+    const byCategory = Object.entries(receipts.reduce((all, receipt) => {
       all[receipt.category] = (all[receipt.category] || 0) + rollup(receipt);
       return all;
     }, {} as Record<string, number>)).sort(([, a], [, b]) => b - a).slice(0, 5);
-    const byMerchant = Object.entries(aggregateReceipts.reduce((all, receipt) => {
+    const byMerchant = Object.entries(receipts.reduce((all, receipt) => {
       all[receipt.merchant] = (all[receipt.merchant] || 0) + rollup(receipt);
       return all;
     }, {} as Record<string, number>)).sort(([, a], [, b]) => b - a).slice(0, 5);
@@ -87,9 +105,9 @@ export function InsightsTab() {
       const date = new Date();
       date.setMonth(date.getMonth() - (5 - index), 1);
       const key = monthKey(date);
-      return { label: date.toLocaleDateString('en-GB', { month: 'short' }), amount: aggregateReceipts.filter((receipt) => receipt.date.slice(0, 7) === key).reduce((sum, receipt) => sum + rollup(receipt), 0) };
+      return { label: date.toLocaleDateString('en-GB', { month: 'short' }), amount: receipts.filter((receipt) => getAnalyticsMonthKey(receipt.transactionDate) === key).reduce((sum, receipt) => sum + rollup(receipt), 0) };
     });
-    return { total, thisMonth, average: aggregateReceipts.length ? total / aggregateReceipts.length : 0, byCategory, byMerchant, months };
+    return { total, thisMonth, average: receipts.length ? total / receipts.length : 0, byCategory, byMerchant, months };
   }, [receipts]);
 
   if (loading) return <div className="ri-mobile-page mx-auto min-w-0 max-w-7xl px-4 pt-8 sm:px-6"><div className="h-8 w-32 animate-pulse rounded bg-white/10" /><div className="mt-8 grid gap-4 sm:grid-cols-3"><div className="h-32 animate-pulse rounded-2xl bg-white/[0.045]" /><div className="h-32 animate-pulse rounded-2xl bg-white/[0.045]" /><div className="h-32 animate-pulse rounded-2xl bg-white/[0.045]" /></div></div>;
@@ -103,8 +121,8 @@ export function InsightsTab() {
     <div className="ri-mobile-page mx-auto min-w-0 max-w-7xl px-4 pt-8 sm:px-6">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
         <h1 className="text-3xl font-bold text-white">Insights</h1>
-        {receipts.length === 0 ? <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.045] p-10 text-center"><BarChart3 className="mx-auto h-8 w-8 text-teal-300" /><p className="mt-4 text-gray-300">Your insights will appear as you add receipts.</p></div> : <>
-          {excludedCount > 0 ? <p className="mt-6 rounded-xl border border-amber-300/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">{excludedCount === 1 ? 'One purchase couldn’t be included in these totals.' : `${excludedCount} purchases couldn’t be included in these totals.`}</p> : null}
+        {purchaseCandidateCount === 0 ? <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.045] p-10 text-center"><BarChart3 className="mx-auto h-8 w-8 text-teal-300" /><p className="mt-4 text-gray-300">Your insights will appear as you add receipts.</p></div> : <>
+          {excludedCount > 0 ? <p className="mt-6 rounded-xl border border-amber-300/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">{excludedCount === 1 ? 'One saved purchase is not included because its amount is still unresolved.' : `${excludedCount} saved purchases are not included because their amounts are still unresolved.`}</p> : null}
           <section className="mt-8"><h2 className="text-lg font-bold text-white">Summary</h2><div className="mt-3 grid gap-3 sm:grid-cols-3"><Stat label="Total spent" value={formatMoney(summary.total)} /><Stat label="This month" value={formatMoney(summary.thisMonth)} /><Stat label="Average purchase" value={formatMoney(summary.average)} /></div></section>
           {meaningfulChart ? (
             <section className="mt-8 rounded-2xl border border-white/10 bg-white/[0.045] p-5 sm:p-6">
@@ -120,10 +138,8 @@ export function InsightsTab() {
                       </span>
                       <div className="relative h-36 w-full overflow-hidden rounded-t-lg border-x border-t border-white/[0.04] bg-white/[0.035]">
                         {month.amount > 0 ? (
-                          <motion.div
-                            initial={{ height: 0 }}
-                            animate={{ height: `${barHeight}%` }}
-                            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                          <div
+                            style={{ height: `${barHeight}%` }}
                             className="absolute inset-x-0 bottom-0 min-h-2 rounded-t-lg bg-gradient-to-t from-teal-500 to-teal-300 shadow-[0_-6px_18px_rgba(45,212,191,0.18)]"
                           />
                         ) : (
