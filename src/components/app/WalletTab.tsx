@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Receipt as ReceiptIcon, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Loader2, Car, Home, Plane, Zap, Utensils, Undo2, Trash2, CheckSquare, Square, ChevronDown, Download, AlertCircle, ShieldCheck, AtSign, ScanLine, CopyCheck } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
+import { Fragment, useState, useEffect, useRef } from 'react';
 import { ReportProblemDialog } from './ReportProblemDialog';
 import {
   confirmReceiptCurrency,
@@ -28,7 +28,7 @@ import { requestReceiptSectionCapture } from '../../lib/receiptCaptureUtils';
 import { getReceiptMilestone } from '../../lib/receiptMilestones';
 import { useToast } from '../../contexts/ToastContext';
 import { convertReceiptAmounts, formatCurrency, getCurrencyConfig } from '../../lib/currency';
-import { isReceiptAmountKnown, isReceiptStatusActionable } from '../../lib/receiptAmountState';
+import { isReceiptAmountKnown } from '../../lib/receiptAmountState';
 
 interface WalletTabProps {
   onReceiptClick: (receipt: Receipt) => void;
@@ -236,9 +236,20 @@ const getNullableNumber = (value: unknown): number | null => {
   return null;
 };
 
-const isReceiptActionable = (receipt: Receipt): boolean => {
-  if (isReceiptStatusActionable(receipt.status)) return true;
-  return getReturnWindowStatus(receipt.returnDate).status === 'urgent';
+type WalletReceiptSection = 'purchases' | 'attention' | 'recovery';
+
+const getWalletReceiptSection = (receipt: Receipt): WalletReceiptSection => {
+  if (['failed', 'error', 'rejected'].includes(receipt.status || '')) return 'recovery';
+  if (receipt.status === 'needs_review' || receipt.status === 'needs_input') return 'attention';
+  if (getReturnWindowStatus(receipt.returnDate).status === 'urgent') return 'attention';
+  return 'purchases';
+};
+
+const getWalletSectionRank = (receipt: Receipt): number => {
+  const section = getWalletReceiptSection(receipt);
+  if (section === 'purchases') return 0;
+  if (section === 'attention') return 1;
+  return 2;
 };
 
 const getNonEmptyString = (value: unknown): string | undefined => (
@@ -440,6 +451,7 @@ export interface Receipt {
   loyaltyMemberId?: string;
   summary?: string;
   cardLast4?: string;
+  startInEditMode?: boolean;
   itemDescriptions: string[];
   searchText: string;
   items?: Array<{
@@ -511,9 +523,11 @@ export function WalletTab({
   const [excludedConversionIds, setExcludedConversionIds] = useState<Set<string>>(new Set());
   const [possibleDuplicates, setPossibleDuplicates] = useState<PossibleDuplicateCandidate[]>([]);
   const [resolvingPossibleDuplicateId, setResolvingPossibleDuplicateId] = useState<string | null>(null);
+  const [showRecoveryReceipts, setShowRecoveryReceipts] = useState(false);
   const previousReceiptIdsRef = useRef<Set<string>>(new Set());
   const successfulReceiptIdsRef = useRef<Set<string>>(new Set());
   const isMilestoneTrackingReadyRef = useRef(false);
+  const needsAttentionSectionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -826,20 +840,7 @@ export function WalletTab({
     : null;
   const budgetUsed = monthlyBudget ? (spentThisMonth / monthlyBudget) * 100 : 0;
   const budgetProgress = Math.min(budgetUsed, 100);
-  const actionReceipts = visibleReceipts.filter(isReceiptActionable).flatMap((receipt) => {
-    const hasNamedMerchant = receipt.merchant && receipt.merchant.trim().toLowerCase() !== 'analyzing...';
-    if (receipt.status === 'needs_review') return [{ receipt, label: 'Review needed', detail: `Review ${hasNamedMerchant ? receipt.merchant : 'this purchase document'}` }];
-    if (['failed', 'error'].includes(receipt.status || '')) return [{ receipt, label: 'Try again', detail: `We could not finish ${hasNamedMerchant ? receipt.merchant : 'this receipt'}` }];
-    if (receipt.status === 'needs_input') return [{ receipt, label: 'Details needed', detail: 'One receipt needs a quick check' }];
-    if (receipt.status === 'rejected') return [{ receipt, label: 'Check document', detail: 'One file was not recognised as purchase evidence' }];
-    const returnStatus = getReturnWindowStatus(receipt.returnDate);
-    if (returnStatus.status === 'urgent') return [{ receipt, label: '1 thing needs you', detail: returnStatus.message }];
-    return [];
-  });
-  const primaryAction = actionReceipts[0];
-  const actionHeading = actionReceipts.length === 1
-    ? '1 thing needs you'
-    : `${actionReceipts.length} things need you`;
+  const attentionReceipts = visibleReceipts.filter((receipt) => getWalletReceiptSection(receipt) === 'attention');
 
   const uniqueCategories = Array.from(new Set(finalizedReceipts.map(r => r.category)));
   const categories = ['All', ...uniqueCategories];
@@ -856,6 +857,10 @@ export function WalletTab({
   };
 
   const filteredReceipts = visibleReceipts.filter(matchesReceiptFilters);
+  const filteredRecoveryReceipts = filteredReceipts.filter((receipt) => getWalletReceiptSection(receipt) === 'recovery');
+  const displayReceipts = filteredReceipts
+    .filter((receipt) => showRecoveryReceipts || getWalletReceiptSection(receipt) !== 'recovery')
+    .sort((first, second) => getWalletSectionRank(first) - getWalletSectionRank(second));
 
   const possibleDuplicate = possibleDuplicates
     .map((candidate) => ({
@@ -864,6 +869,16 @@ export function WalletTab({
       existing: visibleReceipts.find((receipt) => receipt.id === candidate.possible_duplicate_of),
     }))
     .find((match) => match.receipt && match.existing);
+
+  const showNeedsAttention = () => {
+    setSearchQuery('');
+    setSelectedCategory(null);
+    setSelectedFolder('all');
+    setWarrantyFilterActive(false);
+    window.requestAnimationFrame(() => {
+      needsAttentionSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
 
   useEffect(() => {
     onReceiptsChange?.(visibleReceipts);
@@ -890,8 +905,6 @@ export function WalletTab({
     });
   }, [receipts]);
 
-  const workReceipts = finalizedReceipts.filter(r => r.folder === 'work');
-  const personalReceipts = finalizedReceipts.filter(r => r.folder === 'personal');
   const warrantyReceipts = finalizedReceipts.filter(r => r.warrantyDate && new Date(r.warrantyDate) > new Date());
 
   const toggleReceiptSelection = (receiptId: string) => {
@@ -1177,7 +1190,17 @@ export function WalletTab({
           </motion.button>
         </div>
 
-        {primaryAction ? <div className="mb-4 rounded-2xl border border-amber-300/25 bg-gradient-to-br from-amber-400/12 to-teal-400/5 p-5"><div className="flex items-start gap-3"><div className="rounded-xl border border-amber-300/25 bg-amber-400/10 p-2.5"><AlertCircle className="h-5 w-5 text-amber-200" /></div><div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-200">{actionHeading}</p><p className="mt-1 text-2xl font-bold text-white">{primaryAction.detail}</p></div></div></div> : null}
+        {attentionReceipts.length > 0 ? (
+          <button
+            type="button"
+            onClick={showNeedsAttention}
+            className="mb-4 inline-flex min-h-10 items-center gap-2 rounded-full border border-amber-300/20 bg-amber-300/10 px-3.5 py-2 text-sm font-semibold text-amber-100 transition-colors hover:border-amber-200/35 hover:bg-amber-300/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200"
+            aria-label={`${attentionReceipts.length} ${attentionReceipts.length === 1 ? 'purchase needs' : 'purchases need'} attention`}
+          >
+            <AlertCircle className="h-4 w-4" strokeWidth={1.8} />
+            {attentionReceipts.length} {attentionReceipts.length === 1 ? 'needs' : 'need'} attention
+          </button>
+        ) : null}
 
         {possibleDuplicate ? (
           <section className="mb-4 rounded-2xl border border-amber-300/25 bg-gradient-to-br from-amber-400/10 to-white/[0.025] p-5" aria-label="Possible duplicate receipt">
@@ -1197,38 +1220,7 @@ export function WalletTab({
         ) : null}
 
         <div className="mb-6 rounded-2xl border border-teal-300/25 bg-gradient-to-br from-teal-400/15 to-cyan-400/5 p-5">
-          <div className="flex min-w-0 items-start gap-3"><div className="shrink-0 rounded-xl border border-teal-300/20 bg-teal-400/10 p-2.5"><ShieldCheck className="h-5 w-5 text-teal-200" strokeWidth={1.5} /></div><div className="min-w-0 flex-1"><div className="grid min-w-0 grid-cols-1 gap-3 min-[380px]:grid-cols-2"><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-200">This month</p><p className="mt-1 break-words text-2xl font-bold text-white">{formatCurrency(spentThisMonth, accountCurrency.preferredCurrency)} spent</p></div><div className="min-w-0 min-[380px]:text-right"><p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">Average purchase</p><p className="mt-1 break-words text-lg font-bold text-white">{formatCurrency(averagePurchaseThisMonth, accountCurrency.preferredCurrency)}</p></div></div>{monthlyBudget ? <><p className="mt-4 text-sm text-gray-300">of {formatCurrency(monthlyBudget, accountCurrency.preferredCurrency, { maximumFractionDigits: 0, minimumFractionDigits: 0 })} budget</p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-teal-400 transition-[width] duration-300" style={{ width: `${budgetProgress}%` }} /></div><p className="mt-2 text-xs text-gray-400">{budgetUsed.toFixed(1)}% used</p></> : null}{excludedThisMonthCount > 0 ? <p className="mt-3 text-xs text-amber-100">{excludedThisMonthCount === 1 ? 'One purchase couldn’t be included in this total.' : `${excludedThisMonthCount} purchases couldn’t be included in this total.`}</p> : null}</div></div>
-        </div>
-
-        <div className="mb-6">
-          <div className="inline-flex w-full backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-1">
-            {[
-              { value: 'all', label: 'All', count: receipts.length },
-              { value: 'work', label: 'Work', count: workReceipts.length },
-              { value: 'personal', label: 'Personal', count: personalReceipts.length }
-            ].map((option) => {
-              const isSelected = selectedFolder === option.value;
-              const tabWidth = isSelected ? 'flex-[2]' : 'flex-1';
-
-              return (
-                <motion.button
-                  key={option.value}
-                  onClick={() => setSelectedFolder(option.value as 'all' | 'work' | 'personal')}
-                  layout
-                  className={`${tabWidth} rounded-lg p-3 text-center font-semibold transition-all ${
-                    isSelected
-                      ? 'bg-teal-400/30 text-teal-100 shadow-[0_0_20px_rgba(94,234,212,0.3)]'
-                      : 'bg-transparent text-gray-400 hover:text-gray-200'
-                  }`}
-                >
-                  <div className="text-lg font-bold leading-none mb-1">{option.count}</div>
-                  <div className={`text-xs font-semibold ${isSelected ? 'text-teal-300' : 'text-gray-400'}`}>
-                    {option.label}
-                  </div>
-                </motion.button>
-              );
-            })}
-          </div>
+          <div className="flex min-w-0 items-start gap-3"><div className="shrink-0 rounded-xl border border-teal-300/20 bg-teal-400/10 p-2.5"><ShieldCheck className="h-5 w-5 text-teal-200" strokeWidth={1.5} /></div><div className="min-w-0 flex-1"><div className="grid min-w-0 grid-cols-1 gap-3 min-[540px]:grid-cols-2"><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-200">This month</p><p className="mt-1 break-words text-2xl font-bold text-white">{formatCurrency(spentThisMonth, accountCurrency.preferredCurrency)} spent</p></div><div className="min-w-0 min-[540px]:text-right"><p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">Average purchase</p><p className="mt-1 break-words text-lg font-bold text-white">{formatCurrency(averagePurchaseThisMonth, accountCurrency.preferredCurrency)}</p></div></div>{monthlyBudget ? <><p className="mt-4 text-sm text-gray-300">of {formatCurrency(monthlyBudget, accountCurrency.preferredCurrency, { maximumFractionDigits: 0, minimumFractionDigits: 0 })} budget</p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-teal-400 transition-[width] duration-300" style={{ width: `${budgetProgress}%` }} /></div><p className="mt-2 text-xs text-gray-400">{budgetUsed.toFixed(1)}% used</p></> : null}{excludedThisMonthCount > 0 ? <p className="mt-3 text-xs text-amber-100">{excludedThisMonthCount === 1 ? 'One purchase couldn’t be included in this total.' : `${excludedThisMonthCount} purchases couldn’t be included in this total.`}</p> : null}</div></div>
         </div>
 
         {warrantyReceipts.length > 0 && (
@@ -1286,12 +1278,12 @@ export function WalletTab({
             )}
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {categories.map((category) => (
               <button
                 key={category}
                 onClick={() => setSelectedCategory(category === 'All' ? null : category)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold border backdrop-blur-md transition-all ${
+                className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border backdrop-blur-md transition-all ${
                   (selectedCategory === category || (category === 'All' && !selectedCategory))
                     ? 'text-teal-400 bg-teal-400/20 border-teal-400/40'
                     : 'text-gray-400 bg-white/5 border-white/10 hover:bg-white/10'
@@ -1301,21 +1293,43 @@ export function WalletTab({
               </button>
             ))}
           </div>
+
+          <div className="mt-3 flex min-w-0 items-center gap-2 text-xs text-gray-500">
+            <span className="shrink-0 font-semibold">Purchase type</span>
+            <div className="inline-flex min-w-0 rounded-lg border border-white/10 bg-black/20 p-0.5">
+              {[
+                { value: 'all', label: 'All' },
+                { value: 'personal', label: 'Personal' },
+                { value: 'work', label: 'Work' },
+              ].map((option) => (
+                <button
+                  type="button"
+                  key={option.value}
+                  onClick={() => setSelectedFolder(option.value as 'all' | 'work' | 'personal')}
+                  className={`rounded-md px-2.5 py-1.5 font-semibold transition-colors ${selectedFolder === option.value ? 'bg-white/10 text-gray-100' : 'text-gray-500 hover:text-gray-300'}`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-2">
           <h2 className="text-xl font-bold text-white">
-            {filteredReceipts.length} {filteredReceipts.length === 1 ? 'purchase' : 'purchases'}
+            {selectedReceipts.size > 0
+              ? `${selectedReceipts.size} selected`
+              : `${filteredReceipts.length} ${filteredReceipts.length === 1 ? 'purchase' : 'purchases'}`}
           </h2>
-          <div className="flex items-center gap-2 relative">
+          <div className="relative flex max-w-full flex-wrap items-center justify-end gap-2">
             {selectMode && (
               <button
                 type="button"
                 onClick={() => setSelectedReceipts(new Set(filteredReceipts.map((receipt) => receipt.id)))}
                 disabled={filteredReceipts.length === 0}
-                className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-sm font-semibold text-gray-200 transition-colors hover:border-teal-400/35 hover:text-teal-200 disabled:opacity-50"
+                className={`min-h-9 px-2.5 py-1.5 rounded-lg border border-white/10 bg-white/5 text-xs font-semibold text-gray-200 transition-colors hover:border-teal-400/35 hover:text-teal-200 disabled:opacity-50 sm:px-3 sm:text-sm ${selectedReceipts.size > 0 ? 'hidden min-[380px]:inline-flex' : ''}`}
               >
-                All
+                Select all
               </button>
             )}
             {selectedReceipts.size > 0 && (
@@ -1326,10 +1340,10 @@ export function WalletTab({
                   exit={{ opacity: 0, scale: 0.8 }}
                   onClick={() => setMoveMenuOpen(!moveMenuOpen)}
                   disabled={isDeleting}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-teal-500/20 border border-teal-500/50 hover:bg-teal-500/30 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-teal-400 text-sm font-semibold transition-colors"
+                  className="flex min-h-9 items-center gap-1.5 rounded-lg border border-teal-500/50 bg-teal-500/20 px-2.5 py-1.5 text-xs font-semibold text-teal-400 transition-colors hover:bg-teal-500/30 disabled:cursor-not-allowed disabled:opacity-50 sm:px-3 sm:text-sm"
                   title="Move to folder"
                 >
-                  Move to folder
+                  Move
                   <ChevronDown className="w-4 h-4" />
                 </motion.button>
 
@@ -1338,7 +1352,7 @@ export function WalletTab({
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
-                    className="absolute top-full left-0 mt-2 w-48 backdrop-blur-xl bg-black/95 border border-white/10 rounded-lg overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.5)] z-20"
+                    className="absolute right-0 top-full z-20 mt-2 w-48 overflow-hidden rounded-lg border border-white/10 bg-black/95 shadow-[0_0_30px_rgba(0,0,0,0.5)] backdrop-blur-xl"
                   >
                     <button
                       onClick={() => {
@@ -1379,7 +1393,7 @@ export function WalletTab({
                   exit={{ opacity: 0, scale: 0.8 }}
                   onClick={() => setDeleteConfirmOpen(true)}
                   disabled={isDeleting}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-red-500/20 border border-red-500/50 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-red-400 text-sm font-semibold transition-colors"
+                  className="flex min-h-9 items-center gap-1.5 rounded-lg border border-red-500/50 bg-red-500/20 px-2.5 py-1.5 text-xs font-semibold text-red-400 transition-colors hover:bg-red-500/30 disabled:cursor-not-allowed disabled:opacity-50 sm:px-3 sm:text-sm"
                 >
                   <Trash2 className="w-4 h-4" />
                   Delete
@@ -1393,7 +1407,7 @@ export function WalletTab({
                 setSelectMode(!selectMode);
                 setSelectedReceipts(new Set());
               }}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+              className={`flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors sm:px-3 sm:text-sm ${
                 selectMode
                   ? 'bg-teal-400/20 border border-teal-400/40 text-teal-400'
                   : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10'
@@ -1401,7 +1415,7 @@ export function WalletTab({
             >
               {selectMode ? 'Cancel' : 'Select'}
             </motion.button>
-            <ReceiptIcon className="w-5 h-5 text-gray-400" />
+            <ReceiptIcon className="hidden h-5 w-5 text-gray-400 sm:block" />
           </div>
         </div>
 
@@ -1416,7 +1430,7 @@ export function WalletTab({
               <h3 className="text-lg font-bold text-white mb-2">Loading receipts...</h3>
               <p className="text-gray-400">Getting your receipts ready</p>
             </motion.div>
-          ) : filteredReceipts.length === 0 ? (
+          ) : displayReceipts.length === 0 && filteredRecoveryReceipts.length === 0 ? (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1449,7 +1463,10 @@ export function WalletTab({
             </motion.div>
           ) : (
             <div className="space-y-3">
-              {filteredReceipts.map((receipt, index) => {
+              {displayReceipts.map((receipt, index) => {
+                const section = getWalletReceiptSection(receipt);
+                const previousSection = index > 0 ? getWalletReceiptSection(displayReceipts[index - 1]) : null;
+                const startsSection = section !== previousSection;
                 const MerchantIcon = receipt.merchantIcon;
                 const isProcessing = receipt.status === 'processing';
                 const isStaleProcessing = isReceiptStaleProcessing(
@@ -1495,8 +1512,24 @@ export function WalletTab({
                 const preferredCurrencyAmount = convertedAmounts.get(receipt.id);
 
                 return (
+                  <Fragment key={receipt.id}>
+                    {startsSection && section === 'purchases' ? (
+                      <div className="pb-1 pt-1">
+                        <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-gray-400">Purchases</h2>
+                      </div>
+                    ) : null}
+                    {startsSection && section === 'attention' ? (
+                      <div ref={needsAttentionSectionRef} className="scroll-mt-24 pb-1 pt-5">
+                        <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-amber-200">Needs attention</h2>
+                        <p className="mt-1 text-xs text-gray-500">Only purchases that need a quick decision appear here.</p>
+                      </div>
+                    ) : null}
+                    {startsSection && section === 'recovery' ? (
+                      <div className="pb-1 pt-5">
+                        <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-gray-500">Files to revisit</h2>
+                      </div>
+                    ) : null}
                   <motion.div
-                    key={receipt.id}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.2, delay: Math.min(index * 0.03, 0.18), ease: [0.22, 1, 0.36, 1] }}
@@ -1528,7 +1561,7 @@ export function WalletTab({
                       }}
                       className={`w-full text-left ${!isFreshProcessing ? 'cursor-pointer' : 'cursor-default'}`}
                     >
-                      <div className="mb-3 flex min-w-0 items-start gap-3 sm:gap-4">
+                      <div className={`mb-3 flex min-w-0 items-start gap-3 sm:gap-4 ${isDocumentReview ? 'flex-wrap min-[380px]:flex-nowrap' : ''}`}>
                         {selectMode ? (
                           <div className="w-12 h-12 flex-shrink-0 rounded-xl border border-teal-400/50 bg-teal-400/10 flex items-center justify-center">
                             {selectedReceipts.has(receipt.id) ? (
@@ -1586,8 +1619,8 @@ export function WalletTab({
                           ) : isDocumentReview ? (
                             <>
                               <h3 className="mb-1 break-words text-lg font-bold text-white">{hasDisplayMerchant ? receipt.merchant : 'Purchase document'}</h3>
-                              <p className="text-sm font-semibold text-sky-200">Document review</p>
-                              <p className="mt-1 text-xs text-gray-400">This looks like purchase evidence rather than a standard receipt.</p>
+                              <p className="text-sm font-semibold text-sky-200">{receipt.amountKnown ? 'Purchase details uncertain' : 'Amount not found'}</p>
+                              <p className="mt-1 text-xs text-gray-400">{receipt.amountKnown ? 'Check the details we could not confirm.' : 'Add the amount shown on the original.'}</p>
                             </>
                           ) : showIssueHeading ? (
                             <>
@@ -1609,8 +1642,15 @@ export function WalletTab({
                                 {purchaseDateDisplay}
                               </p>
                             )}
-                            {!isFreshProcessing && !showIssueHeading && receipt.category && (
-                              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${receipt.tagColor}`}>{receipt.category}</span>
+                            {!isFreshProcessing && !showIssueHeading && (receipt.category || receipt.cardLast4) && (
+                              <div className="flex flex-wrap items-center gap-2">
+                                {receipt.category ? (
+                                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${receipt.tagColor}`}>{receipt.category}</span>
+                                ) : null}
+                                {receipt.cardLast4 ? (
+                                  <span className="text-[11px] font-semibold tracking-wide text-gray-500">•••• {receipt.cardLast4}</span>
+                                ) : null}
+                              </div>
                             )}
                             {returnWindowStatus.status === 'urgent' && !isFreshProcessing && (
                               <div className="flex items-center gap-1 px-1.5 py-0.5 bg-red-500/20 border border-red-500/40 rounded-full">
@@ -1620,8 +1660,10 @@ export function WalletTab({
                             )}
                           </div>
                         </div>
-                        {!isFreshProcessing && (
-                          <div className="max-w-[46%] shrink-0 text-right">
+                        {!isFreshProcessing && (receipt.amountKnown || !isDocumentReview) && (
+                          <div className={isDocumentReview
+                            ? 'w-full pl-[60px] text-left min-[380px]:w-auto min-[380px]:max-w-[46%] min-[380px]:shrink-0 min-[380px]:pl-0 min-[380px]:text-right'
+                            : 'max-w-[46%] shrink-0 text-right'}>
                             {receipt.amountKnown ? (
                               <div className="break-words text-xl font-bold text-white sm:text-2xl">
                                 {requiresCurrencyConfirmation || isStaleProcessing
@@ -1680,10 +1722,10 @@ export function WalletTab({
                       <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-sky-400/25 bg-sky-400/10 px-4 py-3">
                         <button
                           type="button"
-                          onClick={() => onReceiptClick(receipt)}
+                          onClick={() => onReceiptClick({ ...receipt, startInEditMode: true })}
                           className="rounded-lg bg-sky-200 px-3 py-1.5 text-sm font-bold text-slate-950 transition-colors hover:bg-white"
                         >
-                          Review details
+                          {receipt.amountKnown ? 'Review details' : 'Add amount'}
                         </button>
                         {!receipt.amountKnown && (
                           <button
@@ -1804,11 +1846,24 @@ export function WalletTab({
                       </div>
                     )}
                   </motion.div>
+                  </Fragment>
                 );
               })}
             </div>
           )}
         </AnimatePresence>
+
+        {filteredRecoveryReceipts.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setShowRecoveryReceipts((current) => !current)}
+            className="mt-5 flex min-h-11 w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.035] px-4 py-3 text-left text-sm font-semibold text-gray-400 transition-colors hover:bg-white/[0.06] hover:text-gray-200"
+            aria-expanded={showRecoveryReceipts}
+          >
+            <span>{filteredRecoveryReceipts.length} {filteredRecoveryReceipts.length === 1 ? 'file' : 'files'} to revisit</span>
+            <ChevronDown className={`h-4 w-4 transition-transform ${showRecoveryReceipts ? 'rotate-180' : ''}`} />
+          </button>
+        ) : null}
 
         <ReportProblemDialog
           isOpen={Boolean(reportProblemReceipt)}

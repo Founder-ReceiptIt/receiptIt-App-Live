@@ -254,13 +254,7 @@ export const confirmReceiptCurrency = async (
 export const retryReceiptProcessing = async (
   receiptId: string
 ) => supabase
-  .from('receipts')
-  .update({
-    status: 'processing',
-    error_reason: null,
-    processing_attempt_started_at: new Date().toISOString(),
-  })
-  .eq('id', receiptId);
+  .rpc('request_receipt_reassessment', { p_receipt_id: receiptId });
 
 export const addClearerReceiptPhoto = async ({
   receiptId,

@@ -165,7 +165,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
     setShowOtherCurrencyOptions(false);
     setShowReportProblemDialog(false);
     setIsActionMenuOpen(false);
-    setIsEditMode(false);
+    setIsEditMode(Boolean(receipt?.startInEditMode && receipt?.status === 'needs_review'));
     setDisplayMerchant(receipt?.merchant || '');
     setMerchantDraft(receipt?.merchant || '');
     setDisplayCategory(receipt?.category || 'Other');
@@ -173,7 +173,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
     setDisplayAmount(receipt?.amountKnown ? receipt.amount : null);
     setAmountDraft(receipt?.amountKnown ? receipt.amount.toFixed(2) : '');
     setItemDisplayNameDrafts({});
-  }, [receipt?.id, receipt?.merchant, receipt?.category, receipt?.amount, receipt?.amountKnown]);
+  }, [receipt?.id, receipt?.merchant, receipt?.category, receipt?.amount, receipt?.amountKnown, receipt?.startInEditMode, receipt?.status]);
 
   useEffect(() => {
     setProcessingAttemptStartedAt(receipt?.processingAttemptStartedAt || null);
@@ -426,9 +426,10 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
     }
 
     const isDocumentReview = receipt.status === 'needs_review';
+    const isFocusedAmountReview = isDocumentReview && Boolean(receipt.startInEditMode) && !receipt.amountKnown;
     const nextAmount = isDocumentReview && amountDraft.trim() !== '' ? Number(amountDraft) : displayAmount;
     if (isDocumentReview && (nextAmount === null || !Number.isFinite(nextAmount) || nextAmount < 0 || nextAmount > 1_000_000)) {
-      showToast('Purchase not kept', 'Enter the amount shown on the original purchase document.');
+      showToast(isFocusedAmountReview ? 'Amount not saved' : 'Purchase not kept', 'Enter the amount shown on the original purchase document.');
       return;
     }
 
@@ -512,7 +513,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
     setItemDisplayNameDrafts({});
     setIsEditMode(false);
     onUpdate?.();
-    showToast(isDocumentReview ? 'Purchase kept' : 'Receipt updated');
+    showToast(isFocusedAmountReview ? 'Amount saved' : isDocumentReview ? 'Purchase kept' : 'Receipt updated');
     if (isDocumentReview) onClose();
   };
 
@@ -631,6 +632,8 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
       ? 'Choose another file'
       : 'Try again';
   const isDocumentReview = receipt.status === 'needs_review';
+  const isFocusedAmountReview = isDocumentReview && isEditMode && Boolean(receipt.startInEditMode) && !receipt.amountKnown;
+  const isFullEditMode = isEditMode && !isFocusedAmountReview;
   const isCompactFailedReceipt = Boolean(receiptFailureDetails) && !requiresCurrencyConfirmation && !isFreshProcessing && !isDocumentReview;
   const hasReceiptItems = displayReceiptItems.length > 0;
   const showItemsLoadingState = !isCurrentReceiptDetails || itemsLoading || !itemsLoaded;
@@ -976,7 +979,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
               {isEditMode && (
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-xl border border-teal-400/25 bg-teal-400/10 px-3 py-3 sm:px-4">
                   <div className="min-w-0">
-                    <p className="font-semibold text-teal-100">{isDocumentReview ? 'Review purchase details' : 'Edit receipt'}</p>
+                    <p className="font-semibold text-teal-100">{isFocusedAmountReview ? 'Add purchase amount' : isDocumentReview ? 'Review purchase details' : 'Edit receipt'}</p>
                     <p className="mt-0.5 text-xs text-teal-100/65">Changes update your saved details, not the original.</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
@@ -994,7 +997,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
                       disabled={isSavingReceiptEdits}
                       className="inline-flex min-h-10 items-center justify-center rounded-lg bg-teal-400 px-3 text-sm font-bold text-black transition-colors hover:bg-teal-300 disabled:opacity-50"
                     >
-                      {isSavingReceiptEdits ? 'Saving...' : isDocumentReview ? 'Keep purchase' : 'Save changes'}
+                      {isSavingReceiptEdits ? 'Saving...' : isFocusedAmountReview ? 'Save amount' : isDocumentReview ? 'Keep purchase' : 'Save changes'}
                     </button>
                   </div>
                 </div>
@@ -1011,7 +1014,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    {isEditMode ? (
+                    {isFullEditMode ? (
                       <div className="mb-2 min-w-0 max-w-xl">
                         <label htmlFor={`receipt-merchant-${receipt.id}`} className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-500">
                           Store name
@@ -1083,7 +1086,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
-                  {isEditMode ? (
+                  {isFullEditMode ? (
                     <label className="min-w-0 sm:min-w-52">
                       <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500">Category</span>
                       <select
@@ -1151,8 +1154,8 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
 
                 {receipt.status === 'needs_review' && (
                   <div className="mt-4 rounded-xl border border-sky-400/25 bg-sky-400/10 px-4 py-3 text-sm text-sky-100">
-                    <p className="font-semibold">Document review</p>
-                    <p className="mt-1 text-xs text-sky-100/75">This looks like purchase evidence rather than a standard receipt. Check the details, then keep it if it is useful to you.</p>
+                    <p className="font-semibold">{isFocusedAmountReview ? 'Amount needed' : 'Document review'}</p>
+                    <p className="mt-1 text-xs text-sky-100/75">{isFocusedAmountReview ? 'Enter the amount shown on the original.' : 'This looks like purchase evidence rather than a standard receipt. Check the details, then keep it if it is useful to you.'}</p>
                     {!isEditMode && (
                       <button
                         type="button"
@@ -1359,7 +1362,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
                                   className={`grid ${receiptBreakdownGridColumns} ${receiptBreakdownGridSpacing} items-start py-3`}
                                 >
                                   <div className="col-span-3 min-w-0 sm:col-span-1">
-                                    {isEditMode && item.id ? (
+                                    {isFullEditMode && item.id ? (
                                       <div className="min-w-0">
                                         <label htmlFor={`receipt-item-${item.id}`} className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500">
                                           Item name
