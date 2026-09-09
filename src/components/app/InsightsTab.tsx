@@ -6,12 +6,13 @@ import { useAuth } from '../../contexts/AuthContext';
 import { convertReceiptAmounts, formatCurrency } from '../../lib/currency';
 import {
   getAnalyticsEligibleAmount,
+  getAnalyticsMoneySummary,
   getAnalyticsMonthKey,
   getCurrentCalendarMonthKey,
   isAnalyticsPurchaseCandidate,
 } from '../../lib/receiptAnalytics';
 
-type InsightReceipt = { id: string; amount: number; currency: string; convertedAmount: number; category: string; merchant: string; transactionDate: string | null };
+type InsightReceipt = { id: string; amount: number; currency: string; convertedAmount: number; category: string; merchant: string; transactionDate: string | null; status: string | null; errorReason: string | null; documentType: string | null };
 const monthKey = getCurrentCalendarMonthKey;
 
 export function InsightsTab() {
@@ -65,6 +66,9 @@ export function InsightsTab() {
             category: typeof row.category === 'string' && row.category.trim() ? row.category.trim() : 'Other',
             merchant: typeof row.merchant === 'string' && row.merchant.trim() ? row.merchant.trim() : 'Store unknown',
             transactionDate: row.transaction_date ? String(row.transaction_date) : null,
+            status: row.status,
+            errorReason: row.error_reason,
+            documentType: row.document_type,
           }];
         });
         const converted = await convertReceiptAmounts(sourceReceipts.map((receipt) => ({
@@ -89,10 +93,19 @@ export function InsightsTab() {
 
   const summary = useMemo(() => {
     const rollup = (receipt: InsightReceipt) => receipt.convertedAmount;
-    const total = receipts.reduce((sum, receipt) => sum + rollup(receipt), 0);
     const currentMonth = monthKey(new Date());
-    const monthReceipts = receipts.filter((receipt) => getAnalyticsMonthKey(receipt.transactionDate) === currentMonth);
-    const thisMonth = monthReceipts.reduce((sum, receipt) => sum + rollup(receipt), 0);
+    const convertedAmounts = new Map(receipts.map((receipt) => [receipt.id, receipt.convertedAmount]));
+    const analyticsReceipts = receipts.map((receipt) => ({
+      id: receipt.id,
+      amount: receipt.amount,
+      status: receipt.status,
+      errorReason: receipt.errorReason,
+      documentType: receipt.documentType,
+      merchant: receipt.merchant,
+      transactionDate: receipt.transactionDate,
+    }));
+    const allTime = getAnalyticsMoneySummary(analyticsReceipts, convertedAmounts);
+    const currentMonthSummary = getAnalyticsMoneySummary(analyticsReceipts, convertedAmounts, currentMonth);
     const byCategory = Object.entries(receipts.reduce((all, receipt) => {
       all[receipt.category] = (all[receipt.category] || 0) + rollup(receipt);
       return all;
@@ -107,7 +120,7 @@ export function InsightsTab() {
       const key = monthKey(date);
       return { label: date.toLocaleDateString('en-GB', { month: 'short' }), amount: receipts.filter((receipt) => getAnalyticsMonthKey(receipt.transactionDate) === key).reduce((sum, receipt) => sum + rollup(receipt), 0) };
     });
-    return { total, thisMonth, average: receipts.length ? total / receipts.length : 0, byCategory, byMerchant, months };
+    return { total: allTime.total, thisMonth: currentMonthSummary.total, average: allTime.average, byCategory, byMerchant, months };
   }, [receipts]);
 
   if (loading) return <div className="ri-mobile-page mx-auto min-w-0 max-w-7xl px-4 pt-8 sm:px-6"><div className="h-8 w-32 animate-pulse rounded bg-white/10" /><div className="mt-8 grid gap-4 sm:grid-cols-3"><div className="h-32 animate-pulse rounded-2xl bg-white/[0.045]" /><div className="h-32 animate-pulse rounded-2xl bg-white/[0.045]" /><div className="h-32 animate-pulse rounded-2xl bg-white/[0.045]" /></div></div>;

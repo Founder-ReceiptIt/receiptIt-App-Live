@@ -67,6 +67,10 @@ const scan = files['src/components/app/ScanTab.tsx'];
 check(scan.includes("showToast('Receipt added', 'Processing in the background.')"), 'Scan must release the user after the durable processing handoff');
 check(!scan.includes('receipt-status-'), 'Scan must not wait for AI extraction after the durable handoff');
 check(scan.includes("status: 'processing'"), 'Scan must commit a processing receipt before confirming it was added');
+check(scan.includes("? 'Ready to upload as one receipt.'"), 'one-image confirmation must use singular upload copy');
+check(scan.includes(": 'We’ll read them together as one receipt.'"), 'multi-image confirmation must explain that pages form one receipt');
+check(scan.indexOf('Upload receipt') < scan.indexOf('Add another page') && scan.indexOf('Add another page') < scan.indexOf('Choose a different image'), 'Scan review actions must keep the approved primary, secondary and tertiary order');
+check(!scan.includes('>Add another image<') && !scan.includes('>Choose again<'), 'obsolete Scan review labels must not return');
 
 const manifest = JSON.parse(files['public/manifest.webmanifest']);
 check(manifest.shortcuts?.some((shortcut) => shortcut.name === 'Scan receipt' && shortcut.url === '/#scan'), 'PWA manifest must expose the Scan receipt shortcut');

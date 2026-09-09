@@ -534,7 +534,7 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
   };
 
   const handleContinueMultiImageReceipt = async () => {
-    if (selectedImageFiles.length < 1) {
+    if (isScanningRef.current || selectedImageFiles.length < 1) {
       return;
     }
 
@@ -1217,16 +1217,20 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
                   <h2 className="mt-4 text-2xl font-bold text-white">
                     {selectedImageFiles.length} {selectedImageFiles.length === 1 ? 'image' : 'images'} selected
                   </h2>
-                  <p className="mt-2 text-sm text-gray-300">We’ll read them together as one receipt.</p>
+                  <p className="mt-2 text-sm text-gray-300">
+                    {selectedImageFiles.length === 1
+                      ? 'Ready to upload as one receipt.'
+                      : 'We’ll read them together as one receipt.'}
+                  </p>
                   <div className="mt-5 flex justify-center gap-2" aria-label={`${selectedImageFiles.length} images in selection order`}>
                     {selectedImageFiles.map((file, index) => <span key={`${file.name}-${file.lastModified}-${index}`} className="flex h-8 w-8 items-center justify-center rounded-full border border-teal-300/20 bg-teal-400/10 text-xs font-bold text-teal-100">{index + 1}</span>)}
                   </div>
                   <div className="mt-7 space-y-3">
+                    <button type="button" onClick={() => void handleContinueMultiImageReceipt()} className="w-full rounded-xl border border-teal-400/30 bg-teal-500/20 p-4 font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:bg-teal-500/30 active:scale-[0.98]">Upload receipt</button>
                     <button type="button" onClick={openCameraPicker} className="w-full rounded-xl border border-white/10 bg-white/5 p-4 font-semibold text-white transition-all duration-300 hover:bg-white/10">
-                      <span className="inline-flex items-center justify-center gap-2"><Camera className="h-4 w-4" />Add another image</span>
+                      <span className="inline-flex items-center justify-center gap-2"><Camera className="h-4 w-4" />Add another page</span>
                     </button>
-                    <button type="button" onClick={() => void handleContinueMultiImageReceipt()} className="w-full rounded-xl border border-teal-400/30 bg-teal-500/20 p-4 font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:bg-teal-500/30 active:scale-[0.98]">Continue</button>
-                    <button type="button" onClick={resetScan} className="w-full rounded-xl border border-white/10 bg-white/5 p-4 font-semibold text-gray-300 transition-all duration-300 hover:bg-white/10">Choose again</button>
+                    <button type="button" onClick={resetScan} className="w-full rounded-xl px-4 py-2 text-sm font-semibold text-gray-400 transition-colors hover:text-white">Choose a different image</button>
                   </div>
                 </div>
               </motion.div>

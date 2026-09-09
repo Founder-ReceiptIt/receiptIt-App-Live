@@ -956,7 +956,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
                         }}
                         disabled={isDeleting || isConfirmingCurrency}
                         className={isNotReceiptDocument
-                          ? 'rounded-lg bg-white px-3 py-1.5 text-sm font-bold text-black transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50'
+                          ? 'rounded-lg border border-white/15 bg-black/20 px-3 py-1.5 text-sm font-semibold text-gray-200 transition-colors hover:border-white/25 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50'
                           : 'px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed'}
                       >
                         {isConfirmingCurrency ? 'Trying again...' : failurePrimaryActionLabel}

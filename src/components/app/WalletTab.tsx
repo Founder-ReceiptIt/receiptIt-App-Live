@@ -31,7 +31,7 @@ import { convertReceiptAmounts, formatCurrency, getCurrencyConfig } from '../../
 import { isReceiptAmountKnown } from '../../lib/receiptAmountState';
 import {
   getAnalyticsEligibleAmount,
-  getAnalyticsMonthKey,
+  getAnalyticsMoneySummary,
   getCurrentCalendarMonthKey,
   isAnalyticsPurchaseCandidate,
 } from '../../lib/receiptAnalytics';
@@ -530,6 +530,7 @@ export function WalletTab({
   const [reportProblemReceipt, setReportProblemReceipt] = useState<{ id: string; merchant: string } | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [convertedAmounts, setConvertedAmounts] = useState<Map<string, number>>(new Map());
+  const [analyticsAmountsReady, setAnalyticsAmountsReady] = useState(false);
   const [possibleDuplicates, setPossibleDuplicates] = useState<PossibleDuplicateCandidate[]>([]);
   const [resolvingPossibleDuplicateId, setResolvingPossibleDuplicateId] = useState<string | null>(null);
   const [showNonReceipts, setShowNonReceipts] = useState(false);
@@ -552,6 +553,7 @@ export function WalletTab({
     setSelectedReceipts(new Set());
     setSelectMode(false);
     setConvertedAmounts(new Map());
+    setAnalyticsAmountsReady(false);
     setPossibleDuplicates([]);
     setProcessingAttemptStartedAtByReceiptId({});
 
@@ -817,6 +819,7 @@ export function WalletTab({
   useEffect(() => {
     let active = true;
     const loadConvertedAmounts = async () => {
+      setAnalyticsAmountsReady(false);
       setConvertedAmounts(new Map());
       const receiptsForConversion = filterVisibleWalletReceipts(dedupeWalletReceipts(receipts)).flatMap((receipt) => {
         const amount = getAnalyticsEligibleAmount({
@@ -835,31 +838,36 @@ export function WalletTab({
           transactionDate: receipt.date || null,
         }];
       });
-      const converted = await convertReceiptAmounts(receiptsForConversion, accountCurrency.preferredCurrency);
-      if (!active) return;
-      setConvertedAmounts(converted.amounts);
+      try {
+        const converted = await convertReceiptAmounts(receiptsForConversion, accountCurrency.preferredCurrency);
+        if (!active) return;
+        setConvertedAmounts(converted.amounts);
+      } catch (conversionError) {
+        if (!active) return;
+        console.error('[WalletTab] Could not prepare Wallet totals:', conversionError);
+        setConvertedAmounts(new Map());
+      } finally {
+        if (active) setAnalyticsAmountsReady(true);
+      }
     };
     void loadConvertedAmounts();
     return () => { active = false; };
   }, [receipts, accountCurrency.preferredCurrency]);
 
   const currentMonthKey = getCurrentCalendarMonthKey();
-  const analyticsCandidatesThisMonth = visibleReceipts.filter((receipt) => (
-    isAnalyticsPurchaseCandidate({ status: receipt.status, documentType: receipt.documentType })
-    && getAnalyticsMonthKey(receipt.date) === currentMonthKey
-  ));
-  const receiptsThisMonth = analyticsCandidatesThisMonth.filter((receipt) => getAnalyticsEligibleAmount({
+  const walletAnalyticsReceipts = visibleReceipts.map((receipt) => ({
+    id: receipt.id,
     amount: receipt.amountKnown ? receipt.amount : null,
     status: receipt.status,
     errorReason: receipt.errorReason,
     documentType: receipt.documentType,
     merchant: receipt.merchant,
     transactionDate: receipt.date,
-  }) !== null);
-  const includedReceiptsThisMonth = receiptsThisMonth.filter((receipt) => convertedAmounts.has(receipt.id));
-  const excludedThisMonthCount = analyticsCandidatesThisMonth.length - includedReceiptsThisMonth.length;
-  const spentThisMonth = includedReceiptsThisMonth.reduce((sum, receipt) => sum + (convertedAmounts.get(receipt.id) ?? 0), 0);
-  const averagePurchaseThisMonth = includedReceiptsThisMonth.length ? spentThisMonth / includedReceiptsThisMonth.length : 0;
+  }));
+  const currentMonthSummary = getAnalyticsMoneySummary(walletAnalyticsReceipts, convertedAmounts, currentMonthKey);
+  const excludedThisMonthCount = currentMonthSummary.excludedCount;
+  const spentThisMonth = currentMonthSummary.total;
+  const averagePurchaseThisMonth = currentMonthSummary.average;
   const monthlyBudget = accountCurrency.monthlyBudgetCurrency === accountCurrency.preferredCurrency
     ? accountCurrency.monthlyBudgetAmount
     : null;
@@ -1204,8 +1212,8 @@ export function WalletTab({
           </section>
         ) : null}
 
-        <div className="mb-6 rounded-2xl border border-teal-300/25 bg-gradient-to-br from-teal-400/15 to-cyan-400/5 p-5">
-          <div className="flex min-w-0 items-start gap-3"><div className="shrink-0 rounded-xl border border-teal-300/20 bg-teal-400/10 p-2.5"><ShieldCheck className="h-5 w-5 text-teal-200" strokeWidth={1.5} /></div><div className="min-w-0 flex-1"><div className="grid min-w-0 grid-cols-1 gap-3 min-[540px]:grid-cols-2"><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-200">This month</p><p className="mt-1 break-words text-2xl font-bold text-white">{formatCurrency(spentThisMonth, accountCurrency.preferredCurrency)} spent</p></div><div className="min-w-0 min-[540px]:text-right"><p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">Average purchase</p><p className="mt-1 break-words text-lg font-bold text-white">{formatCurrency(averagePurchaseThisMonth, accountCurrency.preferredCurrency)}</p></div></div>{monthlyBudget ? <><p className="mt-4 text-sm text-gray-300">of {formatCurrency(monthlyBudget, accountCurrency.preferredCurrency, { maximumFractionDigits: 0, minimumFractionDigits: 0 })} budget</p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-teal-400 transition-[width] duration-300" style={{ width: `${budgetProgress}%` }} /></div><p className="mt-2 text-xs text-gray-400">{budgetUsed.toFixed(1)}% used</p></> : null}{excludedThisMonthCount > 0 ? <p className="mt-3 text-xs text-amber-100">{excludedThisMonthCount === 1 ? 'One purchase couldn’t be included in this total.' : `${excludedThisMonthCount} purchases couldn’t be included in this total.`}</p> : null}</div></div>
+        <div className="mb-6 rounded-2xl border border-teal-300/25 bg-gradient-to-br from-teal-400/15 to-cyan-400/5 p-5" aria-busy={!analyticsAmountsReady}>
+          <div className="flex min-w-0 items-start gap-3"><div className="shrink-0 rounded-xl border border-teal-300/20 bg-teal-400/10 p-2.5"><ShieldCheck className="h-5 w-5 text-teal-200" strokeWidth={1.5} /></div><div className="min-w-0 flex-1"><div className="grid min-w-0 grid-cols-1 gap-3 min-[540px]:grid-cols-2"><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-200">This month</p><p className="mt-1 break-words text-2xl font-bold text-white">{analyticsAmountsReady ? `${formatCurrency(spentThisMonth, accountCurrency.preferredCurrency)} spent` : 'Calculating…'}</p></div><div className="min-w-0 min-[540px]:text-right"><p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">Average purchase</p><p className="mt-1 break-words text-lg font-bold text-white">{analyticsAmountsReady ? formatCurrency(averagePurchaseThisMonth, accountCurrency.preferredCurrency) : '—'}</p></div></div>{monthlyBudget ? <><p className="mt-4 text-sm text-gray-300">of {formatCurrency(monthlyBudget, accountCurrency.preferredCurrency, { maximumFractionDigits: 0, minimumFractionDigits: 0 })} budget</p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">{analyticsAmountsReady ? <div className="h-full rounded-full bg-teal-400 transition-[width] duration-300" style={{ width: `${budgetProgress}%` }} /> : null}</div>{analyticsAmountsReady ? <p className="mt-2 text-xs text-gray-400">{budgetUsed.toFixed(1)}% used</p> : null}</> : null}{analyticsAmountsReady && excludedThisMonthCount > 0 ? <p className="mt-3 text-xs text-amber-100">{excludedThisMonthCount === 1 ? 'One purchase couldn’t be included in this total.' : `${excludedThisMonthCount} purchases couldn’t be included in this total.`}</p> : null}</div></div>
         </div>
 
         {warrantyReceipts.length > 0 && (
@@ -1673,7 +1681,7 @@ export function WalletTab({
                             }}
                             disabled={isDeleting || isConfirmingCurrency}
                             className={isNotReceipt
-                              ? 'rounded-lg bg-white px-3 py-1.5 text-sm font-bold text-black transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50'
+                              ? 'rounded-lg border border-white/15 bg-black/20 px-3 py-1.5 text-sm font-semibold text-gray-200 transition-colors hover:border-white/25 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50'
                               : 'px-3 py-1.5 rounded-lg border border-red-300/30 bg-black/20 text-sm font-semibold text-red-100 hover:bg-red-300/10 hover:border-red-200/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed'}
                           >
                             {isConfirmingCurrency ? 'Trying again...' : failurePrimaryActionLabel}

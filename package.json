@@ -17,6 +17,7 @@
     "test:calm-review": "node scripts/check-calm-wallet-review-assist.mjs",
     "test:inbound-email": "node --experimental-strip-types scripts/check-inbound-email-classification.mjs",
     "test:analytics": "node --experimental-strip-types scripts/check-analytics-consistency.mjs",
+    "test:scan-review": "node scripts/check-scan-review.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
   },
   "dependencies": {

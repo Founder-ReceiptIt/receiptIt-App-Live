@@ -9,6 +9,17 @@ export interface AnalyticsReceiptInput {
   transactionDate?: string | null;
 }
 
+export interface AnalyticsReceiptWithId extends AnalyticsReceiptInput {
+  id: string;
+}
+
+export interface AnalyticsMoneySummary {
+  total: number;
+  average: number;
+  includedCount: number;
+  excludedCount: number;
+}
+
 const getFiniteAmount = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string' && value.trim() !== '') {
@@ -60,3 +71,37 @@ export const getAnalyticsMonthKey = (transactionDate?: string | null): string | 
 export const getCurrentCalendarMonthKey = (date = new Date()): string => (
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 );
+
+/**
+ * Shared roll-up used by Wallet and Insights after historical FX conversion.
+ * A missing converted amount is excluded rather than treated as zero. A real,
+ * trusted zero remains valid and is counted.
+ */
+export const getAnalyticsMoneySummary = (
+  receipts: AnalyticsReceiptWithId[],
+  convertedAmounts: ReadonlyMap<string, number>,
+  monthKey?: string | null,
+): AnalyticsMoneySummary => {
+  const candidates = receipts.filter((receipt) => (
+    isAnalyticsPurchaseCandidate(receipt)
+    && (monthKey === undefined || getAnalyticsMonthKey(receipt.transactionDate) === monthKey)
+  ));
+  const includedAmounts = candidates.flatMap((receipt) => {
+    if (getAnalyticsEligibleAmount(receipt) === null) return [];
+    const convertedAmount = convertedAmounts.get(receipt.id);
+    return typeof convertedAmount === 'number'
+      && Number.isFinite(convertedAmount)
+      && convertedAmount >= 0
+      && convertedAmount <= 1_000_000
+      ? [convertedAmount]
+      : [];
+  });
+  const total = includedAmounts.reduce((sum, amount) => sum + amount, 0);
+
+  return {
+    total,
+    average: includedAmounts.length > 0 ? total / includedAmounts.length : 0,
+    includedCount: includedAmounts.length,
+    excludedCount: candidates.length - includedAmounts.length,
+  };
+};
