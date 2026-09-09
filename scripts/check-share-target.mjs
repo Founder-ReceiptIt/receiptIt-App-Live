@@ -10,11 +10,18 @@ assert.equal(manifest.share_target.action, '/share-target');
 assert.equal(manifest.share_target.method, 'POST');
 assert.equal(manifest.share_target.enctype, 'multipart/form-data');
 assert.deepEqual(manifest.share_target.params.files[0].accept, [
+  'image/*',
   'image/jpeg',
   'image/png',
   'image/webp',
   'application/pdf',
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.webp',
+  '.pdf',
 ]);
+assert.ok(manifest.share_target.params.files[0].accept.includes('image/*'));
 
 assert.match(worker, /event\.request\.method === 'POST'/);
 assert.match(worker, /request\.formData\(\)/);

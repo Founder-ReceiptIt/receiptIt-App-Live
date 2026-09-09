@@ -56,10 +56,16 @@
         {
           "name": "files",
           "accept": [
+            "image/*",
             "image/jpeg",
             "image/png",
             "image/webp",
-            "application/pdf"
+            "application/pdf",
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".webp",
+            ".pdf"
           ]
         }
       ]
