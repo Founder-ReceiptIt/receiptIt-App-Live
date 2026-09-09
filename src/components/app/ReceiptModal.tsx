@@ -1058,7 +1058,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
                       </div>
                     )}
                   </div>
-                    <div className="col-span-2 min-w-0 justify-self-end text-right sm:col-span-1 sm:col-start-3 sm:row-start-1">
+                    <div className="col-start-2 min-w-0 justify-self-start text-left sm:col-span-1 sm:col-start-3 sm:row-start-1 sm:justify-self-end sm:text-right">
                     {isEditMode && isDocumentReview ? (
                       <div className="ml-auto w-full max-w-52 text-left sm:text-right">
                         <label htmlFor={`receipt-amount-${receipt.id}`} className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-500">
@@ -1093,7 +1093,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex min-w-0 flex-wrap items-center gap-2 pl-[4.25rem] sm:pl-0">
                   {isFullEditMode ? (
                     <label className="min-w-0 sm:min-w-52">
                       <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-gray-500">Category</span>
@@ -1322,8 +1322,8 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
 
               {(warrantyEndDate || receipt.returnDate) && (
                 <section className="grid gap-3 sm:grid-cols-2">
-                  {warrantyEndDate && <div className="rounded-2xl border border-teal-300/20 bg-teal-400/[0.045] p-3.5"><div className="flex items-center gap-2 text-sm font-bold text-white"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-400/10"><Shield className="h-4 w-4 text-teal-300" /></span>Warranty</div><p className={`mt-1.5 pl-9 text-sm font-medium ${isWarrantyActive ? 'text-teal-100' : 'text-gray-400'}`}>{isWarrantyActive ? `Ends ${warrantyEndDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : `Ended ${warrantyEndDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`}</p></div>}
-                  {receipt.returnDate && <div className="rounded-2xl border border-teal-300/20 bg-teal-400/[0.045] p-3.5"><div className="flex items-center gap-2 text-sm font-bold text-white"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-400/10"><Undo2 className="h-4 w-4 text-teal-300" /></span>Returns</div><p className={`mt-1.5 pl-9 text-sm font-medium ${returnWindowStatus.status === 'expired' ? 'text-gray-400' : 'text-teal-100'}`}>{returnWindowStatus.status === 'expired' ? `Ended ${new Date(receipt.returnDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : returnWindowStatus.message}</p></div>}
+                  {warrantyEndDate && <div className={`rounded-2xl border p-3.5 shadow-[0_0_24px_rgba(45,212,191,0.06)] ${isWarrantyActive ? 'border-teal-300/30 bg-teal-400/[0.07]' : 'border-white/10 bg-white/[0.035]'}`}><div className="flex items-center gap-2 text-sm font-bold text-white"><span className={`flex h-8 w-8 items-center justify-center rounded-lg ${isWarrantyActive ? 'bg-teal-400/15' : 'bg-white/5'}`}><Shield className={`h-4 w-4 ${isWarrantyActive ? 'text-teal-200' : 'text-gray-500'}`} /></span>Warranty</div><p className={`mt-1.5 pl-10 text-sm font-medium ${isWarrantyActive ? 'text-white' : 'text-gray-400'}`}>{isWarrantyActive ? `Ends ${warrantyEndDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : `Ended ${warrantyEndDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`}</p></div>}
+                  {receipt.returnDate && <div className={`rounded-2xl border p-3.5 shadow-[0_0_24px_rgba(45,212,191,0.06)] ${returnWindowStatus.status === 'urgent' ? 'border-amber-300/30 bg-amber-400/[0.07]' : returnWindowStatus.status === 'expired' ? 'border-white/10 bg-white/[0.035]' : 'border-teal-300/30 bg-teal-400/[0.07]'}`}><div className="flex items-center gap-2 text-sm font-bold text-white"><span className={`flex h-8 w-8 items-center justify-center rounded-lg ${returnWindowStatus.status === 'urgent' ? 'bg-amber-400/15' : returnWindowStatus.status === 'expired' ? 'bg-white/5' : 'bg-teal-400/15'}`}><Undo2 className={`h-4 w-4 ${returnWindowStatus.status === 'urgent' ? 'text-amber-200' : returnWindowStatus.status === 'expired' ? 'text-gray-500' : 'text-teal-200'}`} /></span>Returns</div><p className={`mt-1.5 pl-10 text-sm font-medium ${returnWindowStatus.status === 'urgent' ? 'text-amber-100' : returnWindowStatus.status === 'expired' ? 'text-gray-400' : 'text-white'}`}>{returnWindowStatus.status === 'expired' ? `Ended ${new Date(receipt.returnDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : returnWindowStatus.message}</p></div>}
                 </section>
               )}
 

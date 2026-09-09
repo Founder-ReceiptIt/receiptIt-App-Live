@@ -13,7 +13,7 @@ export function TopNav({ activeTab, onTabChange }: TopNavProps) {
 
   const tabs = [
     { id: 'wallet', icon: Wallet, label: 'Wallet' },
-    { id: 'alias', icon: AtSign, label: 'Alias' },
+    { id: 'alias', icon: AtSign, label: 'Receipt email' },
     { id: 'scan', icon: ScanLine, label: 'Scan' },
     { id: 'insights', icon: TrendingUp, label: 'Insights' },
     { id: 'activity', icon: Activity, label: 'Activity' },

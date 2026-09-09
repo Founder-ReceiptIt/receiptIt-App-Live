@@ -97,13 +97,18 @@ const gatekeeper = files['src/components/auth/AlphaGatekeeper.tsx'];
 check(productIntro.includes('Everything after the purchase,') && productIntro.includes('handled.'), 'first-open introduction must retain the approved headline');
 check(productIntro.includes('Private by design.'), 'first-open introduction must retain the measured privacy statement');
 check(!productIntro.includes('setTimeout') && !productIntro.includes('auto-advance'), 'first-open introduction must remain user-controlled');
-check(gatekeeper.includes("receiptit_product_intro_v1_complete"), 'first-open completion must use a non-sensitive local preference');
-check(gatekeeper.includes('sessionStorage.setItem(existingSignInKey'), 'existing users must retain the direct sign-in path');
+check(gatekeeper.includes('AUTHORISED_INTRO_COMPLETE_KEY'), 'authorised intro completion must use a non-sensitive session preference');
+check(gatekeeper.indexOf('if (session || isPasswordRecovery || isExistingUserSignIn)') < gatekeeper.indexOf('if (signupAuthorization && !hasCompletedAuthorisedIntro)'), 'existing users must bypass the new-user introduction');
+check(gatekeeper.includes('openExistingUserSignIn()'), 'existing users must retain the direct sign-in path at the access gate');
+check(!productIntro.includes('Already have an account? Sign in'), 'existing-user sign in must remain outside the authorised new-user introduction');
 
 const alias = files['src/components/app/AliasTab.tsx'];
 check(alias.includes('Your private receipt email'), 'Alias page must lead with plain-English private receipt email terminology');
 check(alias.includes('Copy email'), 'Alias page must use the approved Copy email action');
-check(alias.includes('receiptit_private_email_intro_seen:'), 'Alias education callout must be account-scoped and one-time');
+check(!alias.includes('Why use this?'), 'the repetitive private-email callout must stay removed');
+check(alias.includes('At checkout') && alias.includes('Forward a receipt'), 'the private-email page must retain its two concise usage examples');
+check(topNav.includes("label: 'Receipt email'"), 'desktop navigation must use consumer-facing Receipt email terminology');
+check(bottomNav.includes("label: 'Email'"), 'mobile navigation must use the concise Email label');
 
 const manifest = JSON.parse(files['public/manifest.webmanifest']);
 check(manifest.shortcuts?.some((shortcut) => shortcut.name === 'Scan receipt' && shortcut.url === '/#scan'), 'PWA manifest must expose the Scan receipt shortcut');

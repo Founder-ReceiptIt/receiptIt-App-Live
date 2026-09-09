@@ -4,69 +4,38 @@ import { supabase } from '../../lib/supabase';
 import { ReceiptItWordmark } from '../ReceiptItWordmark';
 import { useAuth } from '../../contexts/AuthContext';
 import { ProductIntro } from './ProductIntro';
-
-const signupAuthorizationKey = 'receiptit_signup_authorization';
-const existingSignInKey = 'receiptit_existing_user_signin';
-const productIntroCompleteKey = 'receiptit_product_intro_v1_complete';
+import {
+  AUTHORISED_INTRO_COMPLETE_KEY,
+  clearProtectedAppRoute,
+  EXISTING_USER_SIGN_IN_KEY,
+  normaliseAuthenticatedRoute,
+  openExistingUserSignIn,
+  SIGNUP_AUTHORIZATION_KEY,
+} from '../../lib/authRouting';
 
 export default function AlphaGatekeeper({ children }: { children: React.ReactNode }) {
   const { session, loading: authLoading, passwordRecoveryActive } = useAuth();
-  const [isVerified, setIsVerified] = useState(false);
   const [accessCode, setAccessCode] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isChecking, setIsChecking] = useState(true);
-  const [hasCompletedProductIntro, setHasCompletedProductIntro] = useState(
-    () => localStorage.getItem(productIntroCompleteKey) === 'true'
-  );
+  const [routeRevision, setRouteRevision] = useState(0);
 
   useEffect(() => {
     if (!session) return;
-    localStorage.setItem(productIntroCompleteKey, 'true');
-    setHasCompletedProductIntro(true);
+    normaliseAuthenticatedRoute();
   }, [session]);
 
   useEffect(() => {
-    let active = true;
+    if (authLoading || session || passwordRecoveryActive) return;
 
-    const restoreGateState = async () => {
-      if (authLoading) return;
-      if (
-        session
-        || passwordRecoveryActive
-        || new URLSearchParams(window.location.search).get('reset') === '1'
-        || sessionStorage.getItem(existingSignInKey) === 'true'
-      ) {
-        if (active) {
-          setIsVerified(true);
-          setIsChecking(false);
-        }
-        return;
-      }
+    if (window.location.pathname === '/signin') {
+      sessionStorage.setItem(EXISTING_USER_SIGN_IN_KEY, 'true');
+    }
 
-      const signupAuthorization = sessionStorage.getItem(signupAuthorizationKey);
-      if (!signupAuthorization) {
-        if (active) {
-          setIsVerified(false);
-          setIsChecking(false);
-        }
-        return;
-      }
-
-      const { data, error: validationError } = await supabase.functions.invoke('verify-access-code', {
-        body: { signupAuthorization },
-      });
-      if (validationError || !data?.valid) {
-        sessionStorage.removeItem(signupAuthorizationKey);
-      }
-      if (active) {
-        setIsVerified(!validationError && data?.valid === true);
-        setIsChecking(false);
-      }
-    };
-
-    void restoreGateState();
-    return () => { active = false; };
+    // Protected destinations belong to an authenticated identity. Keeping one
+    // after sign-out allowed #settings restoration to race the public gate.
+    clearProtectedAppRoute();
+    setRouteRevision((revision) => revision + 1);
   }, [authLoading, passwordRecoveryActive, session]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -94,9 +63,10 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
         return;
       }
 
-      sessionStorage.setItem(signupAuthorizationKey, data.signupAuthorization);
-      sessionStorage.removeItem(existingSignInKey);
-      setIsVerified(true);
+      sessionStorage.setItem(SIGNUP_AUTHORIZATION_KEY, data.signupAuthorization);
+      sessionStorage.removeItem(EXISTING_USER_SIGN_IN_KEY);
+      sessionStorage.removeItem(AUTHORISED_INTRO_COMPLETE_KEY);
+      setRouteRevision((revision) => revision + 1);
     } catch (err) {
       console.error('Access code verification error:', err);
       setError('That access code didn’t work. Please request access from the team.');
@@ -105,7 +75,7 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
     }
   };
 
-  if (isChecking) {
+  if (authLoading) {
     return (
       <div className="ri-page-height fixed inset-0 z-[9999] flex items-center justify-center bg-[#050505]">
         <div className="animate-pulse text-[#2DD4BF]">Loading...</div>
@@ -113,24 +83,28 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
     );
   }
 
-  if (!hasCompletedProductIntro && !session && !passwordRecoveryActive) {
+  const isPasswordRecovery = passwordRecoveryActive || new URLSearchParams(window.location.search).get('reset') === '1';
+  const isExistingUserSignIn = sessionStorage.getItem(EXISTING_USER_SIGN_IN_KEY) === 'true' || window.location.pathname === '/signin';
+  const signupAuthorization = sessionStorage.getItem(SIGNUP_AUTHORIZATION_KEY);
+  const hasCompletedAuthorisedIntro = sessionStorage.getItem(AUTHORISED_INTRO_COMPLETE_KEY) === 'true';
+  void routeRevision;
+
+  if (session || isPasswordRecovery || isExistingUserSignIn) {
+    return <>{children}</>;
+  }
+
+  if (signupAuthorization && !hasCompletedAuthorisedIntro) {
     return (
       <ProductIntro
         onContinue={() => {
-          localStorage.setItem(productIntroCompleteKey, 'true');
-          setHasCompletedProductIntro(true);
-        }}
-        onSignIn={() => {
-          localStorage.setItem(productIntroCompleteKey, 'true');
-          sessionStorage.setItem(existingSignInKey, 'true');
-          setHasCompletedProductIntro(true);
-          setIsVerified(true);
+          sessionStorage.setItem(AUTHORISED_INTRO_COMPLETE_KEY, 'true');
+          setRouteRevision((revision) => revision + 1);
         }}
       />
     );
   }
 
-  if (isVerified) {
+  if (signupAuthorization && hasCompletedAuthorisedIntro) {
     return <>{children}</>;
   }
 
@@ -189,8 +163,8 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
           <button
             type="button"
             onClick={() => {
-              sessionStorage.setItem(existingSignInKey, 'true');
-              setIsVerified(true);
+              openExistingUserSignIn();
+              setRouteRevision((revision) => revision + 1);
             }}
             className="mb-5 text-sm font-semibold text-gray-300 transition-colors hover:text-white"
           >

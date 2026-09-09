@@ -1,31 +1,12 @@
 import { motion } from 'framer-motion';
-import { Archive, MailPlus, RotateCcw, ShieldCheck } from 'lucide-react';
+import { ArrowDown, MailPlus, RotateCcw, ShieldCheck, Sparkles } from 'lucide-react';
 import { ReceiptItWordmark } from '../ReceiptItWordmark';
 
 interface ProductIntroProps {
   onContinue: () => void;
-  onSignIn: () => void;
 }
 
-const benefits = [
-  {
-    icon: MailPlus,
-    label: 'Add purchases your way',
-    copy: 'Scan a receipt, share it from your phone, upload a PDF or send it to your private receipt email.',
-  },
-  {
-    icon: Archive,
-    label: 'We organise the rest',
-    copy: 'receiptIt keeps the original, understands the purchase and makes it searchable.',
-  },
-  {
-    icon: RotateCcw,
-    label: 'Useful after checkout',
-    copy: 'Keep returns, warranties and proof together when you need them.',
-  },
-];
-
-export function ProductIntro({ onContinue, onSignIn }: ProductIntroProps) {
+export function ProductIntro({ onContinue }: ProductIntroProps) {
   return (
     <main className="ri-scroll-viewport z-[9999] bg-[#050505]">
       <div className="ri-scroll-viewport__inner py-3 sm:py-6">
@@ -43,22 +24,27 @@ export function ProductIntro({ onContinue, onSignIn }: ProductIntroProps) {
               Everything after the purchase,<br className="hidden sm:block" /> handled.
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-6 text-gray-300 sm:text-base sm:leading-7">
-              receiptIt keeps the proof, organises what you bought and helps manage the admin that comes afterwards.
+              receiptIt keeps your purchases organised and looks after the useful stuff afterwards.
             </p>
           </div>
 
-          <div className="mt-6 grid gap-2.5 md:mt-8 md:grid-cols-3 md:gap-3">
-            {benefits.map(({ icon: Icon, label, copy }) => (
-              <div key={label} className="flex min-w-0 gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-4 md:block md:p-5">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-teal-300/20 bg-teal-400/10">
-                  <Icon className="h-4 w-4 text-teal-300" strokeWidth={1.7} />
-                </div>
-                <div className="min-w-0 md:mt-4">
-                  <h2 className="text-xs font-bold uppercase tracking-[0.13em] text-white">{label}</h2>
-                  <p className="mt-1.5 text-xs leading-5 text-gray-400 sm:text-sm sm:leading-6">{copy}</p>
-                </div>
-              </div>
-            ))}
+          <div className="mt-6 grid items-center gap-2.5 rounded-2xl border border-white/10 bg-white/[0.035] p-4 text-center md:mt-8 md:grid-cols-[1fr_auto_1fr_auto_1fr] md:gap-4 md:p-5">
+            <div className="min-w-0 rounded-xl border border-white/10 bg-black/25 p-4">
+              <MailPlus className="mx-auto h-5 w-5 text-teal-300" strokeWidth={1.7} />
+              <p className="mt-2 text-xs font-bold uppercase tracking-[0.14em] text-white">Add it</p>
+              <p className="mt-1.5 text-xs leading-5 text-gray-400">Scan · Email · Share · PDF</p>
+            </div>
+            <ArrowDown className="mx-auto h-4 w-4 text-gray-600 md:-rotate-90" />
+            <div className="min-w-0 rounded-xl border border-teal-300/20 bg-teal-400/[0.07] p-4">
+              <Sparkles className="mx-auto h-5 w-5 text-teal-300" strokeWidth={1.7} />
+              <p className="mt-2 text-xs font-bold text-white">receiptIt organises it</p>
+            </div>
+            <ArrowDown className="mx-auto h-4 w-4 text-gray-600 md:-rotate-90" />
+            <div className="min-w-0 rounded-xl border border-white/10 bg-black/25 p-4">
+              <RotateCcw className="mx-auto h-5 w-5 text-teal-300" strokeWidth={1.7} />
+              <p className="mt-2 text-xs font-bold uppercase tracking-[0.14em] text-white">Use it later</p>
+              <p className="mt-1.5 text-xs leading-5 text-gray-400">Returns · Warranties · Proof</p>
+            </div>
           </div>
 
           <div className="mt-5 flex min-w-0 items-start gap-3 rounded-2xl border border-teal-300/15 bg-teal-400/[0.055] p-4 sm:mt-6">
@@ -70,20 +56,13 @@ export function ProductIntro({ onContinue, onSignIn }: ProductIntroProps) {
           </div>
 
           <div className="fixed inset-x-0 bottom-0 z-10 border-t border-white/10 bg-black/90 px-4 py-3 pb-[max(0.75rem,var(--ri-safe-bottom))] backdrop-blur-xl md:static md:mt-6 md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
-            <div className="mx-auto flex max-w-4xl items-center gap-2.5 md:mx-0 md:gap-3">
+            <div className="mx-auto flex max-w-4xl items-center md:mx-0">
               <button
                 type="button"
                 onClick={onContinue}
                 className="inline-flex min-h-12 min-w-0 flex-1 items-center justify-center rounded-xl bg-teal-400 px-4 py-3 text-sm font-bold text-black transition-colors hover:bg-teal-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-200 focus-visible:ring-offset-2 focus-visible:ring-offset-black md:max-w-44 md:px-6"
               >
                 Continue
-              </button>
-              <button
-                type="button"
-                onClick={onSignIn}
-                className="inline-flex min-h-11 min-w-0 flex-1 items-center justify-center px-2 py-2 text-xs font-semibold text-gray-300 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-300 min-[380px]:text-sm md:max-w-xs md:flex-none md:px-3"
-              >
-                Already have an account? Sign in
               </button>
             </div>
           </div>

@@ -40,7 +40,6 @@ const clearScanPickerStateForTabTransition = (currentTab: AppTab, nextTab: AppTa
 
 function App() {
   const { user, session, loading: authLoading, profileLoading, needsAliasSetup, needsCurrencySetup, needsProfileRecovery, passwordRecoveryActive } = useAuth();
-  const [showApp, setShowApp] = useState(false);
   const [activeTab, setActiveTab] = useState<AppTab>(() => getTabFromLocation());
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -48,7 +47,7 @@ function App() {
   const [requestedReceiptId, setRequestedReceiptId] = useState<string | null>(null);
   const recordedShareAuthInterruptionRef = useRef<string | null>(null);
   const isAuthenticated = Boolean(user && session);
-  const shouldShowBootSplash = authLoading || profileLoading || (isAuthenticated && !needsAliasSetup && !showApp);
+  const shouldShowBootSplash = authLoading || profileLoading;
 
   const handleTabChange = useCallback((tab: string) => {
     if (!APP_TABS.includes(tab as AppTab)) return;
@@ -129,25 +128,10 @@ function App() {
       return;
     }
 
-    if (isAuthenticated && !needsAliasSetup) {
-      console.log('[App] User authenticated, preparing app shell');
-      if (showApp) {
-        return;
-      }
-
-      const timer = setTimeout(() => {
-        setShowApp(true);
-      }, 2000);
-
-      return () => clearTimeout(timer);
-    }
-
-    console.log('[App] App shell not ready - resetting splash state');
-    setShowApp(false);
     if (!isAuthenticated) {
       setActiveTab('wallet');
     }
-  }, [authLoading, isAuthenticated, needsAliasSetup, showApp, user, session]);
+  }, [authLoading, isAuthenticated]);
 
   useEffect(() => {
     // A selected receipt belongs to the current authenticated identity only.

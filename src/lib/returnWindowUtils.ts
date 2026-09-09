@@ -27,7 +27,7 @@ export function getReturnWindowStatus(returnDateStr?: string): ReturnWindowStatu
     return {
       status: 'expired',
       daysLeft: 0,
-      message: 'Return Expired'
+      message: 'Expired'
     };
   }
 
@@ -35,7 +35,7 @@ export function getReturnWindowStatus(returnDateStr?: string): ReturnWindowStatu
     return {
       status: 'urgent',
       daysLeft: 0,
-      message: 'Return: Today'
+      message: 'Ends today'
     };
   }
 
@@ -43,13 +43,13 @@ export function getReturnWindowStatus(returnDateStr?: string): ReturnWindowStatu
     return {
       status: 'urgent',
       daysLeft,
-      message: `Return: ${daysLeft} ${daysLeft === 1 ? 'Day' : 'Days'} Left`
+      message: `${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} left`
     };
   }
 
   return {
     status: 'active',
     daysLeft,
-    message: `Return: ${daysLeft} Days Left`
+    message: `${daysLeft} days left`
   };
 }

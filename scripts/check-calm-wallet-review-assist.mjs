@@ -24,7 +24,7 @@ assert.match(wallet, /Add amount/);
 assert.match(wallet, /Review details/);
 assert.match(wallet, /showNeedsAttention/);
 assert.match(wallet, /setSelectedCategory\(null\)/);
-assert.match(wallet, /min-\[540px\]:grid-cols-2/);
+assert.match(wallet, /grid min-w-0 grid-cols-2/, 'the approved compact Wallet summary must retain its balanced two-column layout');
 assert.doesNotMatch(wallet, /THINGS NEED YOU|THING NEEDS YOU/i);
 assert.match(wallet, /flex max-w-full flex-wrap items-center justify-end gap-2/);
 

@@ -3,8 +3,7 @@ import { motion } from 'framer-motion';
 import { Check, Lock, Mail, RefreshCw, Shield } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { ReceiptItWordmark } from '../ReceiptItWordmark';
-
-const signupAuthorizationKey = 'receiptit_signup_authorization';
+import { SIGNUP_AUTHORIZATION_KEY } from '../../lib/authRouting';
 
 const makePrivateAliasSuggestion = () => {
   const colours = ['amber', 'blue', 'calm', 'cedar', 'cloud', 'coral', 'green', 'silver', 'teal'];
@@ -27,7 +26,7 @@ const aliasFormatIsValid = (value: string) => (
 );
 
 export function AuthForm() {
-  const canSignUp = useMemo(() => Boolean(sessionStorage.getItem(signupAuthorizationKey)), []);
+  const canSignUp = useMemo(() => Boolean(sessionStorage.getItem(SIGNUP_AUTHORIZATION_KEY)), []);
   const recoveryLinkInvalid = useMemo(() => new URLSearchParams(window.location.search).get('reset') === '1', []);
   const [isSignUp, setIsSignUp] = useState(canSignUp);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
@@ -94,7 +93,7 @@ export function AuthForm() {
         if (signupError) {
           const errorMessage = signupError.message || 'Signup failed';
           if (errorMessage.includes('access-key') || errorMessage.includes('beta access')) {
-            sessionStorage.removeItem(signupAuthorizationKey);
+            sessionStorage.removeItem(SIGNUP_AUTHORIZATION_KEY);
             throw new Error('Your beta access has expired. Return to the access page and try again.');
           }
           if (errorMessage.includes('already registered')) {

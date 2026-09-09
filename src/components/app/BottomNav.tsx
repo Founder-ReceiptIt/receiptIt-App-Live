@@ -9,7 +9,7 @@ interface BottomNavProps {
 export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
   const tabs = [
     { id: 'wallet', icon: Wallet, label: 'Wallet' },
-    { id: 'alias', icon: AtSign, label: 'Alias' },
+    { id: 'alias', icon: AtSign, label: 'Email' },
     { id: 'scan', icon: ScanLine, label: 'Scan' },
     { id: 'insights', icon: TrendingUp, label: 'Insights' },
     { id: 'settings', icon: Settings, label: 'Settings' },

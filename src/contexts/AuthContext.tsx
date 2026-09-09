@@ -13,6 +13,7 @@ import {
   SupportedCurrencyCode,
 } from '../lib/currency';
 import { clearShareTargetInbox } from '../lib/shareTargetInbox';
+import { prepareSignedOutRoute, SIGNUP_AUTHORIZATION_KEY } from '../lib/authRouting';
 
 interface NotificationPreferences {
   receiptCaptured: boolean;
@@ -88,7 +89,6 @@ const defaultAccountCurrency: AccountCurrencySettings = {
   currencySetupCompleted: true,
 };
 
-const signupAuthorizationKey = 'receiptit_signup_authorization';
 
 const toBoolean = (value: unknown, fallback: boolean): boolean => {
   if (typeof value === 'boolean') {
@@ -579,7 +579,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(null);
         setUser(null);
       }
-
+    }).catch((error) => {
+      // A rejected bootstrap request is a completed failure, not an unresolved
+      // auth state. Clear it to a usable signed-out route instead of spinning.
+      console.error('[Auth] Session bootstrap failed:', error);
+      prepareForIdentity(null);
+      setSession(null);
+      setUser(null);
+      setUsername('');
+      setEmailAlias('');
+      setFullName('');
+      setNeedsAliasSetup(false);
+      setNeedsCurrencySetup(false);
+      setNeedsProfileRecovery(false);
+      setProfileSettings(defaultProfileSettings);
+      setAccountCurrency(defaultAccountCurrency);
+    }).finally(() => {
       setLoading(false);
     });
 
@@ -628,7 +643,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const checkAliasAvailability = async (aliasLocalPart: string) => {
-    const signupAuthorization = sessionStorage.getItem(signupAuthorizationKey);
+    const signupAuthorization = sessionStorage.getItem(SIGNUP_AUTHORIZATION_KEY);
     if (!signupAuthorization) {
       return { available: false, error: new Error('Your beta access has expired.') };
     }
@@ -667,7 +682,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           password,
           fullName,
           aliasLocalPart,
-          signupAuthorization: sessionStorage.getItem(signupAuthorizationKey),
+          signupAuthorization: sessionStorage.getItem(SIGNUP_AUTHORIZATION_KEY),
         },
       });
 
@@ -694,7 +709,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: new Error(createdAccount?.details || createdAccount?.error || 'Failed to create account') };
       }
 
-      sessionStorage.removeItem(signupAuthorizationKey);
+      sessionStorage.removeItem(SIGNUP_AUTHORIZATION_KEY);
 
       const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
         email,
@@ -910,6 +925,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    prepareSignedOutRoute();
     prepareForIdentity(null);
     setUser(null);
     setSession(null);
