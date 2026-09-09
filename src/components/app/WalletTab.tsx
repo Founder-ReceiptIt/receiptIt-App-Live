@@ -1328,7 +1328,6 @@ export function WalletTab({
             >
               {selectMode ? 'Cancel' : 'Select'}
             </motion.button>
-            <ReceiptIcon className="hidden h-5 w-5 text-gray-400 sm:block" />
           </div>
         </div>
 

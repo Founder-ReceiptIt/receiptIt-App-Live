@@ -48,6 +48,7 @@ const receiptModal = files['src/components/app/ReceiptModal.tsx'];
 check(receiptModal.includes('overflow-x-hidden overflow-y-auto'), 'receipt details must never require horizontal scrolling');
 check(receiptModal.includes("const originalActionLabel = isNotReceiptDocument ? 'View document' : isDocumentReview ? 'View original' : 'View receipt'"), 'the signed-original action must use an explicit document-appropriate label');
 check(receiptModal.includes('grid-cols-1') && receiptModal.includes('min-[380px]:grid-cols-[minmax(0,1fr)_auto]'), 'receipt details header must stack safely before reserving a shrinkable title column');
+check(receiptModal.includes('sm:col-start-3 sm:row-start-1'), 'receipt amount must occupy the explicit desktop amount column');
 check(receiptModal.includes('Receipt actions'), 'secondary receipt actions must remain in the compact action menu');
 check(receiptModal.includes('absolute right-3 top-full'), 'the receipt action menu must anchor to the modal edge on narrow screens');
 check(receiptModal.includes('isEditMode'), 'receipt details must retain a single receipt-wide edit mode');
@@ -60,6 +61,7 @@ check(wallet.includes('onClick={onNavigateToScan}'), 'Wallet Quick Scan must reu
 check(receiptAmountState.includes("if (status === 'processing') return false"), 'active processing must remain excluded from actionable Wallet counts');
 check(wallet.includes('Amount not found'), 'unknown receipt amounts must not be rendered as zero');
 check(wallet.includes('Review details'), 'purchase documents must retain a clear review action');
+check(!wallet.includes('<ReceiptIcon className="hidden h-5 w-5 text-gray-400 sm:block"'), 'Wallet select controls must not include a stray decorative icon');
 
 const scan = files['src/components/app/ScanTab.tsx'];
 check(scan.includes("showToast('Receipt added', 'Processing in the background.')"), 'Scan must release the user after the durable processing handoff');

@@ -1058,7 +1058,7 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
                       </div>
                     )}
                   </div>
-                    <div className="col-span-2 min-w-0 justify-self-end text-right sm:col-span-1 sm:row-start-1 sm:max-w-[42%]">
+                    <div className="col-span-2 min-w-0 justify-self-end text-right sm:col-span-1 sm:col-start-3 sm:row-start-1">
                     {isEditMode && isDocumentReview ? (
                       <div className="ml-auto w-full max-w-52 text-left sm:text-right">
                         <label htmlFor={`receipt-amount-${receipt.id}`} className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-500">
