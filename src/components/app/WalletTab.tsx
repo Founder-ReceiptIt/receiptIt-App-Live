@@ -1226,21 +1226,42 @@ export function WalletTab({
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
-        <div className="mb-7 flex min-w-0 flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-3xl font-bold text-white">Receipts</h1>
-            <p className="mt-2 text-sm text-gray-400">Your purchases, in one place.</p>
+        <div className="mb-5 flex min-w-0 flex-col gap-3 md:flex-row md:items-end md:justify-between md:gap-6">
+          <h1 className="min-w-0 text-3xl font-bold text-white">Receipts</h1>
+          <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2 md:max-w-2xl">
+            <div className="relative min-w-0">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                type="search"
+                aria-label="Search receipts"
+                placeholder="Search receipts"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                className="h-11 w-full min-w-0 rounded-xl border border-white/10 bg-white/5 pl-9 pr-9 text-sm text-white outline-none placeholder:text-gray-500 focus:border-teal-400/50"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  aria-label="Clear receipt search"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-gray-400 hover:bg-white/5 hover:text-white"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.98 }}
+              onClick={onNavigateToScan}
+              className="inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-teal-400 px-3 text-sm font-bold text-black shadow-[0_10px_30px_rgba(45,212,191,0.12)] transition-colors hover:bg-teal-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-200 focus-visible:ring-offset-2 focus-visible:ring-offset-black sm:gap-2 sm:px-4"
+              aria-label="Scan receipt"
+            >
+              <ScanLine className="h-5 w-5" strokeWidth={1.8} />
+              <span className="min-[360px]:hidden">Scan</span>
+              <span className="hidden min-[360px]:inline">Scan receipt</span>
+            </motion.button>
           </div>
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.98 }}
-            onClick={onNavigateToScan}
-            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-teal-400 px-4 py-2.5 text-sm font-bold text-black shadow-[0_10px_30px_rgba(45,212,191,0.12)] transition-colors hover:bg-teal-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-200 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
-            aria-label="Scan receipt"
-          >
-            <ScanLine className="h-5 w-5" strokeWidth={1.8} />
-            Scan receipt
-          </motion.button>
         </div>
 
         {attentionReceipts.length > 0 ? (
@@ -1273,7 +1294,7 @@ export function WalletTab({
           </section>
         ) : null}
 
-        <div className="mb-6 rounded-2xl border border-teal-300/25 bg-gradient-to-br from-teal-400/15 to-cyan-400/5 p-5" aria-busy={!analyticsAmountsReady}>
+        <div className="mb-4 rounded-2xl border border-teal-300/25 bg-gradient-to-br from-teal-400/15 to-cyan-400/5 p-5" aria-busy={!analyticsAmountsReady}>
           <div className="flex min-w-0 items-start gap-3"><div className="shrink-0 rounded-xl border border-teal-300/20 bg-teal-400/10 p-2.5"><ShieldCheck className="h-5 w-5 text-teal-200" strokeWidth={1.5} /></div><div className="min-w-0 flex-1"><div className="grid min-w-0 grid-cols-1 gap-3 min-[540px]:grid-cols-2"><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-200">This month</p><p className="mt-1 break-words text-2xl font-bold text-white">{analyticsAmountsReady ? `${formatCurrency(spentThisMonth, accountCurrency.preferredCurrency)} spent` : 'Calculating…'}</p></div><div className="min-w-0 min-[540px]:text-right"><p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">Average purchase</p><p className="mt-1 break-words text-lg font-bold text-white">{analyticsAmountsReady ? formatCurrency(averagePurchaseThisMonth, accountCurrency.preferredCurrency) : '—'}</p></div></div>{monthlyBudget ? <><p className="mt-4 text-sm text-gray-300">of {formatCurrency(monthlyBudget, accountCurrency.preferredCurrency, { maximumFractionDigits: 0, minimumFractionDigits: 0 })} budget</p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">{analyticsAmountsReady ? <div className="h-full rounded-full bg-teal-400 transition-[width] duration-300" style={{ width: `${budgetProgress}%` }} /> : null}</div>{analyticsAmountsReady ? <p className="mt-2 text-xs text-gray-400">{budgetUsed.toFixed(1)}% used</p> : null}</> : null}{analyticsAmountsReady && excludedThisMonthCount > 0 ? <p className="mt-3 text-xs text-amber-100">{excludedThisMonthCount === 1 ? 'One purchase couldn’t be included in this total.' : `${excludedThisMonthCount} purchases couldn’t be included in this total.`}</p> : null}</div></div>
         </div>
 
@@ -1288,7 +1309,7 @@ export function WalletTab({
               setWarrantyFilterActive(!warrantyFilterActive);
               setReturnFilterActive(false);
             }}
-            className={`w-full backdrop-blur-xl border rounded-xl p-4 mb-6 transition-all ${
+            className={`mb-3 w-full rounded-xl border p-4 backdrop-blur-xl transition-all ${
               warrantyFilterActive
                 ? 'bg-gradient-to-r from-emerald-900/30 to-teal-900/25 border-emerald-500/60 shadow-[0_0_30px_rgba(16,185,129,0.25)]'
                 : 'bg-gradient-to-r from-emerald-900/20 to-teal-900/15 border-emerald-500/40 hover:border-emerald-500/60'
@@ -1326,7 +1347,7 @@ export function WalletTab({
               setReturnFilterActive(!returnFilterActive);
               setWarrantyFilterActive(false);
             }}
-            className={`mb-6 w-full rounded-xl border p-4 backdrop-blur-xl transition-all ${
+            className={`mb-4 w-full rounded-xl border p-4 backdrop-blur-xl transition-all ${
               returnFilterActive
                 ? 'border-sky-400/60 bg-gradient-to-r from-sky-900/30 to-teal-900/25 shadow-[0_0_30px_rgba(56,189,248,0.20)]'
                 : 'border-sky-400/40 bg-gradient-to-r from-sky-900/20 to-teal-900/15 hover:border-sky-400/60'
@@ -1343,26 +1364,7 @@ export function WalletTab({
           </motion.button>
         )}
 
-        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4 mb-6">
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search store, item, amount, date or reference..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-10 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-teal-400/50 transition-colors"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            )}
-          </div>
-
+        <div className="mb-4 rounded-xl border border-white/10 bg-white/5 px-3 py-3 backdrop-blur-xl">
           <div className="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {categories.map((category) => (
               <button

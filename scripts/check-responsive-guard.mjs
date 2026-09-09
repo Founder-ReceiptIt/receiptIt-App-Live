@@ -4,7 +4,9 @@ const files = Object.fromEntries(await Promise.all([
   'index.html',
   'src/index.css',
   'src/components/app/BottomNav.tsx',
+  'src/components/app/TopNav.tsx',
   'src/components/app/AliasTab.tsx',
+  'src/components/app/InsightsTab.tsx',
   'src/components/app/ReceiptModal.tsx',
   'src/components/app/ScanTab.tsx',
   'src/components/app/WalletTab.tsx',
@@ -44,6 +46,9 @@ check(bottomNav.includes('min-w-0 flex-1'), 'each bottom navigation item must be
 check(!bottomNav.includes('gap-1 px-4 py-2 group'), 'desktop-width bottom navigation padding must not return');
 check(bottomNav.includes('ri-bottom-safe'), 'bottom navigation must respect the device safe area');
 
+const topNav = files['src/components/app/TopNav.tsx'];
+check(topNav.includes('ml-auto cursor-pointer') && topNav.includes('md:ml-0'), 'the wordmark must sit beside the mobile menu while retaining its desktop position');
+
 const receiptModal = files['src/components/app/ReceiptModal.tsx'];
 check(receiptModal.includes('overflow-x-hidden overflow-y-auto'), 'receipt details must never require horizontal scrolling');
 check(receiptModal.includes("const originalActionLabel = isNotReceiptDocument ? 'View document' : isDocumentReview ? 'View original' : 'View receipt'"), 'the signed-original action must use an explicit document-appropriate label');
@@ -58,6 +63,9 @@ const wallet = files['src/components/app/WalletTab.tsx'];
 const receiptAmountState = files['src/lib/receiptAmountState.ts'];
 check(wallet.includes('aria-label="Scan receipt"'), 'Wallet must retain the one-tap Scan receipt shortcut');
 check(wallet.includes('onClick={onNavigateToScan}'), 'Wallet Quick Scan must reuse the existing Scan route');
+check(wallet.includes('placeholder="Search receipts"'), 'Wallet must retain the concise receipt search control');
+check(wallet.includes('grid-cols-[minmax(0,1fr)_auto]'), 'Wallet Search and Scan controls must share a compact responsive row');
+check(!wallet.includes('Your purchases, in one place.'), 'the obsolete Wallet subtitle must not return');
 check(receiptAmountState.includes("if (status === 'processing') return false"), 'active processing must remain excluded from actionable Wallet counts');
 check(wallet.includes('Amount not found'), 'unknown receipt amounts must not be rendered as zero');
 check(wallet.includes('Review details'), 'purchase documents must retain a clear review action');
@@ -71,6 +79,10 @@ check(scan.includes("? 'Ready to upload as one receipt.'"), 'one-image confirmat
 check(scan.includes(": 'We’ll read them together as one receipt.'"), 'multi-image confirmation must explain that pages form one receipt');
 check(scan.indexOf('Upload receipt') < scan.indexOf('Add another page') && scan.indexOf('Add another page') < scan.indexOf('Choose a different image'), 'Scan review actions must keep the approved primary, secondary and tertiary order');
 check(!scan.includes('>Add another image<') && !scan.includes('>Choose again<'), 'obsolete Scan review labels must not return');
+
+const insights = files['src/components/app/InsightsTab.tsx'];
+check(insights.includes('>Your spending</h1>'), 'the Insights page heading must use the approved Your spending title');
+check(topNav.includes("label: 'Insights'"), 'the navigation tab must remain labelled Insights');
 
 const manifest = JSON.parse(files['public/manifest.webmanifest']);
 check(manifest.shortcuts?.some((shortcut) => shortcut.name === 'Scan receipt' && shortcut.url === '/#scan'), 'PWA manifest must expose the Scan receipt shortcut');

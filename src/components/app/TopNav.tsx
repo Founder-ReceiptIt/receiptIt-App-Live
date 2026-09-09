@@ -31,12 +31,12 @@ export function TopNav({ activeTab, onTabChange }: TopNavProps) {
       transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
       className="ri-top-safe fixed left-0 right-0 top-0 z-50 border-b border-white/10 bg-black/50 backdrop-blur-xl"
     >
-      <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6">
-        <div className="flex min-w-0 items-center justify-between">
-          {/* Logo - Left Side */}
+      <div className="mx-auto max-w-7xl px-4 py-2.5 sm:px-6 sm:py-3 md:py-4">
+        <div className="flex min-w-0 items-center justify-end gap-1.5 md:justify-between md:gap-0">
+          {/* Mobile: wordmark sits beside the menu. Desktop: retain the established left position. */}
           <motion.div
             whileHover={{ y: -1 }}
-            className="text-2xl font-bold font-mono tracking-tight cursor-pointer"
+            className="ml-auto cursor-pointer font-mono text-2xl font-bold tracking-tight md:ml-0"
             onClick={() => onTabChange('wallet')}
           >
             <ReceiptItWordmark className="text-2xl" />

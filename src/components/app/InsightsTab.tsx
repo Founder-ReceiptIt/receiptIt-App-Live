@@ -124,7 +124,7 @@ export function InsightsTab() {
   }, [receipts]);
 
   if (loading) return <div className="ri-mobile-page mx-auto min-w-0 max-w-7xl px-4 pt-8 sm:px-6"><div className="h-8 w-32 animate-pulse rounded bg-white/10" /><div className="mt-8 grid gap-4 sm:grid-cols-3"><div className="h-32 animate-pulse rounded-2xl bg-white/[0.045]" /><div className="h-32 animate-pulse rounded-2xl bg-white/[0.045]" /><div className="h-32 animate-pulse rounded-2xl bg-white/[0.045]" /></div></div>;
-  if (error) return <div className="ri-mobile-page mx-auto min-w-0 max-w-7xl px-4 pt-8 sm:px-6"><h1 className="text-3xl font-bold text-white">Insights</h1><div className="mt-8 max-w-3xl rounded-2xl border border-white/10 bg-white/[0.045] p-5 text-center sm:p-8"><p className="text-gray-300">Could not load insights right now.</p><button onClick={() => setRefreshKey((value) => value + 1)} className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-teal-300"><RefreshCw className="h-4 w-4" />Try again</button></div></div>;
+  if (error) return <div className="ri-mobile-page mx-auto min-w-0 max-w-7xl px-4 pt-8 sm:px-6"><h1 className="text-3xl font-bold text-white">Your spending</h1><div className="mt-8 max-w-3xl rounded-2xl border border-white/10 bg-white/[0.045] p-5 text-center sm:p-8"><p className="text-gray-300">Could not load insights right now.</p><button onClick={() => setRefreshKey((value) => value + 1)} className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-teal-300"><RefreshCw className="h-4 w-4" />Try again</button></div></div>;
 
   const meaningfulChart = receipts.length >= 2 && summary.months.some((month) => month.amount > 0);
   const maxMonth = Math.max(...summary.months.map((month) => month.amount), 1);
@@ -133,7 +133,7 @@ export function InsightsTab() {
   return (
     <div className="ri-mobile-page mx-auto min-w-0 max-w-7xl px-4 pt-8 sm:px-6">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
-        <h1 className="text-3xl font-bold text-white">Insights</h1>
+        <h1 className="text-3xl font-bold text-white">Your spending</h1>
         {purchaseCandidateCount === 0 ? <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.045] p-10 text-center"><BarChart3 className="mx-auto h-8 w-8 text-teal-300" /><p className="mt-4 text-gray-300">Your insights will appear as you add receipts.</p></div> : <>
           {excludedCount > 0 ? <p className="mt-6 rounded-xl border border-amber-300/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">{excludedCount === 1 ? 'One saved purchase is not included because its amount is still unresolved.' : `${excludedCount} saved purchases are not included because their amounts are still unresolved.`}</p> : null}
           <section className="mt-8"><h2 className="text-lg font-bold text-white">Summary</h2><div className="mt-3 grid gap-3 sm:grid-cols-3"><Stat label="Total spent" value={formatMoney(summary.total)} /><Stat label="This month" value={formatMoney(summary.thisMonth)} /><Stat label="Average purchase" value={formatMoney(summary.average)} /></div></section>

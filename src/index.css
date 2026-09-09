@@ -119,12 +119,13 @@ canvas {
 }
 
 .ri-mobile-page {
+  padding-top: 1rem !important;
   padding-bottom: calc(9.5rem + var(--ri-safe-bottom));
   scroll-padding-bottom: calc(9.5rem + var(--ri-safe-bottom));
 }
 
 .ri-app-content {
-  padding-top: calc(5rem + var(--ri-safe-top));
+  padding-top: calc(3.75rem + var(--ri-safe-top));
 }
 
 .ri-top-safe {
@@ -162,8 +163,13 @@ canvas {
 
 @media (min-width: 768px) {
   .ri-mobile-page {
+    padding-top: 1.5rem !important;
     padding-bottom: 3rem;
     scroll-padding-bottom: 3rem;
+  }
+
+  .ri-app-content {
+    padding-top: calc(5rem + var(--ri-safe-top));
   }
 }
 
