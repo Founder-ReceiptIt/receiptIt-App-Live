@@ -19,8 +19,7 @@ export function AliasTab() {
   return (
     <div className="ri-mobile-page mx-auto min-w-0 max-w-7xl px-4 pt-8 sm:px-6">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}>
-        <h1 className="text-3xl font-bold text-white">Your private receipt email</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">Use this when a shop asks where to send your receipt, or forward an existing receipt here.</p>
+        <h1 className="text-3xl font-bold text-white">Your new private email</h1>
 
         <div className="mx-auto mt-5 max-w-3xl">
           <section className="overflow-hidden rounded-2xl border border-teal-300/25 bg-teal-400/[0.055] p-5 text-center shadow-[0_0_32px_rgba(45,212,191,0.07)] sm:p-7">

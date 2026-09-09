@@ -44,7 +44,7 @@ export function ProductIntro({ onContinue }: ProductIntroProps) {
             <div className="flex min-h-36 min-w-0 flex-col items-center rounded-xl border border-white/10 bg-black/25 p-4">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-400/10"><CalendarCheck className="h-5 w-5 text-teal-300" strokeWidth={1.7} /></div>
               <p className="mt-2 text-xs font-bold uppercase tracking-[0.14em] text-white">Use it later</p>
-              <p className="mt-1.5 text-xs leading-5 text-gray-400">Returns · Warranties · Proof</p>
+              <p className="mt-1.5 text-xs leading-5 text-gray-400">Returns · Warranties · <span className="whitespace-nowrap">Proof of purchase</span></p>
             </div>
           </div>
 

@@ -103,7 +103,8 @@ check(!gatekeeper.includes('Already have an account? Sign in'), 'public access g
 check(!productIntro.includes('Already have an account? Sign in'), 'existing-user sign in must remain outside the authorised new-user introduction');
 
 const alias = files['src/components/app/AliasTab.tsx'];
-check(alias.includes('Your private receipt email'), 'Alias page must lead with plain-English private receipt email terminology');
+check(alias.includes('Your new private email'), 'Alias page must use the approved private email heading');
+check(!alias.includes('Use this when a shop asks'), 'Alias page must not restore the removed explanatory subheading');
 check(alias.includes('Copy email'), 'Alias page must use the approved Copy email action');
 check(!alias.includes('Why use this?'), 'the repetitive private-email callout must stay removed');
 check(alias.includes('At checkout') && alias.includes('Forward a receipt'), 'the private-email page must retain its two concise usage examples');

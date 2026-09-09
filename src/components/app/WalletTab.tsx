@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Receipt as ReceiptIcon, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Loader2, Car, Home, Plane, Zap, Utensils, Undo2, Trash2, CheckSquare, Square, ChevronDown, Download, AlertCircle, ShieldCheck, AtSign, ScanLine, CopyCheck } from 'lucide-react';
+import { Receipt as ReceiptIcon, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Loader2, Car, Home, Plane, Zap, Utensils, Undo2, Trash2, CheckSquare, Square, ChevronDown, Download, AlertCircle, Shield, ShieldCheck, AtSign, ScanLine, CopyCheck } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Fragment, useState, useEffect, useRef } from 'react';
 import { ReportProblemDialog } from './ReportProblemDialog';
@@ -1494,6 +1494,8 @@ export function WalletTab({
                 const requiresCurrencyConfirmation = needsCurrencyConfirmation(receipt.status, receipt.errorReason);
                 const isConfirmingCurrency = currencyConfirmationState?.receiptId === receipt.id;
                 const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
+                const hasActiveWarranty = Boolean(receipt.warrantyDate && new Date(receipt.warrantyDate) > new Date());
+                const hasActiveReturn = returnWindowStatus.status === 'active' || returnWindowStatus.status === 'urgent';
                 const receiptFailureDetails = getReceiptFailureDetails({
                   status: receipt.status,
                   errorReason: receipt.errorReason,
@@ -1661,12 +1663,6 @@ export function WalletTab({
                                 ) : null}
                               </div>
                             )}
-                            {returnWindowStatus.status === 'urgent' && !isFreshProcessing && (
-                              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-red-500/20 border border-red-500/40 rounded-full">
-                                <Undo2 className="w-2.5 h-2.5 text-red-400" strokeWidth={2.5} />
-                                <span className="text-red-400 text-[10px] font-bold">{returnWindowStatus.message}</span>
-                              </div>
-                            )}
                           </div>
                         </div>
                         {!isFreshProcessing && (receipt.amountKnown || !isDocumentReview) && (
@@ -1697,6 +1693,21 @@ export function WalletTab({
                           </div>
                         )}
                       </div>
+
+                      {!isFreshProcessing && !showIssueHeading && (hasActiveWarranty || hasActiveReturn) && (
+                        <div className="flex flex-wrap items-center gap-1.5 sm:pl-16">
+                          {hasActiveWarranty && (
+                            <span aria-label="Warranty active" className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-teal-300/35 bg-teal-400/10 px-2 py-0.5 text-[11px] font-semibold text-teal-200">
+                              <Shield className="h-3 w-3 shrink-0" aria-hidden="true" />Active
+                            </span>
+                          )}
+                          {hasActiveReturn && (
+                            <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold ${returnWindowStatus.status === 'urgent' ? 'border-rose-300/50 bg-rose-400/15 text-rose-200' : 'border-rose-300/35 bg-rose-400/10 text-rose-200'}`}>
+                              <Undo2 className="h-3 w-3 shrink-0" aria-hidden="true" />Return: {returnWindowStatus.message}
+                            </span>
+                          )}
+                        </div>
+                      )}
 
                       {isFreshProcessing && (
                       <div className="flex items-center gap-2 flex-wrap">
