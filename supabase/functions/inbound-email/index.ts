@@ -19,6 +19,20 @@ const MAX_ATTACHMENTS = 5;
 // metadata so the failure remains visible in Activity.
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const MAX_BODY_BYTES = 500 * 1024;
+// Some mail clients (including Apple Mail) serialise a user-attached image or
+// PDF with an inline disposition. Keep genuinely useful inline evidence while
+// ignoring the small decorative assets commonly found in signatures.
+const MIN_INLINE_IMAGE_BYTES = 16 * 1024;
+
+type ResendAttachment = {
+  id?: string;
+  filename?: string;
+  content_type?: string;
+  content_disposition?: string | null;
+  content_id?: string | null;
+  size?: number;
+  download_url?: string;
+};
 
 type ResendEvent = {
   type?: string;
@@ -30,12 +44,7 @@ type ResendEvent = {
     cc?: string[];
     bcc?: string[];
     subject?: string;
-    attachments?: Array<{
-      id?: string;
-      filename?: string;
-      content_type?: string;
-      content_disposition?: string;
-    }>;
+    attachments?: ResendAttachment[];
   };
 };
 
@@ -211,7 +220,49 @@ Deno.serve(async (request) => {
 
   const envelope = classifyEnvelope(String(content.subject || event.data.subject || ""), bodyText);
   const classification = envelope.classification;
-  const attachments = (event.data.attachments || []).filter((attachment) => attachment.content_disposition !== "inline").slice(0, MAX_ATTACHMENTS);
+  // Retrieve the authoritative attachment list. The webhook metadata is a
+  // fallback only: providers and mail clients do not always agree on whether a
+  // user-selected file is an attachment or inline content.
+  let providerAttachments: ResendAttachment[] = [];
+  const attachmentListResponse = await fetch(
+    `https://api.resend.com/emails/receiving/${encodeURIComponent(event.data.email_id)}/attachments`,
+    { headers: { Authorization: `Bearer ${resendApiKey}` } },
+  );
+  if (attachmentListResponse.ok) {
+    try {
+      const attachmentListBody = await attachmentListResponse.json() as { data?: unknown };
+      if (Array.isArray(attachmentListBody.data)) {
+        providerAttachments = attachmentListBody.data.filter(
+          (attachment): attachment is ResendAttachment => Boolean(attachment && typeof attachment === "object"),
+        );
+      }
+    } catch {
+      providerAttachments = [];
+    }
+  } else {
+    console.error("[inbound-email] Provider attachment list failed", { status: attachmentListResponse.status });
+  }
+
+  const availableAttachments = providerAttachments.length > 0
+    ? providerAttachments
+    : event.data.attachments || [];
+  const nonInlineAttachments = availableAttachments.filter(
+    (attachment) => attachment.content_disposition !== "inline",
+  );
+  const inlineEvidence = availableAttachments
+    .filter((attachment) => attachment.content_disposition === "inline")
+    .filter((attachment) => {
+      const contentType = String(attachment.content_type || "").toLowerCase();
+      if (contentType === "application/pdf") return true;
+      if (!contentType.startsWith("image/")) return false;
+      return typeof attachment.size === "number" && attachment.size >= MIN_INLINE_IMAGE_BYTES;
+    })
+    .sort((left, right) => (right.size || 0) - (left.size || 0));
+  const attachments = (nonInlineAttachments.length > 0 ? nonInlineAttachments : inlineEvidence)
+    .slice(0, MAX_ATTACHMENTS);
+  const providerAttachmentById = new Map(
+    providerAttachments.filter((attachment) => attachment.id).map((attachment) => [attachment.id!, attachment]),
+  );
 
   let messageId = existingMessage?.id;
   if (!messageId) {
@@ -277,29 +328,9 @@ Deno.serve(async (request) => {
     // or rejected attachment retrievals intentionally remain retryable.
     if (existingAttachment && ["stored", "queued", "duplicate"].includes(existingAttachment.status)) continue;
 
-    // The list endpoint supplies a fresh signed download URL for each
-    // attachment. It is more stable across Resend API versions than assuming
-    // the single-attachment response envelope.
-    const attachmentMetadataResponse = await fetch(`https://api.resend.com/emails/receiving/${encodeURIComponent(event.data.email_id)}/attachments`, {
-      headers: { Authorization: `Bearer ${resendApiKey}` },
-    });
-    if (!attachmentMetadataResponse.ok) {
-      await admin.from("inbound_attachments").upsert({ inbound_message_id: messageId, user_id: alias.user_id, provider_attachment_id: attachment.id, safe_filename: sanitizeFilename(attachment.filename), content_type: attachment.content_type || "application/octet-stream", byte_size: 0, sha256: "0".repeat(64), storage_path: `${alias.user_id}/email-unavailable/${crypto.randomUUID()}`, status: "failed", error_reason: `provider_attachment_metadata_${attachmentMetadataResponse.status}` }, { onConflict: "inbound_message_id,provider_attachment_id" });
-      continue;
-    }
-
     let downloadUrl = "";
     try {
-      const responseBody = await attachmentMetadataResponse.json() as {
-        download_url?: unknown;
-        size?: unknown;
-        data?: Array<{ id?: unknown; download_url?: unknown; size?: unknown }> | { download_url?: unknown; size?: unknown };
-      };
-      const metadata = Array.isArray(responseBody.data)
-        ? responseBody.data.find((candidate) => candidate.id === attachment.id)
-        : responseBody.data && typeof responseBody.data === "object"
-          ? responseBody.data
-          : responseBody;
+      const metadata = providerAttachmentById.get(attachment.id) || attachment;
       const providerByteSize = metadata && typeof metadata.size === "number" && Number.isFinite(metadata.size)
         ? Math.max(0, Math.min(Math.trunc(metadata.size), 2_147_483_647))
         : null;
