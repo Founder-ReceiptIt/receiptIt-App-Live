@@ -31,7 +31,18 @@ import {
   normaliseSharedImageFile,
 } from '../../lib/sharedReceiptEvidence';
 
-type ScanState = 'idle' | 'review' | 'uploading' | 'processing' | 'error';
+type ScanState = 'idle' | 'review' | 'uploading' | 'processing' | 'duplicate' | 'error';
+
+interface ExactDuplicateDecision {
+  file: File;
+  uploadKind: ReceiptUploadKind;
+  fileHash: string;
+  existingReceipt: {
+    id: string;
+    merchant?: string | null;
+    status?: string | null;
+  };
+}
 
 interface ScanTabProps {
   onNavigateToWallet: () => void;
@@ -189,6 +200,7 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [errorTitle, setErrorTitle] = useState<string>('Couldn’t add receipt');
   const [failedReceiptSaved, setFailedReceiptSaved] = useState(false);
+  const [exactDuplicateDecision, setExactDuplicateDecision] = useState<ExactDuplicateDecision | null>(null);
   const [sectionCaptureMode, setSectionCaptureMode] = useState(() => consumeReceiptSectionCaptureRequest());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pickerModeRef = useRef<ReceiptPickerMode>('files');
@@ -205,6 +217,7 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
     uploadKind: ReceiptUploadKind,
     scanToken: number,
     precomputedFileHash?: string,
+    exactDuplicateOverrideOf?: string,
   ) => Promise<void>>(async () => undefined);
 
   useEffect(() => {
@@ -594,7 +607,13 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
     }
   };
 
-  const startScan = async (file: File, uploadKind: ReceiptUploadKind, scanToken: number, precomputedFileHash?: string) => {
+  const startScan = async (
+    file: File,
+    uploadKind: ReceiptUploadKind,
+    scanToken: number,
+    precomputedFileHash?: string,
+    exactDuplicateOverrideOf?: string,
+  ) => {
     if (!isScanActive(scanToken)) {
       return;
     }
@@ -640,7 +659,7 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
         return;
       }
 
-      if (fileHash) {
+      if (fileHash && !exactDuplicateOverrideOf) {
         const { data: existingReceipts, error: existingReceiptError } = await supabase
           .rpc('find_existing_receipt_by_file_hash', { p_file_hash: fileHash });
 
@@ -651,15 +670,8 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
           console.warn('[ScanTab] Could not check for an existing file:', existingReceiptError);
         } else if (existingReceipts?.[0]) {
           const existingReceipt = existingReceipts[0];
-          const isStillProcessing = existingReceipt.status === 'processing';
 
-          console.info('[ScanTab] Exact duplicate selected; opening existing receipt:', existingReceipt.id);
-          showToast(
-            isStillProcessing ? 'Receipt is already processing' : 'Receipt already saved',
-            isStillProcessing
-              ? 'We are already reading this exact file. You can follow its progress in your Wallet.'
-              : 'This exact file is already in your Wallet.'
-          );
+          console.info('[ScanTab] Exact duplicate selected; waiting for the user’s choice:', existingReceipt.id);
 
           // This records only the owner-visible fact that an exact duplicate
           // was stopped. It never stores the selected file or exposes it to
@@ -668,11 +680,10 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
             if (error) console.warn('[ScanTab] Could not record duplicate activity:', error);
           });
 
-          await completePendingShare('duplicate_detected');
           isScanningRef.current = false;
           clearScanningStorage();
-          resetScan();
-          onNavigateToWallet();
+          setExactDuplicateDecision({ file, uploadKind, fileHash, existingReceipt });
+          setScanState('duplicate');
           return;
         }
       }
@@ -739,6 +750,10 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
             image_url: storagePath,
             // Persist the file hash for exact duplicate detection when available
             ...(fileHash ? { file_hash: fileHash } : {}),
+            ...(exactDuplicateOverrideOf ? {
+              duplicate_of: exactDuplicateOverrideOf,
+              is_duplicate: false,
+            } : {}),
             status: 'processing',
             processing_attempt_started_at: new Date().toISOString(),
             merchant: 'Analyzing...',
@@ -850,6 +865,7 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
     setSectionCaptureMode(false);
     setErrorTitle('Couldn’t add receipt');
     setFailedReceiptSaved(false);
+    setExactDuplicateDecision(null);
     pendingReceiptIdRef.current = null;
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
@@ -861,6 +877,31 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
     }
     // ANDROID FIX: Clear localStorage on reset
     clearScanningStorage();
+  };
+
+  const handleSaveExactDuplicateAnyway = () => {
+    if (!exactDuplicateDecision || isScanningRef.current) return;
+
+    const scanToken = activeScanTokenRef.current + 1;
+    activeScanTokenRef.current = scanToken;
+    isScanningRef.current = true;
+    setScanState('uploading');
+    setSelectedFile(exactDuplicateDecision.file);
+    setExactDuplicateDecision(null);
+    window.setTimeout(() => void startScanRef.current(
+      exactDuplicateDecision.file,
+      exactDuplicateDecision.uploadKind,
+      scanToken,
+      exactDuplicateDecision.fileHash,
+      exactDuplicateDecision.existingReceipt.id,
+    ), 0);
+  };
+
+  const handleDeleteExactDuplicateAttempt = async () => {
+    await completePendingShare('duplicate_detected');
+    showToast('Duplicate removed', 'The receipt already in your Wallet was kept.');
+    resetScan();
+    onNavigateToWallet();
   };
 
   startScanRef.current = startScan;
@@ -1343,6 +1384,29 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
                       <span className="font-semibold text-red-400">Cancel</span>
                     </div>
                   </button>
+                </div>
+              </motion.div>
+            )}
+
+            {scanState === 'duplicate' && exactDuplicateDecision && (
+              <motion.div
+                key="duplicate"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.3 }}
+                className="rounded-2xl border border-amber-300/25 bg-gradient-to-br from-amber-400/10 to-white/[0.025] p-5 backdrop-blur-xl sm:p-8"
+                aria-label="Exact duplicate receipt"
+              >
+                <div className="text-center">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-300/25 bg-amber-400/10"><FileImage className="h-7 w-7 text-amber-200" strokeWidth={1.5} /></div>
+                  <p className="mt-4 text-xs font-bold uppercase tracking-[0.16em] text-amber-200">Receipt already saved</p>
+                  <h2 className="mt-2 text-xl font-bold text-white">This exact receipt is already in your Wallet.</h2>
+                  <p className="mt-2 text-sm leading-6 text-gray-400">You can save another copy if it represents a separate purchase, or remove this duplicate attempt.</p>
+                  <div className="mt-6 space-y-3">
+                    <button type="button" onClick={handleSaveExactDuplicateAnyway} className="min-h-11 w-full rounded-xl bg-teal-400 px-4 py-3 text-sm font-bold text-black transition-colors hover:bg-teal-300">Save anyway</button>
+                    <button type="button" onClick={() => void handleDeleteExactDuplicateAttempt()} className="min-h-11 w-full rounded-xl border border-red-300/25 bg-red-400/10 px-4 py-3 text-sm font-semibold text-red-200 transition-colors hover:bg-red-400/15">Delete duplicate</button>
+                  </div>
                 </div>
               </motion.div>
             )}

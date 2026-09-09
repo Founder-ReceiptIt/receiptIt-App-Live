@@ -516,6 +516,7 @@ export function WalletTab({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [warrantyFilterActive, setWarrantyFilterActive] = useState(false);
+  const [returnFilterActive, setReturnFilterActive] = useState(false);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectMode, setSelectMode] = useState(false);
@@ -534,6 +535,8 @@ export function WalletTab({
   const convertedAmountsKeyRef = useRef<string | null>(null);
   const [possibleDuplicates, setPossibleDuplicates] = useState<PossibleDuplicateCandidate[]>([]);
   const [resolvingPossibleDuplicateId, setResolvingPossibleDuplicateId] = useState<string | null>(null);
+  const [deletingPossibleDuplicateId, setDeletingPossibleDuplicateId] = useState<string | null>(null);
+  const [resolvedPossibleDuplicateIds, setResolvedPossibleDuplicateIds] = useState<Set<string>>(new Set());
   const [showNonReceipts, setShowNonReceipts] = useState(false);
   const previousReceiptIdsRef = useRef<Set<string>>(new Set());
   const successfulReceiptIdsRef = useRef<Set<string>>(new Set());
@@ -557,6 +560,7 @@ export function WalletTab({
     setConvertedAmountsKey(null);
     convertedAmountsKeyRef.current = null;
     setPossibleDuplicates([]);
+    setResolvedPossibleDuplicateIds(new Set());
     setProcessingAttemptStartedAtByReceiptId({});
 
     successfulReceiptIdsRef.current = new Set();
@@ -905,8 +909,11 @@ export function WalletTab({
     const matchesSearch = !hasSearchQuery || receipt.searchText.includes(normalizedSearchQuery);
     const matchesCategory = !selectedCategory || selectedCategory === 'All' || receipt.category === selectedCategory;
     const hasActiveWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) > new Date();
+    const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
+    const hasActiveReturnWindow = returnWindowStatus.status === 'active' || returnWindowStatus.status === 'urgent';
     const matchesWarranty = !warrantyFilterActive || hasActiveWarranty;
-    return matchesSearch && matchesCategory && matchesWarranty;
+    const matchesReturns = !returnFilterActive || hasActiveReturnWindow;
+    return matchesSearch && matchesCategory && matchesWarranty && matchesReturns;
   };
 
   const filteredReceipts = visibleReceipts.filter(matchesReceiptFilters);
@@ -920,6 +927,7 @@ export function WalletTab({
     .sort((first, second) => getWalletSectionRank(first) - getWalletSectionRank(second));
 
   const possibleDuplicate = possibleDuplicates
+    .filter((candidate) => !resolvedPossibleDuplicateIds.has(candidate.receipt_id))
     .map((candidate) => ({
       candidate,
       receipt: visibleReceipts.find((receipt) => receipt.id === candidate.receipt_id),
@@ -931,6 +939,7 @@ export function WalletTab({
     setSearchQuery('');
     setSelectedCategory(null);
     setWarrantyFilterActive(false);
+    setReturnFilterActive(false);
     window.requestAnimationFrame(() => {
       needsAttentionSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
@@ -962,6 +971,10 @@ export function WalletTab({
   }, [receipts]);
 
   const warrantyReceipts = finalizedReceipts.filter(r => r.warrantyDate && new Date(r.warrantyDate) > new Date());
+  const activeReturnReceipts = finalizedReceipts.filter((receipt) => {
+    const returnStatus = getReturnWindowStatus(receipt.returnDate).status;
+    return returnStatus === 'active' || returnStatus === 'urgent';
+  });
 
   const toggleReceiptSelection = (receiptId: string) => {
     const newSelected = new Set(selectedReceipts);
@@ -1177,7 +1190,33 @@ export function WalletTab({
     }
 
     setPossibleDuplicates((current) => current.filter((candidate) => candidate.receipt_id !== receiptId));
+    setResolvedPossibleDuplicateIds((current) => new Set(current).add(receiptId));
     showToast('Saved separately', 'Both purchases remain in your Wallet.');
+  };
+
+  const handleDeletePossibleDuplicate = async (receiptId: string) => {
+    const duplicateReceipt = receipts.find((receipt) => receipt.id === receiptId);
+    if (!duplicateReceipt) return;
+    if (!confirm(`Delete the possible duplicate from ${duplicateReceipt.merchant}? The existing receipt will be kept.`)) return;
+
+    setDeletingPossibleDuplicateId(receiptId);
+    const { error } = await deleteReceiptRecord({
+      receiptId,
+      storagePath: duplicateReceipt.storagePath,
+      imageUrl: duplicateReceipt.imageUrl,
+    });
+    setDeletingPossibleDuplicateId(null);
+
+    if (error) {
+      console.error('[WalletTab] Could not delete possible duplicate:', error);
+      showToast('Couldn’t delete duplicate', 'Please try again.');
+      return;
+    }
+
+    setResolvedPossibleDuplicateIds((current) => new Set(current).add(receiptId));
+    setPossibleDuplicates((current) => current.filter((candidate) => candidate.receipt_id !== receiptId));
+    setReceipts((current) => current.filter((receipt) => receipt.id !== receiptId));
+    showToast('Duplicate deleted', 'The existing receipt remains in your Wallet.');
   };
 
   return (
@@ -1224,9 +1263,10 @@ export function WalletTab({
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-200">Possible duplicate</p>
                 <h2 className="mt-1 break-words text-lg font-bold text-white">This looks similar to a receipt already saved.</h2>
                 <p className="mt-1 text-sm leading-6 text-gray-400">Nothing has been removed. Compare the existing receipt or keep this as a separate purchase.</p>
-                <div className="mt-4 flex flex-col gap-2 min-[380px]:flex-row">
+                <div className="mt-4 grid gap-2 min-[520px]:grid-cols-3">
                   <button type="button" onClick={() => onReceiptClick(possibleDuplicate.existing!)} className="min-h-11 rounded-xl border border-white/15 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/5">View existing</button>
                   <button type="button" disabled={resolvingPossibleDuplicateId === possibleDuplicate.receipt!.id} onClick={() => void handleSavePossibleDuplicateAnyway(possibleDuplicate.receipt!.id)} className="min-h-11 rounded-xl bg-teal-400 px-4 py-2.5 text-sm font-bold text-black transition-colors hover:bg-teal-300 disabled:opacity-50">{resolvingPossibleDuplicateId === possibleDuplicate.receipt!.id ? 'Saving…' : 'Save anyway'}</button>
+                  <button type="button" disabled={deletingPossibleDuplicateId === possibleDuplicate.receipt!.id} onClick={() => void handleDeletePossibleDuplicate(possibleDuplicate.receipt!.id)} className="min-h-11 rounded-xl border border-red-300/25 bg-red-400/10 px-4 py-2.5 text-sm font-semibold text-red-200 transition-colors hover:bg-red-400/15 disabled:opacity-50">{deletingPossibleDuplicateId === possibleDuplicate.receipt!.id ? 'Deleting…' : 'Delete duplicate'}</button>
                 </div>
               </div>
             </div>
@@ -1244,7 +1284,10 @@ export function WalletTab({
             transition={{ duration: 0.5, delay: 0.2 }}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => setWarrantyFilterActive(!warrantyFilterActive)}
+            onClick={() => {
+              setWarrantyFilterActive(!warrantyFilterActive);
+              setReturnFilterActive(false);
+            }}
             className={`w-full backdrop-blur-xl border rounded-xl p-4 mb-6 transition-all ${
               warrantyFilterActive
                 ? 'bg-gradient-to-r from-emerald-900/30 to-teal-900/25 border-emerald-500/60 shadow-[0_0_30px_rgba(16,185,129,0.25)]'
@@ -1268,6 +1311,34 @@ export function WalletTab({
                   Active Filter
                 </motion.div>
               )}
+            </div>
+          </motion.button>
+        )}
+
+        {activeReturnReceipts.length > 0 && (
+          <motion.button
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.25 }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => {
+              setReturnFilterActive(!returnFilterActive);
+              setWarrantyFilterActive(false);
+            }}
+            className={`mb-6 w-full rounded-xl border p-4 backdrop-blur-xl transition-all ${
+              returnFilterActive
+                ? 'border-sky-400/60 bg-gradient-to-r from-sky-900/30 to-teal-900/25 shadow-[0_0_30px_rgba(56,189,248,0.20)]'
+                : 'border-sky-400/40 bg-gradient-to-r from-sky-900/20 to-teal-900/15 hover:border-sky-400/60'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <Undo2 className="h-6 w-6 text-sky-300" />
+              <div className="flex-1 text-left">
+                <h3 className="font-bold text-white">{activeReturnReceipts.length} Active {activeReturnReceipts.length === 1 ? 'Return Window' : 'Return Windows'}</h3>
+                <p className="text-sm text-gray-400">{returnFilterActive ? 'Showing returnable purchases only' : 'Click to filter returnable purchases'}</p>
+              </div>
+              {returnFilterActive && <span className="rounded-full border border-sky-300/40 bg-sky-300/15 px-3 py-1 text-xs font-bold text-sky-200">Active Filter</span>}
             </div>
           </motion.button>
         )}
@@ -1384,7 +1455,7 @@ export function WalletTab({
                   <h3 className="text-lg font-bold text-white mb-2">No receipts found</h3>
                   <p className="text-gray-400">Try a store, item, amount, date or reference</p>
                 </>
-              ) : selectedCategory || warrantyFilterActive ? (
+              ) : selectedCategory || warrantyFilterActive || returnFilterActive ? (
                 <>
                   <Search className="w-12 h-12 text-gray-500 mx-auto mb-4" />
                   <h3 className="text-lg font-bold text-white mb-2">No receipts found</h3>

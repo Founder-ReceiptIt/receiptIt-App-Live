@@ -29,6 +29,15 @@ const getTabFromLocation = (): AppTab => {
   return APP_TABS.includes(tab as AppTab) ? tab as AppTab : 'wallet';
 };
 
+const clearScanPickerStateForTabTransition = (currentTab: AppTab, nextTab: AppTab) => {
+  const isLeavingScan = currentTab === 'scan' && nextTab !== 'scan';
+  const isDeliberatelyEnteringScan = currentTab !== 'scan' && nextTab === 'scan' && !getShareTargetIntentId();
+  if (!isLeavingScan && !isDeliberatelyEnteringScan) return;
+
+  localStorage.removeItem('isScanning');
+  localStorage.removeItem('scanningSource');
+};
+
 function App() {
   const { user, session, loading: authLoading, profileLoading, needsAliasSetup, needsCurrencySetup, needsProfileRecovery, passwordRecoveryActive } = useAuth();
   const [showApp, setShowApp] = useState(false);
@@ -45,11 +54,15 @@ function App() {
     if (!APP_TABS.includes(tab as AppTab)) return;
 
     const nextTab = tab as AppTab;
+    // A deliberate tab transition starts Scan clean. Android camera recovery
+    // still works on a genuine page restore while #scan remains active.
+    clearScanPickerStateForTabTransition(activeTab, nextTab);
+
     if (window.location.hash !== `#${nextTab}`) {
       window.history.pushState({ tab: nextTab }, '', `#${nextTab}`);
     }
     setActiveTab(nextTab);
-  }, []);
+  }, [activeTab]);
 
   const handleWalletReceiptsChange = useCallback((receipts: Receipt[]) => {
     setSelectedReceipt((currentReceipt) => {
@@ -80,7 +93,13 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const syncTabFromLocation = () => setActiveTab(getTabFromLocation());
+    const syncTabFromLocation = () => {
+      const nextTab = getTabFromLocation();
+      setActiveTab((currentTab) => {
+        clearScanPickerStateForTabTransition(currentTab, nextTab);
+        return nextTab;
+      });
+    };
     window.addEventListener('popstate', syncTabFromLocation);
     window.addEventListener('hashchange', syncTabFromLocation);
 
@@ -89,15 +108,6 @@ function App() {
       window.removeEventListener('hashchange', syncTabFromLocation);
     };
   }, []);
-
-  useEffect(() => {
-    const isScanning = localStorage.getItem('isScanning');
-    if (isScanning === 'true' && user && session) {
-      console.log('[App] Detected scanning flag in localStorage, forcing scan tab');
-      window.history.replaceState({ tab: 'scan' }, '', '#scan');
-      setActiveTab('scan');
-    }
-  }, [user, session]);
 
   useEffect(() => {
     const shareTargetId = getShareTargetIntentId();

@@ -9,6 +9,7 @@ const [migration, activity, wallet, scan, app, settings] = await Promise.all([
   readFile(new URL('../src/App.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/app/SettingsTab.tsx', import.meta.url), 'utf8'),
 ]);
+const exactDuplicateChoiceMigration = await readFile(new URL('../supabase/migrations/20260909194500_allow_explicit_exact_duplicate_save.sql', import.meta.url), 'utf8');
 
 assert.match(migration, /confidence between 0\.950 and 1\.000/);
 assert.match(migration, /decision in \('pending', 'saved_anyway'\)/);
@@ -23,10 +24,18 @@ assert.match(migration, /record_exact_duplicate_activity/);
 assert.match(wallet, /Possible duplicate/);
 assert.match(wallet, /View existing/);
 assert.match(wallet, /Save anyway/);
+assert.match(wallet, /Delete duplicate/);
+assert.match(wallet, /resolvedPossibleDuplicateIds/);
 assert.match(wallet, /keepPossibleDuplicate/);
 assert.match(wallet, /table: 'receipt_possible_duplicates'/);
 assert.match(scan, /find_existing_receipt_by_file_hash/);
 assert.match(scan, /recordExactDuplicateActivity/);
+assert.match(scan, /Exact duplicate receipt/);
+assert.match(scan, /handleSaveExactDuplicateAnyway/);
+assert.match(scan, /handleDeleteExactDuplicateAttempt/);
+assert.match(exactDuplicateChoiceMigration, /new\.duplicate_of = existing_receipt_id/);
+assert.match(exactDuplicateChoiceMigration, /new\.user_id/);
+assert.match(exactDuplicateChoiceMigration, /new\.file_hash/);
 
 assert.match(app, /'activity'/);
 assert.match(activity, /\.from\('inbound_messages'\)/);

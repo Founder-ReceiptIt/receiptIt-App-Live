@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const scan = await readFile(new URL('../src/components/app/ScanTab.tsx', import.meta.url), 'utf8');
+const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8');
 
 assert.match(scan, /if \(files\.some\(isPdfSelection\)\) \{/);
 assert.match(scan, /if \(files\.length !== 1\) \{/);
@@ -30,5 +31,9 @@ assert.ok(uploadIndex > -1 && uploadIndex < addPageIndex && addPageIndex < resel
 assert.doesNotMatch(scan, />Add another image</);
 assert.doesNotMatch(scan, />Continue<\/button>/);
 assert.doesNotMatch(scan, />Choose again<\/button>/);
+assert.match(app, /const isLeavingScan = currentTab === 'scan' && nextTab !== 'scan'/);
+assert.match(app, /const isDeliberatelyEnteringScan = currentTab !== 'scan' && nextTab === 'scan'/);
+assert.match(app, /setActiveTab\(\(currentTab\) => \{\s*clearScanPickerStateForTabTransition\(currentTab, nextTab\)/);
+assert.doesNotMatch(app, /Detected scanning flag in localStorage, forcing scan tab/);
 
 console.log('Scan review and multi-image guard: PASS');
