@@ -1294,8 +1294,8 @@ export function WalletTab({
           </section>
         ) : null}
 
-        <div className="mb-4 rounded-2xl border border-teal-300/25 bg-gradient-to-br from-teal-400/15 to-cyan-400/5 p-5" aria-busy={!analyticsAmountsReady}>
-          <div className="flex min-w-0 items-start gap-3"><div className="shrink-0 rounded-xl border border-teal-300/20 bg-teal-400/10 p-2.5"><ShieldCheck className="h-5 w-5 text-teal-200" strokeWidth={1.5} /></div><div className="min-w-0 flex-1"><div className="grid min-w-0 grid-cols-1 gap-3 min-[540px]:grid-cols-2"><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-200">This month</p><p className="mt-1 break-words text-2xl font-bold text-white">{analyticsAmountsReady ? `${formatCurrency(spentThisMonth, accountCurrency.preferredCurrency)} spent` : 'Calculating…'}</p></div><div className="min-w-0 min-[540px]:text-right"><p className="text-xs font-bold uppercase tracking-[0.14em] text-gray-400">Average purchase</p><p className="mt-1 break-words text-lg font-bold text-white">{analyticsAmountsReady ? formatCurrency(averagePurchaseThisMonth, accountCurrency.preferredCurrency) : '—'}</p></div></div>{monthlyBudget ? <><p className="mt-4 text-sm text-gray-300">of {formatCurrency(monthlyBudget, accountCurrency.preferredCurrency, { maximumFractionDigits: 0, minimumFractionDigits: 0 })} budget</p><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">{analyticsAmountsReady ? <div className="h-full rounded-full bg-teal-400 transition-[width] duration-300" style={{ width: `${budgetProgress}%` }} /> : null}</div>{analyticsAmountsReady ? <p className="mt-2 text-xs text-gray-400">{budgetUsed.toFixed(1)}% used</p> : null}</> : null}{analyticsAmountsReady && excludedThisMonthCount > 0 ? <p className="mt-3 text-xs text-amber-100">{excludedThisMonthCount === 1 ? 'One purchase couldn’t be included in this total.' : `${excludedThisMonthCount} purchases couldn’t be included in this total.`}</p> : null}</div></div>
+        <div className="mb-4 rounded-2xl border border-teal-300/25 bg-gradient-to-br from-teal-400/15 to-cyan-400/5 p-4 sm:p-5" aria-busy={!analyticsAmountsReady}>
+          <div className="flex min-w-0 items-start gap-3"><div className="shrink-0 rounded-xl border border-teal-300/20 bg-teal-400/10 p-2.5"><ShieldCheck className="h-5 w-5 text-teal-200" strokeWidth={1.5} /></div><div className="min-w-0 flex-1"><div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3"><div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-teal-200 sm:text-xs sm:tracking-[0.16em]">This month</p><p className="mt-1 break-words text-lg font-bold text-white min-[380px]:text-xl sm:text-2xl">{analyticsAmountsReady ? `${formatCurrency(spentThisMonth, accountCurrency.preferredCurrency)} spent` : 'Calculating…'}</p></div><div className="min-w-0 text-right"><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400 sm:text-xs sm:tracking-[0.14em]">Average purchase</p><p className="mt-1 break-words text-base font-bold text-white sm:text-lg">{analyticsAmountsReady ? formatCurrency(averagePurchaseThisMonth, accountCurrency.preferredCurrency) : '—'}</p></div></div>{monthlyBudget ? <><p className="mt-3 text-sm text-gray-300">of {formatCurrency(monthlyBudget, accountCurrency.preferredCurrency, { maximumFractionDigits: 0, minimumFractionDigits: 0 })} budget</p><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">{analyticsAmountsReady ? <div className="h-full rounded-full bg-teal-400 transition-[width] duration-300" style={{ width: `${budgetProgress}%` }} /> : null}</div>{analyticsAmountsReady ? <p className="mt-1.5 text-xs text-gray-400">{budgetUsed.toFixed(1)}% used</p> : null}</> : null}{analyticsAmountsReady && excludedThisMonthCount > 0 ? <p className="mt-3 text-xs text-amber-100">{excludedThisMonthCount === 1 ? 'One purchase couldn’t be included in this total.' : `${excludedThisMonthCount} purchases couldn’t be included in this total.`}</p> : null}</div></div>
         </div>
 
         {warrantyReceipts.length > 0 && (
@@ -1309,14 +1309,14 @@ export function WalletTab({
               setWarrantyFilterActive(!warrantyFilterActive);
               setReturnFilterActive(false);
             }}
-            className={`mb-3 w-full rounded-xl border p-4 backdrop-blur-xl transition-all ${
+            className={`mb-3 w-full rounded-xl border p-3.5 backdrop-blur-xl transition-all sm:p-4 ${
               warrantyFilterActive
                 ? 'bg-gradient-to-r from-emerald-900/30 to-teal-900/25 border-emerald-500/60 shadow-[0_0_30px_rgba(16,185,129,0.25)]'
                 : 'bg-gradient-to-r from-emerald-900/20 to-teal-900/15 border-emerald-500/40 hover:border-emerald-500/60'
             }`}
           >
             <div className="flex items-center gap-3">
-              <ReceiptIcon className="w-6 h-6 text-emerald-400" />
+              <ReceiptIcon className="h-5 w-5 text-emerald-400 sm:h-6 sm:w-6" />
               <div className="flex-1 text-left">
                 <h3 className="text-white font-bold">{warrantyReceipts.length} Active {warrantyReceipts.length === 1 ? 'Warranty' : 'Warranties'}</h3>
                 <p className="text-sm text-gray-400">
@@ -1347,14 +1347,14 @@ export function WalletTab({
               setReturnFilterActive(!returnFilterActive);
               setWarrantyFilterActive(false);
             }}
-            className={`mb-4 w-full rounded-xl border p-4 backdrop-blur-xl transition-all ${
+            className={`mb-3 w-full rounded-xl border p-3.5 backdrop-blur-xl transition-all sm:mb-4 sm:p-4 ${
               returnFilterActive
                 ? 'border-sky-400/60 bg-gradient-to-r from-sky-900/30 to-teal-900/25 shadow-[0_0_30px_rgba(56,189,248,0.20)]'
                 : 'border-sky-400/40 bg-gradient-to-r from-sky-900/20 to-teal-900/15 hover:border-sky-400/60'
             }`}
           >
             <div className="flex items-center gap-3">
-              <Undo2 className="h-6 w-6 text-sky-300" />
+              <Undo2 className="h-5 w-5 text-sky-300 sm:h-6 sm:w-6" />
               <div className="flex-1 text-left">
                 <h3 className="font-bold text-white">{activeReturnReceipts.length} Active {activeReturnReceipts.length === 1 ? 'Return Window' : 'Return Windows'}</h3>
                 <p className="text-sm text-gray-400">{returnFilterActive ? 'Showing returnable purchases only' : 'Click to filter returnable purchases'}</p>
@@ -1364,7 +1364,7 @@ export function WalletTab({
           </motion.button>
         )}
 
-        <div className="mb-4 rounded-xl border border-white/10 bg-white/5 px-3 py-3 backdrop-blur-xl">
+        <div className="mb-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 backdrop-blur-xl sm:mb-4 sm:py-3">
           <div className="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {categories.map((category) => (
               <button
@@ -1383,7 +1383,7 @@ export function WalletTab({
 
         </div>
 
-        <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-2">
+        <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-2 sm:mb-4">
           <h2 className="text-xl font-bold text-white">
             {selectedReceipts.size > 0
               ? `${selectedReceipts.size} selected`
