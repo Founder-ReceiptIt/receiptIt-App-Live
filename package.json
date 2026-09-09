@@ -13,6 +13,8 @@
     "test:share-target": "node scripts/check-share-target.mjs",
     "test:account-isolation": "node scripts/check-account-session-isolation.mjs",
     "test:auth-routing": "node scripts/check-auth-gate-routing.mjs",
+    "test:startup-state": "node scripts/test-startup-state.mjs",
+    "test:startup-browser": "node scripts/test-startup-browser.mjs",
     "test:lewis-ux": "node --experimental-strip-types scripts/check-lewis-beta-ux.mjs",
     "test:activity": "node scripts/check-possible-duplicates-activity.mjs",
     "test:calm-review": "node scripts/check-calm-wallet-review-assist.mjs",
@@ -22,7 +24,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.57.4",
+    "@supabase/supabase-js": "2.112.3",
     "firebase": "^12.7.0",
     "framer-motion": "^12.23.26",
     "lucide-react": "^0.344.0",

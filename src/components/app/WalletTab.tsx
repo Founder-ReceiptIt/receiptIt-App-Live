@@ -1255,11 +1255,10 @@ export function WalletTab({
               whileTap={{ scale: 0.98 }}
               onClick={onNavigateToScan}
               className="inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-teal-400 px-3 text-sm font-bold text-black shadow-[0_10px_30px_rgba(45,212,191,0.12)] transition-colors hover:bg-teal-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-200 focus-visible:ring-offset-2 focus-visible:ring-offset-black sm:gap-2 sm:px-4"
-              aria-label="Open receipt camera"
             >
               <ScanLine className="h-5 w-5" strokeWidth={1.8} />
-              <span className="md:hidden">Quick scan</span>
-              <span className="hidden md:inline">Scan receipt</span>
+              <span className="lg:hidden">Quick scan</span>
+              <span className="hidden lg:inline">Scan receipt</span>
             </motion.button>
           </div>
         </div>

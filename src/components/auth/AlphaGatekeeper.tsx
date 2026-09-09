@@ -1,24 +1,26 @@
 import { useState, useEffect } from 'react';
 import { Lock } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
 import { ReceiptItWordmark } from '../ReceiptItWordmark';
 import { useAuth } from '../../contexts/AuthContext';
 import { ProductIntro } from './ProductIntro';
 import {
   AUTHORISED_INTRO_COMPLETE_KEY,
+  BETA_DEVICE_GRANT_KEY,
   clearProtectedAppRoute,
-  EXISTING_USER_SIGN_IN_KEY,
+  migrateStartupState,
   normaliseAuthenticatedRoute,
-  openExistingUserSignIn,
   SIGNUP_AUTHORIZATION_KEY,
 } from '../../lib/authRouting';
+import { restoreBetaDevice, verifyBetaAccess } from '../../lib/betaAccess';
+import { recordStartup } from '../../lib/startupDiagnostics';
 
 export default function AlphaGatekeeper({ children }: { children: React.ReactNode }) {
-  const { session, loading: authLoading, passwordRecoveryActive } = useAuth();
+  const { session, loading: authLoading, startupError } = useAuth();
   const [accessCode, setAccessCode] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [routeRevision, setRouteRevision] = useState(0);
+  const [gateState, setGateState] = useState<'checking' | 'authorised' | 'public' | 'unavailable'>('checking');
 
   useEffect(() => {
     if (!session) return;
@@ -26,17 +28,48 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
   }, [session]);
 
   useEffect(() => {
-    if (authLoading || session || passwordRecoveryActive) return;
+    if (authLoading || session) return;
+    const clearStaleRoute = () => clearProtectedAppRoute();
+    clearStaleRoute();
+    window.addEventListener('hashchange', clearStaleRoute);
+    window.addEventListener('popstate', clearStaleRoute);
+    return () => {
+      window.removeEventListener('hashchange', clearStaleRoute);
+      window.removeEventListener('popstate', clearStaleRoute);
+    };
+  }, [authLoading, session]);
 
-    if (window.location.pathname === '/signin') {
-      sessionStorage.setItem(EXISTING_USER_SIGN_IN_KEY, 'true');
-    }
-
-    // Protected destinations belong to an authenticated identity. Keeping one
-    // after sign-out allowed #settings restoration to race the public gate.
-    clearProtectedAppRoute();
-    setRouteRevision((revision) => revision + 1);
-  }, [authLoading, passwordRecoveryActive, session]);
+  useEffect(() => {
+    let active = true;
+    migrateStartupState();
+    recordStartup({ protectedRoute: /^#(wallet|settings|scan|alias|insights|activity)$/.test(location.hash) ? location.hash : '', authResolved: !authLoading });
+    if (!authLoading && !session) clearProtectedAppRoute();
+    setGateState('checking');
+    const check = async () => {
+      const token = localStorage.getItem(BETA_DEVICE_GRANT_KEY);
+      const legacyGrant = sessionStorage.getItem(SIGNUP_AUTHORIZATION_KEY);
+      let valid = false;
+      if (token) {
+        const needsSignupGrant = !session && (localStorage.getItem(AUTHORISED_INTRO_COMPLETE_KEY) !== 'true' || window.location.pathname === '/signup');
+        valid = await verifyBetaAccess({ deviceAuthorization: token, ...(needsSignupGrant ? { mode: 'signup' } : {}) });
+      }
+      if (!valid && session?.access_token) valid = await restoreBetaDevice(session.access_token);
+      if (!valid && legacyGrant) valid = await verifyBetaAccess({ signupAuthorization: legacyGrant });
+      if (!active) return;
+      if (!valid) {
+        localStorage.removeItem(BETA_DEVICE_GRANT_KEY);
+        sessionStorage.removeItem(SIGNUP_AUTHORIZATION_KEY);
+      }
+      setGateState(valid ? 'authorised' : 'public');
+      recordStartup({ betaAuthorised: valid });
+    };
+    void check().catch(() => {
+      if (!active) return;
+      setGateState('unavailable');
+      recordStartup({ failure: 'beta_verification_unavailable' });
+    });
+    return () => { active = false; };
+  }, [authLoading, session]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,20 +85,18 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
         return;
       }
 
-      const { data, error: verificationError } = await supabase.functions.invoke('verify-access-code', {
-        body: { accessCode: trimmedCode },
-      });
-
-      if (verificationError || !data?.valid || typeof data.signupAuthorization !== 'string') {
+      const valid = await verifyBetaAccess({ accessCode: trimmedCode });
+      if (!valid) {
         console.error('Access-code verification failed');
         setError('That access code didn’t work. Please request access from the team.');
         setIsLoading(false);
         return;
       }
 
-      sessionStorage.setItem(SIGNUP_AUTHORIZATION_KEY, data.signupAuthorization);
-      sessionStorage.removeItem(EXISTING_USER_SIGN_IN_KEY);
+      localStorage.removeItem(AUTHORISED_INTRO_COMPLETE_KEY);
       sessionStorage.removeItem(AUTHORISED_INTRO_COMPLETE_KEY);
+      window.history.replaceState({ authRoute: 'signup' }, '', '/signup');
+      setGateState('authorised');
       setRouteRevision((revision) => revision + 1);
     } catch (err) {
       console.error('Access code verification error:', err);
@@ -75,7 +106,8 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
     }
   };
 
-  if (authLoading) {
+  // A background grant refresh must not unmount an authenticated Scan/Wallet.
+  if (authLoading || (!session && gateState === 'checking')) {
     return (
       <div className="ri-page-height fixed inset-0 z-[9999] flex items-center justify-center bg-[#050505]">
         <div className="animate-pulse text-[#2DD4BF]">Loading...</div>
@@ -83,30 +115,40 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
     );
   }
 
-  const isPasswordRecovery = passwordRecoveryActive || new URLSearchParams(window.location.search).get('reset') === '1';
-  const isExistingUserSignIn = sessionStorage.getItem(EXISTING_USER_SIGN_IN_KEY) === 'true' || window.location.pathname === '/signin';
   const signupAuthorization = sessionStorage.getItem(SIGNUP_AUTHORIZATION_KEY);
-  const hasCompletedAuthorisedIntro = sessionStorage.getItem(AUTHORISED_INTRO_COMPLETE_KEY) === 'true';
+  const hasCompletedAuthorisedIntro = localStorage.getItem(AUTHORISED_INTRO_COMPLETE_KEY) === 'true';
   void routeRevision;
 
-  if (session || isPasswordRecovery || isExistingUserSignIn) {
-    return <>{children}</>;
+  if (session) {
+    recordStartup({ destination: 'APP', authResolved: true });
+    return <>
+      {startupError && <div role="alert" className="fixed inset-x-4 top-4 z-[10000] rounded-xl border border-white/15 bg-neutral-900 p-3 text-center text-sm text-white">We couldn’t finish opening your account. <button className="font-semibold text-teal-300" onClick={() => window.location.reload()}>Try again</button></div>}
+      {children}
+    </>;
   }
 
-  if (signupAuthorization && !hasCompletedAuthorisedIntro) {
+  if (gateState === 'authorised' && !hasCompletedAuthorisedIntro && signupAuthorization) {
+    recordStartup({ destination: 'INTRO', introRequired: true });
     return (
       <ProductIntro
         onContinue={() => {
-          sessionStorage.setItem(AUTHORISED_INTRO_COMPLETE_KEY, 'true');
+          localStorage.setItem(AUTHORISED_INTRO_COMPLETE_KEY, 'true');
+          window.history.replaceState({ authRoute: 'signup' }, '', '/signup');
           setRouteRevision((revision) => revision + 1);
         }}
       />
     );
   }
 
-  if (signupAuthorization && hasCompletedAuthorisedIntro) {
-    return <>{children}</>;
+  if (gateState === 'authorised') {
+    recordStartup({ destination: window.location.pathname === '/signup' && signupAuthorization ? 'SIGN_UP' : 'SIGN_IN', introRequired: false });
+    return <>
+      {startupError && <div role="alert" className="fixed inset-x-4 top-4 z-[10000] rounded-xl border border-white/15 bg-neutral-900 p-3 text-center text-sm text-white">We couldn’t restore your session. <button className="font-semibold text-teal-300" onClick={() => window.location.reload()}>Try again</button></div>}
+      {children}
+    </>;
   }
+
+  recordStartup({ destination: 'EARLY_ACCESS', authResolved: true });
 
   return (
     <div className="ri-scroll-viewport z-[9999] bg-[#050505]">
@@ -129,6 +171,7 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
           </p>
         </div>
 
+        {(gateState === 'unavailable' || startupError) && <div role="alert" className="rounded-xl border border-white/15 p-3 text-sm text-gray-300">We couldn’t check your access. Your saved information is still here. <button type="button" className="font-semibold text-teal-300" onClick={() => window.location.reload()}>Try again</button></div>}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <input
@@ -160,16 +203,6 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
         </form>
 
         <div className="text-center pt-4">
-          <button
-            type="button"
-            onClick={() => {
-              openExistingUserSignIn();
-              setRouteRevision((revision) => revision + 1);
-            }}
-            className="mb-5 text-sm font-semibold text-gray-300 transition-colors hover:text-white"
-          >
-            Already have an account? Sign in
-          </button>
           <p className="text-gray-600 text-xs">
             Need access?<br />
             <a

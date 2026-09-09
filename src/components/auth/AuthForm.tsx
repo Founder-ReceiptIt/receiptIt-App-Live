@@ -28,7 +28,7 @@ const aliasFormatIsValid = (value: string) => (
 export function AuthForm() {
   const canSignUp = useMemo(() => Boolean(sessionStorage.getItem(SIGNUP_AUTHORIZATION_KEY)), []);
   const recoveryLinkInvalid = useMemo(() => new URLSearchParams(window.location.search).get('reset') === '1', []);
-  const [isSignUp, setIsSignUp] = useState(canSignUp);
+  const [isSignUp, setIsSignUp] = useState(canSignUp && window.location.pathname === '/signup');
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [resetRequested, setResetRequested] = useState(false);
   const [email, setEmail] = useState('');

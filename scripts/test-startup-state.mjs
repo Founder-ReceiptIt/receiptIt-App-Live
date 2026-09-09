@@ -1,0 +1,38 @@
+import assert from 'node:assert/strict';
+import { issueBetaDeviceGrant, verifyBetaDeviceGrant } from '../supabase/functions/_shared/beta-device-grant.ts';
+import { migrateStartupState, prepareSignedOutRoute, BETA_DEVICE_GRANT_KEY, SIGNUP_AUTHORIZATION_KEY, EXISTING_USER_SIGN_IN_KEY, AUTHORISED_INTRO_COMPLETE_KEY } from '../src/lib/authRouting.ts';
+
+const storage = () => { const entries = new Map(); return { getItem: k => entries.get(k) ?? null, setItem: (k,v) => entries.set(k,String(v)), removeItem:k => entries.delete(k) }; };
+globalThis.localStorage = storage();
+globalThis.sessionStorage = storage();
+globalThis.window = { location: new URL('https://www.receiptit.app/#settings'), history: { replaceState: (_s,_t,url) => { window.location = new URL(url,window.location); } } };
+localStorage.setItem('sb-session', 'valid-session-preserved');
+localStorage.setItem('preferred_currency', 'AUD');
+sessionStorage.setItem(EXISTING_USER_SIGN_IN_KEY, 'true');
+sessionStorage.setItem(SIGNUP_AUTHORIZATION_KEY, 'existing-server-grant');
+migrateStartupState();
+assert.equal(sessionStorage.getItem(EXISTING_USER_SIGN_IN_KEY), null);
+assert.equal(sessionStorage.getItem(SIGNUP_AUTHORIZATION_KEY), 'existing-server-grant');
+assert.equal(localStorage.getItem('sb-session'), 'valid-session-preserved');
+assert.equal(localStorage.getItem('preferred_currency'), 'AUD');
+migrateStartupState();
+localStorage.setItem(BETA_DEVICE_GRANT_KEY, 'signed-device-grant');
+prepareSignedOutRoute();
+assert.equal(window.location.pathname, '/signin');
+assert.equal(window.location.hash, '');
+assert.equal(localStorage.getItem(BETA_DEVICE_GRANT_KEY), 'signed-device-grant');
+assert.equal(sessionStorage.getItem(SIGNUP_AUTHORIZATION_KEY), null);
+assert.equal(localStorage.getItem(AUTHORISED_INTRO_COMPLETE_KEY), 'true');
+
+const secret = 'isolated-unit-test-secret-not-a-production-credential';
+const token = await issueBetaDeviceGrant(secret, '1');
+assert.equal(await verifyBetaDeviceGrant(token, secret, '1'), true);
+assert.equal(await verifyBetaDeviceGrant(`${token.slice(0,-4)}AAAA`, secret, '1'), false);
+assert.equal(await verifyBetaDeviceGrant(token, secret, 'revoked'), false);
+assert.equal(await verifyBetaDeviceGrant(token, 'different-secret', '1'), false);
+assert.equal(await verifyBetaDeviceGrant('true', secret, '1'), false);
+const now = Date.now;
+Date.now = () => now() + 181 * 86400 * 1000;
+assert.equal(await verifyBetaDeviceGrant(token, secret, '1'), false);
+Date.now = now;
+console.log('PASS: legacy migration, sign-out, grant preservation, forgery rejection, revocation and expiry.');

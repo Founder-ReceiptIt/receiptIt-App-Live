@@ -13,7 +13,9 @@ import {
   SupportedCurrencyCode,
 } from '../lib/currency';
 import { clearShareTargetInbox } from '../lib/shareTargetInbox';
-import { prepareSignedOutRoute, SIGNUP_AUTHORIZATION_KEY } from '../lib/authRouting';
+import { BETA_DEVICE_GRANT_KEY, prepareSignedOutRoute, SIGNUP_AUTHORIZATION_KEY } from '../lib/authRouting';
+import { restoreBetaDevice } from '../lib/betaAccess';
+import { recordStartup } from '../lib/startupDiagnostics';
 
 interface NotificationPreferences {
   receiptCaptured: boolean;
@@ -37,6 +39,7 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   profileLoading: boolean;
+  startupError: boolean;
   username: string;
   emailAlias: string;
   fullName: string;
@@ -170,6 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [startupError, setStartupError] = useState(false);
   const [username, setUsername] = useState('');
   const [emailAlias, setEmailAlias] = useState('');
   const [fullName, setFullName] = useState('');
@@ -182,6 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isSigningUp, setIsSigningUp] = useState(false);
   const activeIdentityRef = useRef<string | null>(null);
   const identityHydratedRef = useRef(false);
+  const profileReadyIdentityRef = useRef<string | null>(null);
   // `settings` is deliberately not requested here: older live profiles do not
   // have that optional column, and selecting a missing column makes Supabase
   // reject the entire profile read (which previously looked like a login loop).
@@ -217,6 +222,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const applyProfileState = (profileData: any, fallbackFullName = '') => {
+    profileReadyIdentityRef.current = profileData?.id || null;
     setUsername(profileData?.username || '');
     setEmailAlias('');
     setFullName(profileData?.full_name || fallbackFullName || profileData?.username || '');
@@ -417,6 +423,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const validateUserExists = async (): Promise<boolean> => {
     try {
       const { data: { user: authUser }, error } = await supabase.auth.getUser();
+      if (error && (!error.status || error.status >= 500)) throw error;
       if (error || !authUser) {
         console.warn('[validateUserExists] User not found in auth or auth check failed');
         return false;
@@ -424,11 +431,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return true;
     } catch (err) {
       console.error('[validateUserExists] Error validating user existence:', err);
-      return true;
+      throw err;
     }
   };
 
   const clearProfileState = () => {
+    profileReadyIdentityRef.current = null;
     setUsername('');
     setEmailAlias('');
     setFullName('');
@@ -472,6 +480,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const fetchProfile = async (userId: string) => {
+    recordStartup({ phase: 'profile' });
     console.log('[fetchProfile] Fetching profile');
 
     if (isSigningUp) {
@@ -525,13 +534,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setNeedsProfileRecovery(true);
       }
     } finally {
-      if (activeIdentityRef.current === userId) setProfileLoading(false);
+      if (activeIdentityRef.current === userId) {
+        setProfileLoading(false);
+        recordStartup({ phase: 'profile_resolved' });
+      }
     }
   };
 
   useEffect(() => {
-
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    let active = true;
+    let eventRevision = 0;
+    recordStartup({ phase: 'session', authResolved: false });
+    supabase.auth.getSession().then(async ({ data: { session }, error: sessionError }) => {
+      if (!active || eventRevision) return;
+      if (sessionError) throw sessionError;
       console.log('[Auth] Session retrieved:', Boolean(session?.user));
 
       if (session?.user) {
@@ -540,6 +556,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setPasswordRecoveryActive(true);
           }
           const { data: { user: authUser }, error } = await supabase.auth.getUser();
+          if (!active || eventRevision) return;
+          if (error && (!error.status || error.status >= 500)) throw error;
           if (error || !authUser) {
             console.warn('[Auth] Session exists but user not found in auth - clearing stale session');
             prepareForIdentity(null);
@@ -562,6 +580,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.log('[Auth] Session validated; loading profile');
           await fetchProfile(authUser.id);
         } catch (err) {
+          if (!active || eventRevision) return;
+          setStartupError(true);
+          recordStartup({ failure: 'session_validation_unavailable' });
           console.error('[Auth] Error validating session:', err);
           prepareForIdentity(null);
           setSession(null);
@@ -580,6 +601,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
       }
     }).catch((error) => {
+      if (!active || eventRevision) return;
+      setStartupError(true);
+      recordStartup({ failure: 'session_bootstrap_unavailable' });
       // A rejected bootstrap request is a completed failure, not an unresolved
       // auth state. Clear it to a usable signed-out route instead of spinning.
       console.error('[Auth] Session bootstrap failed:', error);
@@ -595,7 +619,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfileSettings(defaultProfileSettings);
       setAccountCurrency(defaultAccountCurrency);
     }).finally(() => {
+      if (!active) return;
       setLoading(false);
+      recordStartup({ phase: 'resolved', authResolved: true });
     });
 
     const {
@@ -607,11 +633,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (_event === 'INITIAL_SESSION') {
         return;
       }
+      eventRevision += 1;
 
       // Supabase holds an internal auth lock while this callback is running.
       // Defer profile/RPC work so sign-in and signup cannot deadlock while the
       // callback tries to make another authenticated request.
       window.setTimeout(() => { void (async () => {
+        if (!active) return;
+        setStartupError(false);
         console.log('[onAuthStateChange] Auth state changed:', _event);
         prepareForIdentity(session?.user?.id ?? null);
         setSession(session);
@@ -620,10 +649,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setPasswordRecoveryActive(true);
         }
 
-        if (session?.user) {
+        if (session?.user && profileReadyIdentityRef.current !== session.user.id) {
           console.log('[onAuthStateChange] Auth state change - loading profile');
           await fetchProfile(session.user.id);
-        } else {
+        } else if (!session?.user) {
           console.log('[onAuthStateChange] Auth state change - no user, clearing profile data');
           setUsername('');
           setEmailAlias('');
@@ -636,10 +665,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         setLoading(false);
-      })(); }, 0);
+      })().catch(() => {
+        if (!active) return;
+        setStartupError(true);
+        setProfileLoading(false);
+        recordStartup({ failure: 'auth_event_unavailable' });
+      }).finally(() => { if (active) setLoading(false); }); }, 0);
     });
 
-    return () => subscription.unsubscribe();
+    return () => { active = false; subscription.unsubscribe(); };
   }, []);
 
   const checkAliasAvailability = async (aliasLocalPart: string) => {
@@ -925,6 +959,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    if (!localStorage.getItem(BETA_DEVICE_GRANT_KEY) && session?.access_token) {
+      try { await restoreBetaDevice(session.access_token); } catch { /* Sign out must still complete during an outage. */ }
+    }
     prepareSignedOutRoute();
     prepareForIdentity(null);
     setUser(null);
@@ -1002,6 +1039,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     session,
     loading,
     profileLoading,
+    startupError,
     username,
     emailAlias,
     fullName,

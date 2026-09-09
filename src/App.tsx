@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LoadingScreen } from './components/landing/LoadingScreen';
 import { TopNav } from './components/app/TopNav';
@@ -74,8 +75,16 @@ function App() {
   }, []);
 
   const handleQuickScan = useCallback(() => {
-    setQuickScanRequestId((currentRequestId) => currentRequestId + 1);
-    handleTabChange('scan');
+    if (!window.matchMedia('(max-width: 1023px)').matches) {
+      handleTabChange('scan');
+      return;
+    }
+    // Mount the existing capture input inside this user tap. Waiting for the
+    // Wallet exit animation loses native camera activation on some phones.
+    flushSync(() => {
+      setQuickScanRequestId((currentRequestId) => currentRequestId + 1);
+      handleTabChange('scan');
+    });
   }, [handleTabChange]);
 
   const handleQuickScanHandled = useCallback(() => {
@@ -191,7 +200,7 @@ function App() {
             <TopNav activeTab={activeTab} onTabChange={handleTabChange} />
 
             <div className="ri-app-content min-w-0">
-              <AnimatePresence mode="wait">
+              <AnimatePresence mode={activeTab === 'scan' ? 'sync' : 'wait'}>
                 {activeTab === 'wallet' && (
                   <motion.div
                     key="wallet"

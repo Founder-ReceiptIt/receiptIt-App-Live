@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { issueBetaDeviceGrant, verifyBetaDeviceGrant } from "../_shared/beta-device-grant.ts";
 import {
   corsHeadersFor,
   isRateLimitAllowed,
@@ -36,8 +37,12 @@ Deno.serve(async (request: Request) => {
 
   let accessCode = "";
   let signupAuthorization = "";
+  let deviceAuthorization = "";
+  let mode = "";
   try {
-    const body = await request.json() as { accessCode?: unknown; signupAuthorization?: unknown };
+    const body = await request.json() as { accessCode?: unknown; signupAuthorization?: unknown; deviceAuthorization?: unknown; mode?: unknown };
+    deviceAuthorization = typeof body.deviceAuthorization === 'string' ? body.deviceAuthorization.slice(0, 1025) : '';
+    mode = typeof body.mode === 'string' ? body.mode : '';
     accessCode = typeof body.accessCode === "string" ? body.accessCode.trim().toUpperCase() : "";
     signupAuthorization = typeof body.signupAuthorization === "string"
       ? body.signupAuthorization.trim().slice(0, 256)
@@ -46,15 +51,16 @@ Deno.serve(async (request: Request) => {
     return jsonResponse(request, { valid: false }, 400);
   }
 
-  if ((!accessCode && !signupAuthorization) || accessCode.length > 128) {
+  if ((!accessCode && !signupAuthorization && !deviceAuthorization && mode !== 'restore-device') || accessCode.length > 128) {
     return jsonResponse(request, { valid: false }, 400);
   }
 
   const requestHash = await requestSubjectHash(request, "unknown-client");
-  const submittedValueHash = await valueHash(accessCode || signupAuthorization);
-  const rateLimitPrefix = signupAuthorization ? "signup-authorization-check" : "access-code";
-  const requestLimit = signupAuthorization ? 30 : 10;
-  const valueLimit = signupAuthorization ? 30 : 5;
+  const submittedValueHash = await valueHash(accessCode || signupAuthorization || deviceAuthorization || requestHash);
+  const checkingGrant = Boolean(signupAuthorization || deviceAuthorization || mode === 'restore-device');
+  const rateLimitPrefix = checkingGrant ? "beta-device-check" : "access-code";
+  const requestLimit = checkingGrant ? 120 : 10;
+  const valueLimit = checkingGrant ? 120 : 5;
   const [ipAllowed, valueAllowed] = await Promise.all([
     isRateLimitAllowed(supabaseUrl, serviceRoleKey, `${rateLimitPrefix}-ip`, requestHash, requestLimit, 900),
     isRateLimitAllowed(supabaseUrl, serviceRoleKey, `${rateLimitPrefix}-value`, submittedValueHash, valueLimit, 900),
@@ -68,6 +74,30 @@ Deno.serve(async (request: Request) => {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
+  // Changing this server-only epoch revokes all device grants. Account sessions
+  // and existing one-use signup authorisations remain independent.
+  const epoch = Deno.env.get('BETA_DEVICE_GRANT_EPOCH') || '1';
+  if (deviceAuthorization) {
+    const valid = await verifyBetaDeviceGrant(deviceAuthorization, serviceRoleKey, epoch);
+    if (valid && mode === 'signup') {
+      const token = crypto.randomUUID().replaceAll('-', '') + crypto.randomUUID().replaceAll('-', '');
+      const { error } = await admin.from('signup_authorizations').insert({ token_hash: await valueHash(token), expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString() });
+      if (error) return jsonResponse(request, { error: 'Verification is temporarily unavailable' }, 503);
+      return jsonResponse(request, { valid: true, deviceAuthorization, signupAuthorization: token }, 200);
+    }
+    return jsonResponse(request, { valid, ...(valid ? { deviceAuthorization } : {}) }, 200);
+  }
+  if (mode === 'restore-device') {
+    const bearer = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') || '';
+    const { data: identity, error: identityError } = await admin.auth.getUser(bearer);
+    if (identityError || !identity.user) return jsonResponse(request, { valid: false }, 200);
+    // Only existing provisioned beta accounts can migrate a signed-in browser.
+    const { data: profile, error: profileError } = await admin.from('profiles').select('id').eq('id', identity.user.id).maybeSingle();
+    if (profileError) return jsonResponse(request, { error: 'Verification is temporarily unavailable' }, 503);
+    if (!profile) return jsonResponse(request, { valid: false }, 200);
+    return jsonResponse(request, { valid: true, deviceAuthorization: await issueBetaDeviceGrant(serviceRoleKey, epoch) }, 200);
+  }
+
   if (signupAuthorization) {
     const tokenHash = await valueHash(signupAuthorization);
     const { data: valid, error } = await admin.rpc("signup_authorization_is_valid", {
@@ -79,7 +109,7 @@ Deno.serve(async (request: Request) => {
     }
     return jsonResponse(
       request,
-      valid === true ? { valid: true, signupAuthorization } : { valid: false },
+      valid === true ? { valid: true, signupAuthorization, deviceAuthorization: await issueBetaDeviceGrant(serviceRoleKey, epoch) } : { valid: false },
       200,
     );
   }
@@ -114,5 +144,5 @@ Deno.serve(async (request: Request) => {
     return jsonResponse(request, { error: "Verification is temporarily unavailable" }, 503);
   }
 
-  return jsonResponse(request, { valid: true, signupAuthorization: rawAuthorization }, 200);
+  return jsonResponse(request, { valid: true, signupAuthorization: rawAuthorization, deviceAuthorization: await issueBetaDeviceGrant(serviceRoleKey, epoch) }, 200);
 });

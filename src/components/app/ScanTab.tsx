@@ -405,12 +405,8 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
       fileInputRef.current.click();
     }
 
-    window.setTimeout(() => {
-      if (fileInputRef.current) {
-        fileInputRef.current.removeAttribute('capture');
-        fileInputRef.current.setAttribute('multiple', '');
-      }
-    }, 100);
+    // Keep the camera hint stable for the native picker. The explicit upload
+    // action below switches back to multi-file mode when the user chooses it.
   }, [productionQaBlocked, showToast]);
 
   const openFilePicker = () => {

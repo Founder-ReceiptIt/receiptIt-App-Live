@@ -64,10 +64,10 @@ check(!receiptModal.includes('<Pencil'), 'scattered receipt-field pencil actions
 
 const wallet = files['src/components/app/WalletTab.tsx'];
 const receiptAmountState = files['src/lib/receiptAmountState.ts'];
-check(wallet.includes('aria-label="Open receipt camera"'), 'Wallet must retain an explicit one-tap camera action');
+check(wallet.includes('onClick={onNavigateToScan}') && wallet.includes('Quick scan'), 'Wallet must retain an explicit one-tap camera action');
 check(wallet.includes('onClick={onNavigateToScan}'), 'Wallet Quick Scan must reuse the existing Scan route');
-check(wallet.includes('<span className="md:hidden">Quick scan</span>'), 'Wallet must label the mobile camera shortcut Quick scan');
-check(wallet.includes('<span className="hidden md:inline">Scan receipt</span>'), 'Wallet must retain the desktop Scan receipt label');
+check(wallet.includes('<span className="lg:hidden">Quick scan</span>'), 'Wallet must label the mobile camera shortcut Quick scan');
+check(wallet.includes('<span className="hidden lg:inline">Scan receipt</span>'), 'Wallet must retain the desktop Scan receipt label');
 check(wallet.includes('placeholder="Search receipts"'), 'Wallet must retain the concise receipt search control');
 check(wallet.includes('grid-cols-[minmax(0,1fr)_auto]'), 'Wallet Search and Scan controls must share a compact responsive row');
 check(!wallet.includes('Your purchases, in one place.'), 'the obsolete Wallet subtitle must not return');
@@ -95,11 +95,11 @@ check(topNav.includes("label: 'Insights'"), 'the navigation tab must remain labe
 const productIntro = files['src/components/auth/ProductIntro.tsx'];
 const gatekeeper = files['src/components/auth/AlphaGatekeeper.tsx'];
 check(productIntro.includes('Everything after the purchase,') && productIntro.includes('handled.'), 'first-open introduction must retain the approved headline');
-check(productIntro.includes('Private by design.'), 'first-open introduction must retain the measured privacy statement');
+check(productIntro.includes('Your purchases are yours.'), 'first-open introduction must retain the human privacy statement');
 check(!productIntro.includes('setTimeout') && !productIntro.includes('auto-advance'), 'first-open introduction must remain user-controlled');
 check(gatekeeper.includes('AUTHORISED_INTRO_COMPLETE_KEY'), 'authorised intro completion must use a non-sensitive session preference');
-check(gatekeeper.indexOf('if (session || isPasswordRecovery || isExistingUserSignIn)') < gatekeeper.indexOf('if (signupAuthorization && !hasCompletedAuthorisedIntro)'), 'existing users must bypass the new-user introduction');
-check(gatekeeper.includes('openExistingUserSignIn()'), 'existing users must retain the direct sign-in path at the access gate');
+check(gatekeeper.indexOf('if (session)') < gatekeeper.indexOf("if (gateState === 'authorised' && !hasCompletedAuthorisedIntro"), 'existing users must bypass the new-user introduction');
+check(!gatekeeper.includes('Already have an account? Sign in'), 'public access gate must not expose sign in before device approval');
 check(!productIntro.includes('Already have an account? Sign in'), 'existing-user sign in must remain outside the authorised new-user introduction');
 
 const alias = files['src/components/app/AliasTab.tsx'];
