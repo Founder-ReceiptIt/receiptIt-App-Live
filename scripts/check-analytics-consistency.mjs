@@ -62,6 +62,7 @@ assert.doesNotMatch(wallet, />Purchase type</);
 assert.match(wallet, /•••• \{receipt\.cardLast4\}/);
 assert.match(wallet, /getAnalyticsMoneySummary/);
 assert.match(insights, /getAnalyticsMoneySummary/);
+assert.match(wallet, /const analyticsAmountsReady = !loading && convertedAmountsKey === analyticsConversionKey/);
 assert.match(wallet, /analyticsAmountsReady \? `\$\{formatCurrency\(spentThisMonth/);
 assert.match(wallet, /'Calculating…'/);
 

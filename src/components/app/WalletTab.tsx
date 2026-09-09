@@ -530,7 +530,8 @@ export function WalletTab({
   const [reportProblemReceipt, setReportProblemReceipt] = useState<{ id: string; merchant: string } | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [convertedAmounts, setConvertedAmounts] = useState<Map<string, number>>(new Map());
-  const [analyticsAmountsReady, setAnalyticsAmountsReady] = useState(false);
+  const [convertedAmountsKey, setConvertedAmountsKey] = useState<string | null>(null);
+  const convertedAmountsKeyRef = useRef<string | null>(null);
   const [possibleDuplicates, setPossibleDuplicates] = useState<PossibleDuplicateCandidate[]>([]);
   const [resolvingPossibleDuplicateId, setResolvingPossibleDuplicateId] = useState<string | null>(null);
   const [showNonReceipts, setShowNonReceipts] = useState(false);
@@ -553,7 +554,8 @@ export function WalletTab({
     setSelectedReceipts(new Set());
     setSelectMode(false);
     setConvertedAmounts(new Map());
-    setAnalyticsAmountsReady(false);
+    setConvertedAmountsKey(null);
+    convertedAmountsKeyRef.current = null;
     setPossibleDuplicates([]);
     setProcessingAttemptStartedAtByReceiptId({});
 
@@ -815,12 +817,27 @@ export function WalletTab({
 
   const visibleReceipts = filterVisibleWalletReceipts(dedupeWalletReceipts(effectiveReceipts));
   const finalizedReceipts = visibleReceipts.filter((receipt) => isFinalizedReceiptStatus(receipt.status));
+  const analyticsConversionKey = JSON.stringify([
+    user?.id || '',
+    accountCurrency.preferredCurrency,
+    receipts.map((receipt) => [
+      receipt.id,
+      receipt.amountKnown ? receipt.amount : null,
+      receipt.currency,
+      receipt.date || null,
+      receipt.status || null,
+      receipt.errorReason || null,
+      receipt.documentType || null,
+    ]),
+  ]);
 
   useEffect(() => {
     let active = true;
     const loadConvertedAmounts = async () => {
-      setAnalyticsAmountsReady(false);
-      setConvertedAmounts(new Map());
+      if (convertedAmountsKeyRef.current !== analyticsConversionKey) {
+        setConvertedAmounts(new Map());
+        setConvertedAmountsKey(null);
+      }
       const receiptsForConversion = filterVisibleWalletReceipts(dedupeWalletReceipts(receipts)).flatMap((receipt) => {
         const amount = getAnalyticsEligibleAmount({
           amount: receipt.amountKnown ? receipt.amount : null,
@@ -847,12 +864,15 @@ export function WalletTab({
         console.error('[WalletTab] Could not prepare Wallet totals:', conversionError);
         setConvertedAmounts(new Map());
       } finally {
-        if (active) setAnalyticsAmountsReady(true);
+        if (active) {
+          convertedAmountsKeyRef.current = analyticsConversionKey;
+          setConvertedAmountsKey(analyticsConversionKey);
+        }
       }
     };
     void loadConvertedAmounts();
     return () => { active = false; };
-  }, [receipts, accountCurrency.preferredCurrency]);
+  }, [receipts, accountCurrency.preferredCurrency, analyticsConversionKey]);
 
   const currentMonthKey = getCurrentCalendarMonthKey();
   const walletAnalyticsReceipts = visibleReceipts.map((receipt) => ({
@@ -865,6 +885,7 @@ export function WalletTab({
     transactionDate: receipt.date,
   }));
   const currentMonthSummary = getAnalyticsMoneySummary(walletAnalyticsReceipts, convertedAmounts, currentMonthKey);
+  const analyticsAmountsReady = !loading && convertedAmountsKey === analyticsConversionKey;
   const excludedThisMonthCount = currentMonthSummary.excludedCount;
   const spentThisMonth = currentMonthSummary.total;
   const averagePurchaseThisMonth = currentMonthSummary.average;
