@@ -125,7 +125,7 @@ canvas {
 }
 
 .ri-app-content {
-  padding-top: calc(3.75rem + var(--ri-safe-top));
+  padding-top: var(--ri-safe-top);
 }
 
 .ri-top-safe {

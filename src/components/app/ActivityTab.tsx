@@ -196,7 +196,7 @@ export function ActivityTab({ onOpenReceipt }: ActivityTabProps) {
       const messageAttachments = attachmentsByMessage.get(message.id) || [];
       const receiptId = messageAttachments.find((attachment) => attachment.receipt_id)?.receipt_id || undefined;
       const receipt = receiptId ? receiptsById.get(receiptId) : undefined;
-      const senderDetail = message.sender_domain ? `From ${message.sender_domain}` : 'Received through your receiptIt address';
+      const senderDetail = message.sender_domain ? `From ${message.sender_domain}` : 'Received through your private receipt email';
       const occurredAt = message.processed_at || message.received_at;
 
       if (message.status === 'duplicate') {

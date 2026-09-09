@@ -21,7 +21,7 @@ export function AliasSetupModal() {
         throw error;
       }
     } catch {
-      setError('We couldn’t create your address. Please try again.');
+      setError('We couldn’t create your private receipt email. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -47,7 +47,7 @@ export function AliasSetupModal() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-3 rounded-xl border border-white/10 bg-white/5 p-4 text-sm leading-6 text-gray-300">
-              <p className="flex flex-wrap items-baseline gap-x-1">When a shop asks for your email, use your <ReceiptItWordmark className="text-sm" /> address instead.</p>
+              <p>When a shop asks where to send your receipt, use your private receipt email instead.</p>
               <p>Your receipts arrive here. Your personal inbox stays private.</p>
               <p className="text-gray-400">You can also add existing receipts by photo or PDF.</p>
             </div>
@@ -69,7 +69,7 @@ export function AliasSetupModal() {
               disabled={loading}
               className="w-full py-3 bg-teal-400 text-black font-bold rounded-lg hover:bg-teal-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Setting up your address...' : 'Set up my private address'}
+              {loading ? 'Setting up your email...' : 'Set up my private receipt email'}
             </motion.button>
           </form>
         </div>

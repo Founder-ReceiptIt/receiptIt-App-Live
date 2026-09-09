@@ -3,9 +3,11 @@ import { Lock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { ReceiptItWordmark } from '../ReceiptItWordmark';
 import { useAuth } from '../../contexts/AuthContext';
+import { ProductIntro } from './ProductIntro';
 
 const signupAuthorizationKey = 'receiptit_signup_authorization';
 const existingSignInKey = 'receiptit_existing_user_signin';
+const productIntroCompleteKey = 'receiptit_product_intro_v1_complete';
 
 export default function AlphaGatekeeper({ children }: { children: React.ReactNode }) {
   const { session, loading: authLoading, passwordRecoveryActive } = useAuth();
@@ -14,6 +16,15 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
+  const [hasCompletedProductIntro, setHasCompletedProductIntro] = useState(
+    () => localStorage.getItem(productIntroCompleteKey) === 'true'
+  );
+
+  useEffect(() => {
+    if (!session) return;
+    localStorage.setItem(productIntroCompleteKey, 'true');
+    setHasCompletedProductIntro(true);
+  }, [session]);
 
   useEffect(() => {
     let active = true;
@@ -99,6 +110,23 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
       <div className="ri-page-height fixed inset-0 z-[9999] flex items-center justify-center bg-[#050505]">
         <div className="animate-pulse text-[#2DD4BF]">Loading...</div>
       </div>
+    );
+  }
+
+  if (!hasCompletedProductIntro && !session && !passwordRecoveryActive) {
+    return (
+      <ProductIntro
+        onContinue={() => {
+          localStorage.setItem(productIntroCompleteKey, 'true');
+          setHasCompletedProductIntro(true);
+        }}
+        onSignIn={() => {
+          localStorage.setItem(productIntroCompleteKey, 'true');
+          sessionStorage.setItem(existingSignInKey, 'true');
+          setHasCompletedProductIntro(true);
+          setIsVerified(true);
+        }}
+      />
     );
   }
 

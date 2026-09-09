@@ -1255,11 +1255,11 @@ export function WalletTab({
               whileTap={{ scale: 0.98 }}
               onClick={onNavigateToScan}
               className="inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-teal-400 px-3 text-sm font-bold text-black shadow-[0_10px_30px_rgba(45,212,191,0.12)] transition-colors hover:bg-teal-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-200 focus-visible:ring-offset-2 focus-visible:ring-offset-black sm:gap-2 sm:px-4"
-              aria-label="Scan receipt"
+              aria-label="Open receipt camera"
             >
               <ScanLine className="h-5 w-5" strokeWidth={1.8} />
-              <span className="min-[360px]:hidden">Scan</span>
-              <span className="hidden min-[360px]:inline">Scan receipt</span>
+              <span className="md:hidden">Quick scan</span>
+              <span className="hidden md:inline">Scan receipt</span>
             </motion.button>
           </div>
         </div>
@@ -1309,7 +1309,8 @@ export function WalletTab({
               setWarrantyFilterActive(!warrantyFilterActive);
               setReturnFilterActive(false);
             }}
-            className={`mb-3 w-full rounded-xl border p-3.5 backdrop-blur-xl transition-all sm:p-4 ${
+            aria-label={`${warrantyReceipts.length} active ${warrantyReceipts.length === 1 ? 'warranty' : 'warranties'}. Filter Wallet.`}
+            className={`mb-2.5 w-full rounded-xl border p-3 backdrop-blur-xl transition-all sm:mb-3 sm:p-3.5 ${
               warrantyFilterActive
                 ? 'bg-gradient-to-r from-emerald-900/30 to-teal-900/25 border-emerald-500/60 shadow-[0_0_30px_rgba(16,185,129,0.25)]'
                 : 'bg-gradient-to-r from-emerald-900/20 to-teal-900/15 border-emerald-500/40 hover:border-emerald-500/60'
@@ -1319,9 +1320,6 @@ export function WalletTab({
               <ReceiptIcon className="h-5 w-5 text-emerald-400 sm:h-6 sm:w-6" />
               <div className="flex-1 text-left">
                 <h3 className="text-white font-bold">{warrantyReceipts.length} Active {warrantyReceipts.length === 1 ? 'Warranty' : 'Warranties'}</h3>
-                <p className="text-sm text-gray-400">
-                  {warrantyFilterActive ? 'Showing warranty items only' : 'Click to filter warranty items'}
-                </p>
               </div>
               {warrantyFilterActive && (
                 <motion.div
@@ -1347,7 +1345,8 @@ export function WalletTab({
               setReturnFilterActive(!returnFilterActive);
               setWarrantyFilterActive(false);
             }}
-            className={`mb-3 w-full rounded-xl border p-3.5 backdrop-blur-xl transition-all sm:mb-4 sm:p-4 ${
+            aria-label={`${activeReturnReceipts.length} active return ${activeReturnReceipts.length === 1 ? 'window' : 'windows'}. Filter Wallet.`}
+            className={`mb-3 w-full rounded-xl border p-3 backdrop-blur-xl transition-all sm:mb-4 sm:p-3.5 ${
               returnFilterActive
                 ? 'border-sky-400/60 bg-gradient-to-r from-sky-900/30 to-teal-900/25 shadow-[0_0_30px_rgba(56,189,248,0.20)]'
                 : 'border-sky-400/40 bg-gradient-to-r from-sky-900/20 to-teal-900/15 hover:border-sky-400/60'
@@ -1357,7 +1356,6 @@ export function WalletTab({
               <Undo2 className="h-5 w-5 text-sky-300 sm:h-6 sm:w-6" />
               <div className="flex-1 text-left">
                 <h3 className="font-bold text-white">{activeReturnReceipts.length} Active {activeReturnReceipts.length === 1 ? 'Return Window' : 'Return Windows'}</h3>
-                <p className="text-sm text-gray-400">{returnFilterActive ? 'Showing returnable purchases only' : 'Click to filter returnable purchases'}</p>
               </div>
               {returnFilterActive && <span className="rounded-full border border-sky-300/40 bg-sky-300/15 px-3 py-1 text-xs font-bold text-sky-200">Active Filter</span>}
             </div>
@@ -1467,10 +1465,10 @@ export function WalletTab({
                 <>
                   <ReceiptIcon className="w-12 h-12 text-gray-500 mx-auto mb-4" />
                   <h3 className="text-lg font-bold text-white mb-2">Your purchases will appear here.</h3>
-                  <p className="mx-auto max-w-sm text-gray-400">Add your first receipt or use your private receiptIt address.</p>
+                  <p className="mx-auto max-w-sm text-gray-400">Add your first receipt or use your private receipt email.</p>
                   <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
                     <button type="button" onClick={onNavigateToScan} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-teal-400 px-4 py-2.5 text-sm font-bold text-black transition-colors hover:bg-teal-300"><ScanLine className="h-4 w-4" strokeWidth={1.8} />Add receipt</button>
-                    <button type="button" onClick={onNavigateToAlias} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/15 px-4 py-2.5 text-sm font-semibold text-gray-200 transition-colors hover:bg-white/5"><AtSign className="h-4 w-4" strokeWidth={1.8} />View receiptIt address</button>
+                    <button type="button" onClick={onNavigateToAlias} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/15 px-4 py-2.5 text-sm font-semibold text-gray-200 transition-colors hover:bg-white/5"><AtSign className="h-4 w-4" strokeWidth={1.8} />View private receipt email</button>
                   </div>
                 </>
               )}
@@ -1530,11 +1528,6 @@ export function WalletTab({
 
                 return (
                   <Fragment key={receipt.id}>
-                    {startsSection && section === 'purchases' ? (
-                      <div className="pb-1 pt-1">
-                        <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-gray-400">Purchases</h2>
-                      </div>
-                    ) : null}
                     {startsSection && section === 'attention' ? (
                       <div ref={needsAttentionSectionRef} className="scroll-mt-24 pb-1 pt-5">
                         <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-amber-200">Needs attention</h2>
