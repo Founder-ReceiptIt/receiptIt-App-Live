@@ -299,6 +299,7 @@ Deno.serve(async (request) => {
     const wasPreviouslyIgnored = existingMessage.status === "ignored";
     await admin.from("inbound_messages").update({
       classification,
+      attachment_count: attachments.length,
       error_reason: classification === "marketing" ? envelope.ignoredReason : null,
       ...(classification === "marketing"
         ? { status: "ignored", processed_at: new Date().toISOString() }

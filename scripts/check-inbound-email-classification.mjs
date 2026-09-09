@@ -55,6 +55,7 @@ assert.match(handler, /MIN_INLINE_IMAGE_BYTES = 16 \* 1024/);
 assert.match(handler, /providerAttachments\.length > 0/);
 assert.match(handler, /attachment\.content_disposition === "inline"/);
 assert.match(handler, /attachmentListResponse/);
+assert.match(handler, /wasPreviouslyIgnored[\s\S]*attachment_count: attachments\.length/);
 assert.equal([...handler.matchAll(/ignored:\s*true/g)].length, 1);
 
 console.log('Inbound email classification guard: PASS');
