@@ -1121,6 +1121,20 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
 
       <div className="mx-auto w-full max-w-md">
         <div className="w-full">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/jpg,image/png,application/pdf"
+            multiple
+            onChange={handleFileSelect}
+            onClick={(e) => {
+              // Ensure we don't have stale values
+              const target = e.target as HTMLInputElement;
+              target.value = '';
+            }}
+            className="hidden"
+          />
+
           <AnimatePresence mode="wait">
             {scanState === 'idle' && (
               <motion.div
@@ -1150,20 +1164,6 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
                 <div className="mb-5 text-center">
                   <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-teal-400/25 bg-teal-400/10"><Camera className="w-7 h-7 text-teal-300" strokeWidth={1.5} /></div>
                 </div>
-
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/jpg,image/png,application/pdf"
-                  multiple
-                  onChange={handleFileSelect}
-                  onClick={(e) => {
-                    // Ensure we don't have stale values
-                    const target = e.target as HTMLInputElement;
-                    target.value = '';
-                  }}
-                  className="hidden"
-                />
 
                 {/* TODO native: guided receipt capture with edge detection, blur checks and lighting checks. */}
 

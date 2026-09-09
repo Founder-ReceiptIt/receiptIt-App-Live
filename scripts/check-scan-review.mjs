@@ -12,6 +12,10 @@ assert.ok(
 );
 
 assert.match(scan, /type="file"[\s\S]*multiple/);
+assert.ok(
+  scan.indexOf('ref={fileInputRef}') < scan.indexOf('<AnimatePresence mode="wait">'),
+  'The shared picker input must stay mounted while the multi-image review state is visible',
+);
 assert.match(scan, /selectedImageFiles\.length === 1[\s\S]*Ready to upload as one receipt\./);
 assert.match(scan, /We’ll read them together as one receipt\./);
 assert.match(scan, /aria-label=\{`\$\{selectedImageFiles\.length\} images in selection order`\}/);
