@@ -18,8 +18,10 @@ check(/profileLoading/.test(files.app), 'app shell must wait for the current pro
 check(/setSelectedReceipt\(null\)[\s\S]*\[user\?\.id\]/.test(files.app), 'selected receipt must clear when the auth identity changes');
 
 check(/activeIdentityRef/.test(files.auth), 'auth provider must track identity transitions');
+check(/identityHydratedRef/.test(files.auth), 'auth provider must distinguish initial session hydration from a real identity transition');
 check(/prepareForIdentity\(session\?\.user\?\.id \?\? null\)/.test(files.auth), 'auth events must clear prior identity state before loading the next identity');
 check(/clearShareTargetInbox/.test(files.auth), 'auth identity changes must clear unowned share-target payloads');
+check(/if \(!isInitialIdentityHydration\) \{\s*clearAccountScopedClientState\(\);\s*\}/.test(files.auth), 'real identity changes must still clear account-scoped client state');
 check(/removeItem\('isScanning'\)/.test(files.auth), 'auth identity changes must clear scan state');
 
 check(/setReceipts\(\[\]\);[\s\S]*setLoading\(true\);/.test(files.wallet), 'Wallet must clear old rows synchronously before loading the next user');

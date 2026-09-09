@@ -181,6 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [accountCurrency, setAccountCurrency] = useState<AccountCurrencySettings>(defaultAccountCurrency);
   const [isSigningUp, setIsSigningUp] = useState(false);
   const activeIdentityRef = useRef<string | null>(null);
+  const identityHydratedRef = useRef(false);
   // `settings` is deliberately not requested here: older live profiles do not
   // have that optional column, and selecting a missing column makes Supabase
   // reject the entire profile read (which previously looked like a login loop).
@@ -448,7 +449,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const prepareForIdentity = (nextUserId: string | null) => {
-    if (activeIdentityRef.current === nextUserId) return;
+    const isInitialIdentityHydration = !identityHydratedRef.current;
+    if (!isInitialIdentityHydration && activeIdentityRef.current === nextUserId) return;
 
     // Clear user-derived state before exposing the next identity to the app.
     // This prevents the previous Wallet/profile from rendering during the
@@ -456,8 +458,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearProfileState();
     setNeedsProfileRecovery(false);
     setProfileLoading(Boolean(nextUserId));
-    clearAccountScopedClientState();
+
+    // A cold PWA launch restores the existing Supabase session after the
+    // Android share-target worker has already stored the incoming file. That
+    // first null -> user hydration is not an account switch and must not erase
+    // the freshly received payload. Real sign-in, sign-out and user-to-user
+    // transitions still clear all account-scoped client state below.
+    if (!isInitialIdentityHydration) {
+      clearAccountScopedClientState();
+    }
     activeIdentityRef.current = nextUserId;
+    identityHydratedRef.current = true;
   };
 
   const fetchProfile = async (userId: string) => {

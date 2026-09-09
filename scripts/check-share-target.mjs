@@ -5,6 +5,7 @@ const manifest = JSON.parse(await readFile(new URL('../public/manifest.webmanife
 const worker = await readFile(new URL('../public/share-target-sw.js', import.meta.url), 'utf8');
 const scan = await readFile(new URL('../src/components/app/ScanTab.tsx', import.meta.url), 'utf8');
 const main = await readFile(new URL('../src/main.tsx', import.meta.url), 'utf8');
+const auth = await readFile(new URL('../src/contexts/AuthContext.tsx', import.meta.url), 'utf8');
 
 assert.equal(manifest.share_target.action, '/share-target');
 assert.equal(manifest.share_target.method, 'POST');
@@ -39,5 +40,9 @@ assert.match(scan, /completePendingShare\('processing_handoff'\)/);
 assert.match(scan, /recordShareTargetEvent\(shareTargetId, 'ingestion_started'\)/);
 assert.match(scan, /For now, save or screenshot the receipt/);
 assert.match(main, /serviceWorker\.register\('\/share-target-sw\.js'/);
+assert.match(auth, /const identityHydratedRef = useRef\(false\)/);
+assert.match(auth, /const isInitialIdentityHydration = !identityHydratedRef\.current/);
+assert.match(auth, /if \(!isInitialIdentityHydration\) \{\s*clearAccountScopedClientState\(\);\s*\}/);
+assert.match(auth, /identityHydratedRef\.current = true/);
 
 console.log('Share-target foundation checks passed.');
