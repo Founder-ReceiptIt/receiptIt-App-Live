@@ -37,6 +37,8 @@ assert.doesNotMatch(activity, /sender_address|reply_to_address|subject|body_sha2
 assert.match(activity, /message\.classification === 'marketing' && message\.status === 'ignored'/);
 assert.match(activity, /Email received and added/);
 assert.match(activity, /Email needs review/);
+assert.match(activity, /receipt\?\.status === 'needs_input'/);
+assert.match(activity, /Receipt needs a detail/);
 assert.match(activity, /Couldn’t process purchase email/);
 assert.match(activity, /Duplicate already saved/);
 assert.match(activity, /last 90 days/);

@@ -14,7 +14,10 @@ import { classifyEnvelope } from "./email-classification.ts";
 
 const MAX_WEBHOOK_BYTES = 256 * 1024;
 const MAX_ATTACHMENTS = 5;
-const MAX_ATTACHMENT_BYTES = 6 * 1024 * 1024;
+// Keep Alias attachments aligned with Scan and the private receipts bucket.
+// Anything larger is rejected before Storage/AI work and retained as bounded
+// metadata so the failure remains visible in Activity.
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const MAX_BODY_BYTES = 500 * 1024;
 
 type ResendEvent = {
@@ -289,13 +292,36 @@ Deno.serve(async (request) => {
     try {
       const responseBody = await attachmentMetadataResponse.json() as {
         download_url?: unknown;
-        data?: Array<{ id?: unknown; download_url?: unknown }> | { download_url?: unknown };
+        size?: unknown;
+        data?: Array<{ id?: unknown; download_url?: unknown; size?: unknown }> | { download_url?: unknown; size?: unknown };
       };
       const metadata = Array.isArray(responseBody.data)
         ? responseBody.data.find((candidate) => candidate.id === attachment.id)
         : responseBody.data && typeof responseBody.data === "object"
           ? responseBody.data
           : responseBody;
+      const providerByteSize = metadata && typeof metadata.size === "number" && Number.isFinite(metadata.size)
+        ? Math.max(0, Math.min(Math.trunc(metadata.size), 2_147_483_647))
+        : null;
+      if (providerByteSize !== null && providerByteSize > MAX_ATTACHMENT_BYTES) {
+        const { error: auditError } = await admin.from("inbound_attachments").upsert({
+          inbound_message_id: messageId,
+          user_id: alias.user_id,
+          provider_attachment_id: attachment.id,
+          safe_filename: sanitizeFilename(attachment.filename),
+          content_type: attachment.content_type || "application/octet-stream",
+          byte_size: providerByteSize,
+          sha256: "0".repeat(64),
+          storage_path: `${alias.user_id}/email-rejected/${crypto.randomUUID()}`,
+          status: "rejected",
+          error_reason: "attachment_too_large",
+        }, { onConflict: "inbound_message_id,provider_attachment_id" });
+        if (auditError) {
+          console.error("[inbound-email] Could not record oversized attachment", { code: auditError.code });
+        }
+        continue;
+      }
+
       downloadUrl = metadata && typeof metadata.download_url === "string" ? metadata.download_url : "";
       const parsedUrl = new URL(downloadUrl);
       // The signed host is provider-controlled and can vary by Resend region.
@@ -318,7 +344,10 @@ Deno.serve(async (request) => {
     const bytes = new Uint8Array(await attachmentDownloadResponse.arrayBuffer());
     const detected = bytes.byteLength <= MAX_ATTACHMENT_BYTES ? inferredAttachmentType(bytes) : null;
     if (!detected) {
-      await admin.from("inbound_attachments").upsert({ inbound_message_id: messageId, user_id: alias.user_id, provider_attachment_id: attachment.id, safe_filename: sanitizeFilename(attachment.filename), content_type: attachment.content_type || "application/octet-stream", byte_size: bytes.byteLength, sha256: await sha256(bytes.buffer), storage_path: `${alias.user_id}/email-rejected/${crypto.randomUUID()}`, status: "rejected", error_reason: bytes.byteLength > MAX_ATTACHMENT_BYTES ? "attachment_too_large" : "unsupported_or_invalid_attachment" }, { onConflict: "inbound_message_id,provider_attachment_id" });
+      const { error: auditError } = await admin.from("inbound_attachments").upsert({ inbound_message_id: messageId, user_id: alias.user_id, provider_attachment_id: attachment.id, safe_filename: sanitizeFilename(attachment.filename), content_type: attachment.content_type || "application/octet-stream", byte_size: Math.min(bytes.byteLength, 2_147_483_647), sha256: await sha256(bytes.buffer), storage_path: `${alias.user_id}/email-rejected/${crypto.randomUUID()}`, status: "rejected", error_reason: bytes.byteLength > MAX_ATTACHMENT_BYTES ? "attachment_too_large" : "unsupported_or_invalid_attachment" }, { onConflict: "inbound_message_id,provider_attachment_id" });
+      if (auditError) {
+        console.error("[inbound-email] Could not record rejected attachment", { code: auditError.code });
+      }
       continue;
     }
 
@@ -452,10 +481,16 @@ Deno.serve(async (request) => {
         ? "rejected"
         : evidenceStatuses.has("failed")
           ? "failed"
-          : "received";
+          : attachments.length > 0
+            ? "failed"
+            : "received";
   await admin.from("inbound_messages").update({
     status: finalStatus,
-    error_reason: finalStatus === "received" ? "no_processable_evidence" : null,
+    error_reason: finalStatus === "received"
+      ? "no_processable_evidence"
+      : finalStatus === "failed" && evidenceRows?.length === 0
+        ? "attachment_audit_failed"
+        : null,
     processed_at: finalStatus === "received" ? null : new Date().toISOString(),
   }).eq("id", messageId);
   return json({ accepted: true, ...(existingMessage ? { replayed: true } : {}) });

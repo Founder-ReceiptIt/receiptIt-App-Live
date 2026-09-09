@@ -48,6 +48,9 @@ assert.match(handler, /ignored_reason: envelope\.ignoredReason/);
 assert.match(handler, /\.eq\("provider_message_id", providerMessageId\)/);
 assert.match(handler, /wasPreviouslyIgnored/);
 assert.match(handler, /classification === "marketing" \? envelope\.ignoredReason : null/);
+assert.match(handler, /MAX_ATTACHMENT_BYTES = 10 \* 1024 \* 1024/);
+assert.match(handler, /attachment_audit_failed/);
+assert.match(handler, /providerByteSize !== null && providerByteSize > MAX_ATTACHMENT_BYTES/);
 assert.equal([...handler.matchAll(/ignored:\s*true/g)].length, 1);
 
 console.log('Inbound email classification guard: PASS');

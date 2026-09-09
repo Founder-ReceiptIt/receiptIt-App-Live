@@ -3,6 +3,14 @@ import { readFile } from 'node:fs/promises';
 
 const scan = await readFile(new URL('../src/components/app/ScanTab.tsx', import.meta.url), 'utf8');
 
+assert.match(scan, /if \(files\.some\(isPdfSelection\)\) \{/);
+assert.match(scan, /if \(files\.length !== 1\) \{/);
+assert.match(scan, /setSelectedImageFiles\(\[\]\);/);
+assert.ok(
+  scan.indexOf('if (files.some(isPdfSelection)) {') < scan.indexOf("} else if (pickerMode === 'camera') {"),
+  'PDF handling must outrank stale camera recovery state',
+);
+
 assert.match(scan, /type="file"[\s\S]*multiple/);
 assert.match(scan, /selectedImageFiles\.length === 1[\s\S]*Ready to upload as one receipt\./);
 assert.match(scan, /We’ll read them together as one receipt\./);

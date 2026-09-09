@@ -205,6 +205,8 @@ export function ActivityTab({ onOpenReceipt }: ActivityTabProps) {
         nextEvents.push({ id: `email:${message.id}`, occurredAt, title: 'Couldn’t process purchase email', detail: `${senderDetail}. Try forwarding it again or add the receipt directly.`, tone: 'attention', icon: AlertTriangle, receiptId, actionLabel: receiptId ? 'View in Wallet' : undefined, needsAttention: true });
       } else if (receipt?.status === 'needs_review') {
         nextEvents.push({ id: `email:${message.id}`, occurredAt, title: 'Email needs review', detail: `${merchantLabel(receipt)} was recognised as purchase evidence.`, tone: 'attention', icon: Mail, receiptId, actionLabel: 'Review details', needsAttention: true });
+      } else if (receipt?.status === 'needs_input') {
+        nextEvents.push({ id: `email:${message.id}`, occurredAt, title: 'Receipt needs a detail', detail: `${senderDetail}. Open it to confirm the missing information.`, tone: 'attention', icon: AlertTriangle, receiptId, actionLabel: 'Review details', needsAttention: true });
       } else if (receipt?.status === 'processing') {
         nextEvents.push({ id: `email:${message.id}`, occurredAt: message.received_at, title: 'Receipt processing', detail: senderDetail, tone: 'processing', icon: Clock3, receiptId, needsAttention: false });
       } else if (receipt && ['parsed', 'completed'].includes(receipt.status || '')) {

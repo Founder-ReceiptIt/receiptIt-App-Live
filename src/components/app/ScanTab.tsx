@@ -463,7 +463,18 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
     // Block a second selection while deterministic file validation is running.
     isScanningRef.current = true;
 
-    if (pickerMode === 'camera') {
+    // A PDF can never be produced by the camera. Handle it before consulting
+    // the picker-mode recovery flag so stale Android camera state cannot fold a
+    // genuine single PDF into an earlier image selection and falsely report
+    // that multiple PDFs were chosen.
+    if (files.some(isPdfSelection)) {
+      if (files.length !== 1) {
+        showSelectionError('Upload one PDF at a time.');
+        return;
+      }
+
+      setSelectedImageFiles([]);
+    } else if (pickerMode === 'camera') {
       const nextImages = [...selectedImageFiles, file];
       if (!(await prepareImageSelection(nextImages))) return;
 
@@ -477,11 +488,6 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
         setScanState('review');
       });
       isScanningRef.current = false;
-      return;
-    }
-
-    if (files.length > 1 && files.some(isPdfSelection)) {
-      showSelectionError('Upload one PDF at a time.');
       return;
     }
 
