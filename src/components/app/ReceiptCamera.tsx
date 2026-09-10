@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Camera, X } from 'lucide-react';
+import { CaptureQualityAssist } from './CaptureQualityAssist';
 
 interface ReceiptCameraProps {
   onClose: () => void;
@@ -130,6 +131,7 @@ export function ReceiptCamera({ onClose, onCapture }: ReceiptCameraProps) {
         <div className="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-white/15 bg-white/5">
           <video ref={videoRef} autoPlay playsInline muted aria-label="Camera preview" className="h-full w-full object-contain"
             onLoadedData={() => { if (streamRef.current && document.visibilityState !== 'hidden') setReady(true); }} />
+          <CaptureQualityAssist videoRef={videoRef} enabled={ready && !error && !capturing} />
           {(!ready || error) && <div role="status" className="absolute inset-0 flex items-center justify-center bg-black/90 p-5 text-center text-sm text-gray-200">{error || 'Opening camera…'}</div>}
         </div>
         <div className="mx-auto mt-3 w-full max-w-md shrink-0">
