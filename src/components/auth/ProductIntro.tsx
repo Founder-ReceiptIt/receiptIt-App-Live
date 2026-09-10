@@ -10,7 +10,7 @@ export function ProductIntro({ onContinue }: ProductIntroProps) {
     <main className="ri-scroll-viewport z-[9999] bg-black">
       <div className="ri-scroll-viewport__inner py-3 sm:py-6">
         <section aria-labelledby="product-intro-title" className="w-full min-w-0 max-w-lg pb-24 md:pb-0">
-          <h1 id="product-intro-title" className="text-center">
+          <h1 id="product-intro-title" className="relative -top-2 text-center">
             <ReceiptItWordmark className="text-3xl sm:text-4xl" />
           </h1>
 

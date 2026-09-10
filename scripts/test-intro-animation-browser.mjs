@@ -14,7 +14,7 @@ async function open(width,height,{reduced=false,fail=false}={}){
   const value=path.endsWith('/verify-access-code')?{valid:true,deviceAuthorization:'isolated-intro-grant',signupAuthorization:'isolated-signup-grant'}:path.endsWith('/user')?null:[];
   await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(value)});
  });
- if(fail)await context.route('**/intro/revision-05/receiptit-story.js',route=>route.abort());
+ if(fail)await context.route('**/intro/revision-05/receiptit-story.js*',route=>route.abort());
  await context.addInitScript(()=>localStorage.setItem('receiptit_beta_device_grant_v1','isolated-intro-grant'));
  const page=await context.newPage();await page.goto(base+'/signup');await page.getByRole('button',{name:'Continue',exact:true}).waitFor();
  return {context,page};
@@ -45,13 +45,20 @@ try{
    await page.getByRole('button',{name:'Pause animation',exact:true}).click();
    const stopped=await story.evaluate(el=>el.currentTime);await page.waitForTimeout(200);assert.equal(await story.evaluate(el=>el.currentTime),stopped);
    await page.getByRole('button',{name:'Play animation',exact:true}).click();await page.waitForTimeout(200);assert.ok(await story.evaluate(el=>!el.paused&&el.currentTime>0));
-   for(const [label,time] of [['checkout',0],['private-email',5.8],['complete',10.8]]){
+   assert.equal(await story.evaluate(el=>el.duration),15.5);
+   for(const [time,first,second] of [[9.7,0,0],[10.35,1,0],[11.3,1,1],[15.2,1,1]]){
+    await story.evaluate((el,t)=>el.seek(t),time);
+    assert.equal(Number(await story.locator('[data-anim="signatureFirst"]').getAttribute('opacity')),first);
+    assert.equal(Number(await story.locator('[data-anim="signatureSecond"]').getAttribute('opacity')),second);
+   }
+   for(const [label,time] of [['checkout',0],['private-email',5.8],['complete',12]]){
     await story.evaluate((el,t)=>el.seek(t),time);await page.waitForTimeout(80);await fit(page);
     if(name==='Pixel'||label==='complete')await page.screenshot({path:`${out}/${name}-${label}.png`});
    }
    assert.equal(await story.locator('[data-anim="emailUser"]').textContent(),'username@');
    assert.equal(await story.locator('[data-anim="emailDomain"]').textContent(),'in.receiptit.app');
    assert.equal(await story.locator('[data-anim="signature"]').getAttribute('opacity'),'1');
+   assert.ok(await story.locator('[data-anim="signatureSecond"]').evaluate(el=>{const b=el.getBBox();return b.x>=0&&b.x+b.width<=390;}),'Larger closing text fits the artwork');
    await page.locator('main').evaluate(el=>el.scrollTo({top:el.scrollHeight,behavior:'instant'}));
    const lower=await story.boundingBox(),cta=await page.getByRole('button',{name:'Continue',exact:true}).boundingBox();assert.ok(lower.y+lower.height<=cta.y,'Entire story scrolls clear of Continue');
    await continueToSignup(page);

@@ -32,7 +32,7 @@ const smooth=(t,a,b)=>{const v=clamp((t-a)/(b-a));return v*v*(3-2*v);};
 class ReceiptItStory extends HTMLElement {
  static get observedAttributes(){return ['variant','layout','mode'];}
  constructor(){super();this.attachShadow({mode:'open'});this._time=0;this._playing=false;this._frame=0;this._manual=false;this._visible=true;this._media=matchMedia('(prefers-reduced-motion: reduce)');this._onMedia=()=>{if(this._media.matches)this.pause();this.renderFrame();if(!this._media.matches&&!this._manual)this.play();};this._onVisibility=()=>{this._last=null;};}
- get duration(){return this.getAttribute('variant')==='compact'?10:13;}
+ get duration(){return this.getAttribute('variant')==='compact'?10:15.5;}
  get currentTime(){return this._time;}
  get paused(){return !this._playing;}
  connectedCallback(){this.setAttribute('role','img');this._media.addEventListener('change',this._onMedia);document.addEventListener('visibilitychange',this._onVisibility);this._resize=new ResizeObserver(()=>this.build());this._resize.observe(this);this._intersection=new IntersectionObserver(entries=>{this._visible=entries[0].isIntersecting;this._last=null;});this._intersection.observe(this);this.build();fontsReady.then(()=>{if(this.isConnected&&!this._manual)this.play();}).catch(()=>{});}
@@ -53,7 +53,7 @@ class ReceiptItStory extends HTMLElement {
   this._slot=slot;this._compact=compact;this._layout=layout;this._W=W;this._H=H;this._cardY=cardY;this._paperY=slot?288:compact?252:318+(coreH-800)*.15;this._retailBottom=slot?278:compact?228:294;
   this.setAttribute('aria-label',`Order complete at Northbridge Tech. Headphones cost £129.99. In the receipt email field, the example username@gmail.com is typed. Only gmail.com is erased, keeping username@, then in.receiptit.app is typed in teal. Only the receiptIt address is confirmed for sending. A paper receipt travels down and becomes a saved purchase in receiptIt, with the original receipt retained. ${compact?'':'Personal data protected, while giving you more from your purchases.'} Illustrative addresses and purchase.`);
   const signatureY=slot?16:mobile?26:investor?88:44;
-  const signature=`${txt(W/2,signatureY,'Personal data protected,',mobile?14:20,'#edf1ef','text-anchor="middle"')}${txt(W/2,signatureY+(slot?22:mobile?26:31),'while giving you <tspan fill="#5eead4">more from your purchases.</tspan>',mobile?14:20,'#edf1ef','text-anchor="middle"')}`;
+  const signature=`${txt(W/2,signatureY,'Personal data protected,',mobile?15:22,'#edf1ef','text-anchor="middle" data-anim="signatureFirst"')}${txt(W/2,signatureY+(slot?24:mobile?28:33),'while giving you <tspan fill="#5eead4">more from your purchases.</tspan>',mobile?15:22,'#edf1ef','text-anchor="middle" data-anim="signatureSecond"')}`;
   this.shadowRoot.innerHTML=`<style>
    :host{display:block;width:100%;height:100%;min-width:0;background:#000;contain:layout paint}
    svg.master{display:block;width:100%;height:100%;font-family:'JetBrains Mono',monospace;isolation:isolate;-webkit-font-smoothing:antialiased}
@@ -116,7 +116,7 @@ class ReceiptItStory extends HTMLElement {
   </g>
   <g data-anim="proof">${txt(66,this._slot?222:241,'Original receipt saved',12,'#b3beb9')}</g>
  </g></g>`;}
- renderFrame(){if(!this._nodes)return;const compact=this._compact,fixed=this._media.matches||['static','investor'].includes(this.getAttribute('mode'));const t=fixed?(compact?8.5:10.8):this._time,end=this.duration;
+ renderFrame(){if(!this._nodes)return;const compact=this._compact,fixed=this._media.matches||['static','investor'].includes(this.getAttribute('mode'));const t=fixed?(compact?8.5:12):this._time,end=this.duration;
   const reset=1-smooth(t,end-.18,end),op=(name,v)=>this._nodes[name]?.setAttribute('opacity',clamp(v));
   const a=compact?{normal:[.9,2.0],erase:[2.2,3.05],domain:[3.18,4.15],confirm:[4.15,4.55],send:4.32,travel:[4.65,5.0],unfold:[4.8,5.4],surface:[5.9,6.4],store:[5.95,6.6],core:[6.2,6.6],proof:[6.5,6.8]}:{normal:[1.6,2.85],erase:[3.1,4.15],domain:[4.3,5.3],confirm:[5.3,5.7],send:5.55,travel:[5.9,6.28],unfold:[6.05,6.7],surface:[7.4,8.15],store:[7.45,8.35],core:[8.0,8.65],proof:[8.5,8.8]};
   // Add a half-second after the complete address, preserving the final hold.
@@ -142,7 +142,9 @@ class ReceiptItStory extends HTMLElement {
   const targetCY=this._cardY+(this._slot?217:236),targetCX=54,currentCX=195+(targetCX-195)*store,currentCY=cy+(targetCY-cy)*store;
   op('paper',paperOpacity);this._nodes.paper.setAttribute('transform',`translate(${currentCX-112*paperScale} ${currentCY-127*paperScale}) scale(${paperScale})`);
   const surface=smooth(t,...a.surface);op('card',surface*reset);this._nodes.surface.setAttribute('x',(350-(224+126*surface))/2);this._nodes.surface.setAttribute('width',224+126*surface);
-  op('added',smooth(t,a.surface[0]+.25,a.surface[1]));op('core',smooth(t,...a.core));op('proof',smooth(t,...a.proof));op('signature',smooth(t,9.7,9.85)*reset);
+  op('added',smooth(t,a.surface[0]+.25,a.surface[1]));op('core',smooth(t,...a.core));op('proof',smooth(t,...a.proof));
+  // Reveal each closing line gently in sequence, then hold both before looping.
+  op('signature',reset);op('signatureFirst',smooth(t,9.7,10.35));op('signatureSecond',smooth(t,10.55,11.3));
  }
 }
 customElements.define('receiptit-story',ReceiptItStory);

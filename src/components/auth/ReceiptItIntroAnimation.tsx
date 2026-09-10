@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Pause, Play } from 'lucide-react';
 
 type StoryElement = HTMLElement & { readonly paused: boolean; play(): void; pause(): void };
-const animationModule = '/intro/revision-05/receiptit-story.js';
+const animationModule = '/intro/revision-05/receiptit-story.js?v=6';
 const fallbackDescription = 'Illustration: use a receiptIt email at checkout instead of your personal email. The purchase and original receipt are saved in receiptIt.';
 
 export function ReceiptItIntroAnimation() {
@@ -56,7 +56,7 @@ export function ReceiptItIntroAnimation() {
   return (
     <div className="mx-auto w-full max-w-[412px]">
       <div className="relative aspect-[390/540] w-full bg-black">
-        <img src="/intro/revision-05/signup-slot-static.png" alt={animated ? '' : fallbackDescription}
+        <img src="/intro/revision-05/signup-slot-static-v6.png" alt={animated ? '' : fallbackDescription}
           aria-hidden={animated || undefined} width={780} height={1080}
           className={`absolute inset-0 h-full w-full object-contain ${animated ? 'invisible' : ''}`} />
         <div ref={host} className="absolute inset-0" />
