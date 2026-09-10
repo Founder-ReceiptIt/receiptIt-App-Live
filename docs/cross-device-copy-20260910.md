@@ -53,3 +53,17 @@ TypeScript, production build, responsive guard, analytics consistency,
 Scan/multi-image and async/document-review checks pass. ESLint: zero errors,
 three existing unrelated AuthContext/ToastContext warnings. The existing bundle
 size advisory remains. Old copy assertions were updated, not removed.
+
+## Production verification
+
+Application commit: `1a7aeda5`. Production deployment succeeded:
+https://vercel.com/receiptits-projects/receipt-it-app-live/5gWDsasm3vaTPgYhyFFa47oHqQHC
+The published application was retested at all six viewports with isolated data;
+all passed. Evidence: `output/cross-device-copy/production/results.json` and
+the corresponding Wallet/Email screenshots. September/October values, clipboard
+copy and absence of the old footer/desktop labels were checked again.
+
+The bottom-clearance test explicitly scrolls to the end of the document:
+scrollIntoViewIfNeeded does not account for fixed navigation covering an element
+that is already inside the viewport. Full scroll verified that the content is
+reachable; no app navigation or spacing change was required.

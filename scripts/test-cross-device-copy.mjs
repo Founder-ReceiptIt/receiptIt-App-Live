@@ -65,7 +65,9 @@ try{
   }
   await fits(page);await page.waitForTimeout(400);await page.screenshot({path:`${out}/email-${name}.png`,fullPage:true});
   if(phase!=='before'){
-   await page.getByText(secondCopy,{exact:true}).scrollIntoViewIfNeeded();
+   // An element can be inside the viewport yet behind fixed navigation;
+   // scrollIntoViewIfNeeded alone does not test whether it is reachable.
+   await page.evaluate(()=>window.scrollTo({top:document.documentElement.scrollHeight,behavior:'instant'}));
    const textBox=await page.getByText(secondCopy,{exact:true}).boundingBox();
    const nav=await page.locator('nav').last().boundingBox();
    if(width<768&&nav)assert.ok(textBox.y+textBox.height<=nav.y,'Final supporting copy clears fixed navigation');
