@@ -3,6 +3,11 @@
 # signature and five-minute timestamp before reading any message data.
 verify_jwt = false
 
+[functions.delete-receipt]
+# Owner requests are verified with Auth.getUser and deleted under their own JWT.
+# Scheduled cleanup has a separate narrow credential and cannot delete rows.
+verify_jwt = false
+
 [auth]
 # Password recovery and other Auth links must return to the live ReceiptIt app.
 site_url = "https://www.receiptit.app"

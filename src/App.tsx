@@ -238,6 +238,7 @@ function App() {
                   >
                     <ScanTab
                       onNavigateToWallet={() => handleTabChange('wallet')}
+                      onOpenReceipt={handleOpenReceiptFromActivity}
                       quickScanRequestId={quickScanRequestId}
                       onQuickScanHandled={handleQuickScanHandled}
                     />

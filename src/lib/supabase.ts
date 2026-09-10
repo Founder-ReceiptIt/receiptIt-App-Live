@@ -1,5 +1,4 @@
 import { createClient } from '@supabase/supabase-js';
-import { getReceiptOriginalStoragePath } from './receiptOriginalPathUtils';
 import { startupFetch } from './startupNetwork';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -282,48 +281,17 @@ export const markReceiptProcessingTimedOut = async (receiptId: string) => supaba
 
 export const deleteReceiptRecord = async ({
   receiptId,
-  storagePath,
-  imageUrl,
 }: {
   receiptId: string,
   storagePath?: string | null,
   imageUrl?: string | null,
 }) => {
-  const removableStoragePath = getReceiptOriginalStoragePath({ storagePath, imageUrl });
-
-  const { data: evidenceRows, error: evidenceError } = await supabase
-    .from('receipt_evidence_versions')
-    .select('storage_path')
-    .eq('receipt_id', receiptId);
-
-  if (evidenceError) {
-    console.warn('[DeleteReceiptRecord] Evidence history lookup failed; receipt retained:', evidenceError);
-    return { data: null, error: evidenceError };
-  }
-
-  const removableStoragePaths = Array.from(new Set([
-    removableStoragePath,
-    ...(evidenceRows || []).map((row) => (
-      typeof row.storage_path === 'string' ? row.storage_path : null
-    )),
-  ].filter((path): path is string => Boolean(path))));
-
-  if (removableStoragePaths.length > 0) {
-    const { error: storageError } = await supabase
-      .storage
-      .from('receipts')
-      .remove(removableStoragePaths);
-
-    if (storageError) {
-      console.warn('[DeleteReceiptRecord] Storage deletion failed; receipt retained:', storageError);
-      return { data: null, error: storageError };
-    }
-  }
-
-  return supabase
-    .from('receipts')
-    .delete()
-    .eq('id', receiptId);
+  // The server derives paths from owned rows, commits DB deletion first, then
+  // drains a durable cleanup queue. Never remove originals before a failed FK.
+  const result = await supabase.functions.invoke<{ success: boolean; cleanupPending?: boolean }>('delete-receipt', {
+    body: { receiptId },
+  });
+  return { data: result.data, error: result.error || (result.data?.success ? null : new Error('Receipt deletion was not confirmed')) };
 };
 
 export const recordReceiptOriginalView = async (receiptId: string) => supabase

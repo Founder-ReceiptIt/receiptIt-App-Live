@@ -1289,7 +1289,7 @@ export function WalletTab({
               <div className="shrink-0 rounded-xl border border-amber-300/25 bg-amber-400/10 p-2.5"><CopyCheck className="h-5 w-5 text-amber-200" strokeWidth={1.7} /></div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-200">Possible duplicate</p>
-                <h2 className="mt-1 break-words text-lg font-bold text-white">This looks similar to a receipt already saved.</h2>
+                <h2 className="mt-1 break-words text-lg font-bold text-white">This might already be saved</h2>
                 <p className="mt-1 text-sm leading-6 text-gray-400">Nothing has been removed. Compare the existing receipt or keep this as a separate purchase.</p>
                 <div className="mt-4 grid gap-2 min-[520px]:grid-cols-3">
                   <button type="button" onClick={() => onReceiptClick(possibleDuplicate.existing!)} className="min-h-11 rounded-xl border border-white/15 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/5">View existing</button>
