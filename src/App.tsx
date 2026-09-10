@@ -75,12 +75,7 @@ function App() {
   }, []);
 
   const handleQuickScan = useCallback(() => {
-    if (!window.matchMedia('(max-width: 1023px)').matches) {
-      handleTabChange('scan');
-      return;
-    }
-    // Mount the existing capture input inside this user tap. Waiting for the
-    // Wallet exit animation loses native camera activation on some phones.
+    // Open the shared camera view from this deliberate tap on every screen size.
     flushSync(() => {
       setQuickScanRequestId((currentRequestId) => currentRequestId + 1);
       handleTabChange('scan');

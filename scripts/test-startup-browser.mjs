@@ -26,12 +26,10 @@ for(const [name,width,height,mobile] of [['Small',320,568,true],['Pixel',393,873
  const button=page.getByRole('button',{name:mobile?'Quick scan':'Scan receipt',exact:true});
  await button.waitFor({timeout:15000});
  let chooserCount=0;page.on('filechooser',()=>chooserCount++);
- if(mobile){
-   const [chooser]=await Promise.all([page.waitForEvent('filechooser',{timeout:5000}),button.click()]);
-   assert.equal(await chooser.element().getAttribute('capture'),'environment');
-   assert.equal(chooser.isMultiple(),false);
-   await chooser.setFiles([]);
- }else{await button.click();await page.waitForTimeout(500);assert.equal(chooserCount,0);}
+ await button.click();
+ await page.getByRole('dialog',{name:'Receipt camera',exact:true}).waitFor();
+ assert.equal(chooserCount,0,'Quick scan must never launch a file chooser');
+ await page.getByRole('button',{name:'Close camera',exact:true}).click();
  await page.getByRole('heading',{name:'Add receipt',exact:true}).waitFor();
  await page.getByRole('button',{name:'Upload from device',exact:true}).waitFor({timeout:5000});
  assert.equal(await page.getByText('Uploading receipt...', {exact:true}).count(),0);
@@ -45,7 +43,7 @@ for(const [name,width,height,mobile] of [['Small',320,568,true],['Pixel',393,873
  assert.equal(await captureInput.evaluate(el=>el.isConnected),true,'Session refresh must not remount the capture flow');
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  await page.screenshot({path:`/tmp/receiptit-startup-v3-scan-${name}.png`});
- console.log('PASS',name,mobile?'Wallet camera input opened from the tap; existing Scan flow retained':'desktop opens full Scan without forcing camera');
+ console.log('PASS',name,'Wallet opens shared camera directly without file chooser; cancellation and session refresh retain Scan');
  await page.getByRole('button',{name:'Settings',exact:true}).click();
  await page.getByRole('button',{name:'Sign out',exact:true}).click();
  await page.getByRole('button',{name:'Sign in',exact:true}).waitFor();

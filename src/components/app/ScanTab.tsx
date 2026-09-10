@@ -12,6 +12,7 @@ import {
 } from '../../lib/uploadValidation';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+import { ReceiptCamera } from './ReceiptCamera';
 import { consumeReceiptSectionCaptureRequest } from '../../lib/receiptCaptureUtils';
 import {
   clearShareTargetLocation,
@@ -192,6 +193,7 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
     productionQaMode ? 'checking' : 'inactive',
   );
   const [scanState, setScanState] = useState<ScanState>('idle');
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedImageFiles, setSelectedImageFiles] = useState<File[]>([]);
   const [isCombiningImages, setIsCombiningImages] = useState(false);
@@ -394,19 +396,9 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
       return;
     }
 
-    pickerOpenedThisMountRef.current = true;
     pickerModeRef.current = 'camera';
-    localStorage.setItem('isScanning', 'true');
-    localStorage.setItem('scanningSource', 'camera');
-
-    if (fileInputRef.current) {
-      fileInputRef.current.removeAttribute('multiple');
-      fileInputRef.current.setAttribute('capture', 'environment');
-      fileInputRef.current.click();
-    }
-
-    // Keep the camera hint stable for the native picker. The explicit upload
-    // action below switches back to multi-file mode when the user chooses it.
+    clearScanningStorage();
+    setCameraOpen(true);
   }, [productionQaBlocked, showToast]);
 
   const openFilePicker = () => {
@@ -430,13 +422,6 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
     handledQuickScanRequestRef.current = quickScanRequestId;
     onQuickScanHandled?.();
 
-    // A Wallet Quick Scan originates from a real user tap. Reuse that short-lived
-    // browser activation when the platform still exposes it; otherwise leave the
-    // normal Scan screen visible rather than attempting a fragile camera hack.
-    if (navigator.userActivation && !navigator.userActivation.isActive) {
-      return;
-    }
-
     openCameraPicker();
   }, [onQuickScanHandled, openCameraPicker, quickScanRequestId, scanState]);
 
@@ -446,15 +431,19 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
     e.stopPropagation();
 
     const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    const pickerMode: ReceiptPickerMode = localStorage.getItem('scanningSource') === 'camera'
+      ? 'camera'
+      : pickerModeRef.current;
+    await handleSelectedFiles(files, pickerMode);
+  };
+
+  const handleSelectedFiles = async (files: File[], pickerMode: ReceiptPickerMode) => {
     if (productionQaBlocked) {
-      e.target.value = '';
       showToast('Production test blocked', 'This account is not approved for production fixtures.');
       return;
     }
     const file = files[0];
-    const pickerMode: ReceiptPickerMode = localStorage.getItem('scanningSource') === 'camera'
-      ? 'camera'
-      : pickerModeRef.current;
     if (!file || (isScanningRef.current && !restoredPickerRef.current)) {
       console.log('[ScanTab] File selection blocked - already scanning or no file');
       // Clear localStorage if no file selected (user cancelled)
@@ -465,9 +454,6 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
     console.log('[ScanTab] File selection accepted:', { type: file.type, size: file.size, count: files.length });
     restoredPickerRef.current = false;
     clearScanningStorage();
-
-    // Reset the input immediately to prevent re-triggering
-    e.target.value = '';
 
     // Block a second selection while deterministic file validation is running.
     isScanningRef.current = true;
@@ -1147,6 +1133,7 @@ export function ScanTab({ onNavigateToWallet, quickScanRequestId = 0, onQuickSca
 
   return (
     <div className="ri-mobile-page ri-page-height mx-auto min-w-0 max-w-7xl px-4 pt-8 sm:px-6">
+      {cameraOpen && <ReceiptCamera onClose={() => { setCameraOpen(false); clearScanningStorage(); }} onCapture={file => { setCameraOpen(false); void handleSelectedFiles([file], 'camera'); }} />}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
