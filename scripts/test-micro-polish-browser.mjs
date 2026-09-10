@@ -75,9 +75,16 @@ for(const [name,width,height,mobile] of [['Small',320,568,true],['Android',360,6
  await page.goto(base+'/#alias');await page.getByRole('heading',{name:phase==='before'?'Your private receipt email':'Your new private email',exact:true}).waitFor();await page.waitForTimeout(300);await fit(page,name+' Email');
  if(phase!=='before')assert.equal(await page.getByText(/Use this when a shop asks/).count(),0);
  await page.screenshot({path:out+'/email-'+name+'.png',fullPage:true});await context.close();
- const introContext=await contextFor(width,height,mobile,true);const intro=await introContext.newPage();await intro.goto(base+'/signup');await intro.getByRole('heading',{name:/Everything after the purchase/}).waitFor();
- await intro.getByText('Use it later',{exact:true}).scrollIntoViewIfNeeded();await intro.waitForTimeout(300);await fit(intro,name+' Intro');
- if(phase!=='before')await intro.getByText('Proof of purchase',{exact:true}).waitFor();
+ const introContext=await contextFor(width,height,mobile,true);const intro=await introContext.newPage();await intro.goto(base+'/signup');
+ if(phase==='before'){
+  await intro.getByRole('heading',{name:/Everything after the purchase/}).waitFor();
+  await intro.getByText('Use it later',{exact:true}).scrollIntoViewIfNeeded();
+ }else{
+  await intro.getByRole('heading',{name:'receiptIt',exact:true}).waitFor();
+  await intro.getByRole('button',{name:'Continue',exact:true}).waitFor();
+  assert.equal(await intro.getByText(/Everything after the purchase/).count(),0);
+ }
+ await intro.waitForTimeout(300);await fit(intro,name+' Intro');
  await intro.screenshot({path:out+'/intro-'+name+'.png',fullPage:true});await introContext.close();
  console.log('PASS',phase,name,'Wallet/detail both, warranty-only, return-only, neither, urgent/expired; Email; Intro');
 }
