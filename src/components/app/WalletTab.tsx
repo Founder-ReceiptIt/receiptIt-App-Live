@@ -897,6 +897,7 @@ export function WalletTab({
   }, [receipts, accountCurrency.preferredCurrency, analyticsConversionKey]);
 
   const currentMonthKey = getCurrentCalendarMonthKey();
+  const currentMonthLabel = new Date(`${currentMonthKey}-01T12:00:00`).toLocaleDateString('en-GB', { month: 'long' });
   const walletAnalyticsReceipts = visibleReceipts.map((receipt) => ({
     id: receipt.id,
     amount: receipt.amountKnown ? receipt.amount : null,
@@ -1266,8 +1267,7 @@ export function WalletTab({
               className="col-start-2 row-start-1 inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-teal-400 px-3 text-sm font-bold text-black shadow-[0_10px_30px_rgba(45,212,191,0.12)] transition-colors hover:bg-teal-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-200 focus-visible:ring-offset-2 focus-visible:ring-offset-black sm:gap-2 sm:px-4 md:col-start-3"
             >
               <ScanLine className="h-5 w-5" strokeWidth={1.8} />
-              <span className="lg:hidden">Quick scan</span>
-              <span className="hidden lg:inline">Scan receipt</span>
+              <span>Quick scan</span>
             </motion.button>
         </div>
 
@@ -1302,7 +1302,7 @@ export function WalletTab({
         ) : null}
 
         <div className="mb-4 rounded-2xl border border-teal-300/25 bg-gradient-to-br from-teal-400/15 to-cyan-400/5 p-4 sm:p-5" aria-busy={!analyticsAmountsReady}>
-          <div className="flex min-w-0 items-start gap-3"><div className="shrink-0 rounded-xl border border-teal-300/20 bg-teal-400/10 p-2.5"><ShieldCheck className="h-5 w-5 text-teal-200" strokeWidth={1.5} /></div><div className="min-w-0 flex-1"><div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3"><div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-teal-200 sm:text-xs sm:tracking-[0.16em]">This month</p><p className="mt-1 break-words text-lg font-bold text-white min-[380px]:text-xl sm:text-2xl">{analyticsAmountsReady ? `${formatCurrency(spentThisMonth, accountCurrency.preferredCurrency)} spent` : 'Calculating…'}</p></div><div className="min-w-0 text-right"><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400 sm:text-xs sm:tracking-[0.14em]">Average purchase</p><p className="mt-1 break-words text-base font-bold text-white sm:text-lg">{analyticsAmountsReady ? formatCurrency(averagePurchaseThisMonth, accountCurrency.preferredCurrency) : '—'}</p></div></div>{monthlyBudget ? <><p className="mt-3 text-sm text-gray-300">of {formatCurrency(monthlyBudget, accountCurrency.preferredCurrency, { maximumFractionDigits: 0, minimumFractionDigits: 0 })} budget</p><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">{analyticsAmountsReady ? <div className="h-full rounded-full bg-teal-400 transition-[width] duration-300" style={{ width: `${budgetProgress}%` }} /> : null}</div>{analyticsAmountsReady ? <p className="mt-1.5 text-xs text-gray-400">{budgetUsed.toFixed(1)}% used</p> : null}</> : null}{analyticsAmountsReady && excludedThisMonthCount > 0 ? <p className="mt-3 text-xs text-amber-100">{excludedThisMonthCount === 1 ? 'One purchase couldn’t be included in this total.' : `${excludedThisMonthCount} purchases couldn’t be included in this total.`}</p> : null}</div></div>
+          <div className="flex min-w-0 items-start gap-3"><div className="shrink-0 rounded-xl border border-teal-300/20 bg-teal-400/10 p-2.5"><ShieldCheck className="h-5 w-5 text-teal-200" strokeWidth={1.5} /></div><div className="min-w-0 flex-1"><div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3"><div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-teal-200 sm:text-xs sm:tracking-[0.16em]">{currentMonthLabel} spend</p><p className="mt-1 break-words text-lg font-bold text-white min-[380px]:text-xl sm:text-2xl">{analyticsAmountsReady ? formatCurrency(spentThisMonth, accountCurrency.preferredCurrency) : 'Calculating…'}</p></div><div className="min-w-0 text-right"><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400 sm:text-xs sm:tracking-[0.14em]">Average purchase</p><p className="mt-1 break-words text-base font-bold text-white sm:text-lg">{analyticsAmountsReady ? formatCurrency(averagePurchaseThisMonth, accountCurrency.preferredCurrency) : '—'}</p></div></div>{monthlyBudget ? <><p className="mt-3 text-sm text-gray-300">of {formatCurrency(monthlyBudget, accountCurrency.preferredCurrency, { maximumFractionDigits: 0, minimumFractionDigits: 0 })} budget</p><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">{analyticsAmountsReady ? <div className="h-full rounded-full bg-teal-400 transition-[width] duration-300" style={{ width: `${budgetProgress}%` }} /> : null}</div>{analyticsAmountsReady ? <p className="mt-1.5 text-xs text-gray-400">{budgetUsed.toFixed(1)}% used</p> : null}</> : null}{analyticsAmountsReady && excludedThisMonthCount > 0 ? <p className="mt-3 text-xs text-amber-100">{excludedThisMonthCount === 1 ? 'One purchase couldn’t be included in this total.' : `${excludedThisMonthCount} purchases couldn’t be included in this total.`}</p> : null}</div></div>
         </div>
 
 

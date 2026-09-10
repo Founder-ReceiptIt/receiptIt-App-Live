@@ -66,8 +66,8 @@ const wallet = files['src/components/app/WalletTab.tsx'];
 const receiptAmountState = files['src/lib/receiptAmountState.ts'];
 check(wallet.includes('onClick={onNavigateToScan}') && wallet.includes('Quick scan'), 'Wallet must retain an explicit one-tap camera action');
 check(wallet.includes('onClick={onNavigateToScan}'), 'Wallet Quick Scan must reuse the existing Scan route');
-check(wallet.includes('<span className="lg:hidden">Quick scan</span>'), 'Wallet must label the mobile camera shortcut Quick scan');
-check(wallet.includes('<span className="hidden lg:inline">Scan receipt</span>'), 'Wallet must retain the desktop Scan receipt label');
+check(wallet.includes('<span>Quick scan</span>') && !wallet.includes('<span className="hidden lg:inline">Scan receipt</span>'), 'Wallet must share the Quick scan label across desktop and mobile');
+check(wallet.includes('{currentMonthLabel} spend') && !wallet.includes('} spent`'), 'Wallet must use the dynamic month heading without an amount suffix');
 check(wallet.includes('placeholder="Search receipts"'), 'Wallet must retain the concise receipt search control');
 check(wallet.includes('grid-cols-[minmax(0,1fr)_auto]'), 'Wallet Search and Scan controls must share a compact responsive row');
 check(!wallet.includes('Your purchases, in one place.'), 'the obsolete Wallet subtitle must not return');
@@ -107,7 +107,7 @@ check(alias.includes('Your new private email'), 'Alias page must use the approve
 check(!alias.includes('Use this when a shop asks'), 'Alias page must not restore the removed explanatory subheading');
 check(alias.includes('Copy email'), 'Alias page must use the approved Copy email action');
 check(!alias.includes('Why use this?'), 'the repetitive private-email callout must stay removed');
-check(alias.includes('At checkout') && alias.includes('Forward a receipt'), 'the private-email page must retain its two concise usage examples');
+check(alias.includes('Stop the spam') && alias.includes('Send receipts here') && (alias.match(/<h2 /g) || []).length === 2 && !alias.includes('Keeps your main inbox'), 'the private-email page must contain exactly the two current supporting sections without a redundant footer');
 check(topNav.includes("label: 'Receipt email'"), 'desktop navigation must use consumer-facing Receipt email terminology');
 check(bottomNav.includes("label: 'Email'"), 'mobile navigation must use the concise Email label');
 

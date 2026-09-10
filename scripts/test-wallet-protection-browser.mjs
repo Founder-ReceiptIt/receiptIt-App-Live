@@ -59,7 +59,7 @@ for(const [name,width,height,mobile] of [['Small',320,568,true],['Android',360,6
   assert.deepEqual(await categoryRow.getByRole('button').allTextContents(),['All','Tech','Groceries','Transport','Other']);
   const filterRow=page.getByRole('group',{name:'Warranty and return filters',exact:true});
   assert.equal(await filterRow.getByRole('button').count(),2);
-  const geometry=await Promise.all([categoryRow,warranty,returns,page.getByRole('heading',{name:'Receipts',exact:true}),page.getByRole('button',{name:mobile?'Quick scan':'Scan receipt',exact:true}),page.getByRole('searchbox',{name:'Search receipts',exact:true})].map(el=>el.boundingBox()));
+  const geometry=await Promise.all([categoryRow,warranty,returns,page.getByRole('heading',{name:'Receipts',exact:true}),page.getByRole('button',{name:'Quick scan',exact:true}),page.getByRole('searchbox',{name:'Search receipts',exact:true})].map(el=>el.boundingBox()));
   const [categoryBox,warrantyBox,returnBox,headingBox,scanBox,searchBox]=geometry;
   assert.ok(warrantyBox.y>=categoryBox.y+categoryBox.height,'Protection filters below categories');
   assert.equal(warrantyBox.y,returnBox.y,'Protection filters stay together');
