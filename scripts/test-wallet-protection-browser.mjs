@@ -5,7 +5,7 @@ const {chromium}=await import(process.env.RECEIPTIT_BROWSER_MODULE || 'playwrigh
 const base=process.env.TEST_URL||'http://127.0.0.1:5173';
 const phase=process.env.QA_PHASE||'after';
 const protection=(page,name)=>phase==='before'?page.getByText(name,{exact:true}):page.getByRole('group',{name,exact:true});
-const out=process.env.QA_OUTPUT_DIR || process.cwd()+'/output/micro-polish-email-warranty/'+phase;
+const out=process.env.QA_OUTPUT_DIR || process.cwd()+'/output/wallet-protection-composition/'+phase;
 await mkdir(out,{recursive:true});
 const browser=await chromium.launch({headless:true,channel:'chrome'});
 const user={id:'00000000-0000-4000-8000-000000000001',aud:'authenticated',role:'authenticated',email:'isolated-browser@example.invalid',app_metadata:{provider:'email'},user_metadata:{},created_at:'2026-01-01T00:00:00Z'};
@@ -46,9 +46,28 @@ for(const [name,width,height,mobile] of [['Small',320,568,true],['Android',360,6
  await fit(page,name+' Wallet');
  const card=page.getByRole('button').filter({has:page.getByRole('heading',{name:'Northbridge Tech',exact:true})});
  if(phase!=='before'){await card.getByLabel('Warranty active').waitFor();await card.getByText('Return: 27 days left',{exact:true}).waitFor();}
+ console.log('METRICS',phase,name,JSON.stringify(await card.evaluate(el=>({cardHeight:el.parentElement.getBoundingClientRect().height,listTop:el.parentElement.getBoundingClientRect().top+scrollY}))));
+ await page.screenshot({path:out+'/wallet-default-'+name+'.png'});
+ if(phase!=='before'){
+  const warranty=page.getByRole('button',{name:'Active warranties',exact:true});
+  const returns=page.getByRole('button',{name:'Open return windows',exact:true});
+  await warranty.click();assert.equal(await warranty.getAttribute('aria-pressed'),'true');
+  assert.equal(await page.getByRole('heading',{name:'Returns only',exact:true}).count(),0);
+  await page.waitForTimeout(400);await page.screenshot({path:out+'/wallet-warranty-filter-'+name+'.png'});
+  await returns.click();assert.equal(await warranty.getAttribute('aria-pressed'),'false');assert.equal(await returns.getAttribute('aria-pressed'),'true');
+  assert.equal(await page.getByRole('heading',{name:'Warranty only',exact:true}).count(),0);
+  await page.waitForTimeout(400);await page.screenshot({path:out+'/wallet-return-filter-'+name+'.png'});
+  await returns.click();assert.equal(await returns.getAttribute('aria-pressed'),'false');
+  const search=page.getByRole('searchbox',{name:'Search receipts',exact:true});
+  await search.fill('Neither');await warranty.click();assert.equal(await page.getByRole('heading',{name:'Northbridge Tech',exact:true}).count(),0);
+  await search.fill('');await warranty.click();
+  await page.getByRole('button',{name:'Technology',exact:true}).click();await returns.click();assert.equal(await page.getByRole('heading',{name:'Returns only',exact:true}).count(),1);
+  await returns.click();await page.getByRole('button',{name:'All',exact:true}).click();
+ }
  await card.evaluate(el=>el.scrollIntoView({block:'center',behavior:'instant'}));await page.waitForTimeout(300);
  await page.screenshot({path:out+'/wallet-'+name+'.png'});
  await card.click();await page.getByRole('button',{name:'Close receipt',exact:true}).waitFor();
+ if(phase!=='before')assert.equal(await protection(page,'Warranty').evaluate(el=>Boolean(document.querySelector('h4')?.compareDocumentPosition(el)&Node.DOCUMENT_POSITION_FOLLOWING)),true,'Protection below Items & payment');
  await protection(page,'Warranty').evaluate(el=>el.closest('section').scrollIntoView({block:'center',behavior:'instant'}));await page.waitForTimeout(500);await fit(page,name+' Detail');
  await page.screenshot({path:out+'/detail-'+name+'.png'});
  await page.getByRole('button',{name:'Close receipt',exact:true}).click();
@@ -72,13 +91,15 @@ for(const [name,width,height,mobile] of [['Small',320,568,true],['Android',360,6
   }
   await page.getByRole('button',{name:'Close receipt',exact:true}).click();
  }
- await page.goto(base+'/#alias');await page.getByRole('heading',{name:phase==='before'?'Your private receipt email':'Your new private email',exact:true}).waitFor();await page.waitForTimeout(300);await fit(page,name+' Email');
- if(phase!=='before')assert.equal(await page.getByText(/Use this when a shop asks/).count(),0);
- await page.screenshot({path:out+'/email-'+name+'.png',fullPage:true});await context.close();
- const introContext=await contextFor(width,height,mobile,true);const intro=await introContext.newPage();await intro.goto(base+'/signup');await intro.getByRole('heading',{name:/Everything after the purchase/}).waitFor();
- await intro.getByText('Use it later',{exact:true}).scrollIntoViewIfNeeded();await intro.waitForTimeout(300);await fit(intro,name+' Intro');
- if(phase!=='before')await intro.getByText('Proof of purchase',{exact:true}).waitFor();
- await intro.screenshot({path:out+'/intro-'+name+'.png',fullPage:true});await introContext.close();
- console.log('PASS',phase,name,'Wallet/detail both, warranty-only, return-only, neither, urgent/expired; Email; Intro');
+ if(phase!=='before'){
+  const dates=rows.map(r=>[r.warranty_date,r.return_date]);
+  rows.forEach(r=>{r.warranty_date=null;r.return_date=null;});
+  await page.reload();await page.getByRole('heading',{name:'Northbridge Tech',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Active warranties',exact:true}).click();await page.getByRole('heading',{name:'No active warranties',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Open return windows',exact:true}).click();await page.getByRole('heading',{name:'No active return windows',exact:true}).waitFor();
+  rows.forEach((r,i)=>{[r.warranty_date,r.return_date]=dates[i];});
+ }
+ await context.close();
+ console.log('PASS',phase,name,'Wallet filters, search/category composition, protection placement and variant rendering');
 }
 await browser.close();

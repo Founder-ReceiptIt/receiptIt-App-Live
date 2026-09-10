@@ -1,8 +1,10 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Receipt as ReceiptIcon, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Loader2, Car, Home, Plane, Zap, Utensils, Undo2, Trash2, CheckSquare, Square, ChevronDown, Download, AlertCircle, Shield, ShieldCheck, AtSign, ScanLine, CopyCheck } from 'lucide-react';
+import { Receipt as ReceiptIcon, Laptop, Coffee, Shirt, Search, X, ShoppingBag, Loader2, Car, Home, Plane, Zap, Utensils, Trash2, CheckSquare, Square, ChevronDown, Download, AlertCircle, ShieldCheck, AtSign, ScanLine, CopyCheck } from 'lucide-react';
+import { ProtectionBadge } from './PurchaseProtection';
 import type { LucideIcon } from 'lucide-react';
 import { Fragment, useState, useEffect, useRef } from 'react';
 import { ReportProblemDialog } from './ReportProblemDialog';
+import { PurchaseProtectionFilter } from './PurchaseProtectionFilter';
 import {
   confirmReceiptCurrency,
   deleteReceiptRecord,
@@ -1227,8 +1229,18 @@ export function WalletTab({
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
         <div className="mb-5 flex min-w-0 flex-col gap-3 md:flex-row md:items-end md:justify-between md:gap-6">
-          <h1 className="min-w-0 text-3xl font-bold text-white">Receipts</h1>
-          <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2 md:max-w-2xl">
+          <div className="flex min-w-0 items-center justify-between gap-3">
+            <h1 className="min-w-0 text-3xl font-bold text-white">Receipts</h1>
+            <div className="flex shrink-0 gap-2 md:hidden">
+              <PurchaseProtectionFilter kind="warranty" active={warrantyFilterActive} count={warrantyReceipts.length} onToggle={() => { setWarrantyFilterActive(!warrantyFilterActive); setReturnFilterActive(false); }} />
+              <PurchaseProtectionFilter kind="return" active={returnFilterActive} count={activeReturnReceipts.length} onToggle={() => { setReturnFilterActive(!returnFilterActive); setWarrantyFilterActive(false); }} />
+            </div>
+          </div>
+          <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2 md:max-w-2xl md:grid-cols-[auto_minmax(0,1fr)_auto]">
+            <div className="hidden gap-2 md:flex">
+              <PurchaseProtectionFilter kind="warranty" active={warrantyFilterActive} count={warrantyReceipts.length} onToggle={() => { setWarrantyFilterActive(!warrantyFilterActive); setReturnFilterActive(false); }} />
+              <PurchaseProtectionFilter kind="return" active={returnFilterActive} count={activeReturnReceipts.length} onToggle={() => { setReturnFilterActive(!returnFilterActive); setWarrantyFilterActive(false); }} />
+            </div>
             <div className="relative min-w-0">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
@@ -1297,69 +1309,6 @@ export function WalletTab({
           <div className="flex min-w-0 items-start gap-3"><div className="shrink-0 rounded-xl border border-teal-300/20 bg-teal-400/10 p-2.5"><ShieldCheck className="h-5 w-5 text-teal-200" strokeWidth={1.5} /></div><div className="min-w-0 flex-1"><div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3"><div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-teal-200 sm:text-xs sm:tracking-[0.16em]">This month</p><p className="mt-1 break-words text-lg font-bold text-white min-[380px]:text-xl sm:text-2xl">{analyticsAmountsReady ? `${formatCurrency(spentThisMonth, accountCurrency.preferredCurrency)} spent` : 'Calculating…'}</p></div><div className="min-w-0 text-right"><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400 sm:text-xs sm:tracking-[0.14em]">Average purchase</p><p className="mt-1 break-words text-base font-bold text-white sm:text-lg">{analyticsAmountsReady ? formatCurrency(averagePurchaseThisMonth, accountCurrency.preferredCurrency) : '—'}</p></div></div>{monthlyBudget ? <><p className="mt-3 text-sm text-gray-300">of {formatCurrency(monthlyBudget, accountCurrency.preferredCurrency, { maximumFractionDigits: 0, minimumFractionDigits: 0 })} budget</p><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">{analyticsAmountsReady ? <div className="h-full rounded-full bg-teal-400 transition-[width] duration-300" style={{ width: `${budgetProgress}%` }} /> : null}</div>{analyticsAmountsReady ? <p className="mt-1.5 text-xs text-gray-400">{budgetUsed.toFixed(1)}% used</p> : null}</> : null}{analyticsAmountsReady && excludedThisMonthCount > 0 ? <p className="mt-3 text-xs text-amber-100">{excludedThisMonthCount === 1 ? 'One purchase couldn’t be included in this total.' : `${excludedThisMonthCount} purchases couldn’t be included in this total.`}</p> : null}</div></div>
         </div>
 
-        {warrantyReceipts.length > 0 && (
-          <motion.button
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => {
-              setWarrantyFilterActive(!warrantyFilterActive);
-              setReturnFilterActive(false);
-            }}
-            aria-label={`${warrantyReceipts.length} active ${warrantyReceipts.length === 1 ? 'warranty' : 'warranties'}. Filter Wallet.`}
-            className={`mb-2.5 w-full rounded-xl border p-3 backdrop-blur-xl transition-all sm:mb-3 sm:p-3.5 ${
-              warrantyFilterActive
-                ? 'bg-gradient-to-r from-emerald-900/30 to-teal-900/25 border-emerald-500/60 shadow-[0_0_30px_rgba(16,185,129,0.25)]'
-                : 'bg-gradient-to-r from-emerald-900/20 to-teal-900/15 border-emerald-500/40 hover:border-emerald-500/60'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <ReceiptIcon className="h-5 w-5 text-emerald-400 sm:h-6 sm:w-6" />
-              <div className="flex-1 text-left">
-                <h3 className="text-white font-bold">{warrantyReceipts.length} Active {warrantyReceipts.length === 1 ? 'Warranty' : 'Warranties'}</h3>
-              </div>
-              {warrantyFilterActive && (
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  className="px-3 py-1 bg-emerald-400/20 border border-emerald-400/40 rounded-full text-xs font-bold text-emerald-400"
-                >
-                  Active Filter
-                </motion.div>
-              )}
-            </div>
-          </motion.button>
-        )}
-
-        {activeReturnReceipts.length > 0 && (
-          <motion.button
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.25 }}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => {
-              setReturnFilterActive(!returnFilterActive);
-              setWarrantyFilterActive(false);
-            }}
-            aria-label={`${activeReturnReceipts.length} active return ${activeReturnReceipts.length === 1 ? 'window' : 'windows'}. Filter Wallet.`}
-            className={`mb-3 w-full rounded-xl border p-3 backdrop-blur-xl transition-all sm:mb-4 sm:p-3.5 ${
-              returnFilterActive
-                ? 'border-sky-400/60 bg-gradient-to-r from-sky-900/30 to-teal-900/25 shadow-[0_0_30px_rgba(56,189,248,0.20)]'
-                : 'border-sky-400/40 bg-gradient-to-r from-sky-900/20 to-teal-900/15 hover:border-sky-400/60'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <Undo2 className="h-5 w-5 text-sky-300 sm:h-6 sm:w-6" />
-              <div className="flex-1 text-left">
-                <h3 className="font-bold text-white">{activeReturnReceipts.length} Active {activeReturnReceipts.length === 1 ? 'Return Window' : 'Return Windows'}</h3>
-              </div>
-              {returnFilterActive && <span className="rounded-full border border-sky-300/40 bg-sky-300/15 px-3 py-1 text-xs font-bold text-sky-200">Active Filter</span>}
-            </div>
-          </motion.button>
-        )}
 
         <div className="mb-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 backdrop-blur-xl sm:mb-4 sm:py-3">
           <div className="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -1380,6 +1329,11 @@ export function WalletTab({
 
         </div>
 
+        {(warrantyFilterActive || returnFilterActive) && (
+          <p role="status" className={`mb-2 text-xs font-semibold ${warrantyFilterActive ? 'text-teal-200' : 'text-rose-200'}`}>
+            {warrantyFilterActive ? 'Active warranties' : 'Open return windows'}
+          </p>
+        )}
         <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-2 sm:mb-4">
           <h2 className="text-xl font-bold text-white">
             {selectedReceipts.size > 0
@@ -1457,7 +1411,7 @@ export function WalletTab({
               ) : selectedCategory || warrantyFilterActive || returnFilterActive ? (
                 <>
                   <Search className="w-12 h-12 text-gray-500 mx-auto mb-4" />
-                  <h3 className="text-lg font-bold text-white mb-2">No receipts found</h3>
+                  <h3 className="text-lg font-bold text-white mb-2">{warrantyFilterActive ? 'No active warranties' : returnFilterActive ? 'No active return windows' : 'No receipts found'}</h3>
                   <p className="text-gray-400">Try adjusting your filters</p>
                 </>
               ) : (
@@ -1545,7 +1499,7 @@ export function WalletTab({
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.2, delay: Math.min(index * 0.03, 0.18), ease: [0.22, 1, 0.36, 1] }}
                     whileHover={isFreshProcessing ? undefined : { y: -2 }}
-                    className={`w-full backdrop-blur-xl border rounded-xl p-5 transition-all text-left relative ${
+                    className={`w-full backdrop-blur-xl border rounded-xl px-4 py-3 sm:px-5 transition-all text-left relative ${
                       selectMode && selectedReceipts.has(receipt.id)
                         ? 'bg-teal-400/20 border-teal-400/60'
                         : isFreshProcessing
@@ -1572,7 +1526,7 @@ export function WalletTab({
                       }}
                       className={`w-full text-left ${!isFreshProcessing ? 'cursor-pointer' : 'cursor-default'}`}
                     >
-                      <div className={`mb-3 flex min-w-0 items-start gap-3 sm:gap-4 ${isDocumentReview ? 'flex-wrap min-[380px]:flex-nowrap' : ''}`}>
+                      <div className={`mb-1.5 flex min-w-0 items-start gap-3 sm:gap-4 ${isDocumentReview ? 'flex-wrap min-[380px]:flex-nowrap' : ''}`}>
                         {selectMode ? (
                           <div className="w-12 h-12 flex-shrink-0 rounded-xl border border-teal-400/50 bg-teal-400/10 flex items-center justify-center">
                             {selectedReceipts.has(receipt.id) ? (
@@ -1696,16 +1650,8 @@ export function WalletTab({
 
                       {!isFreshProcessing && !showIssueHeading && (hasActiveWarranty || hasActiveReturn) && (
                         <div className="flex flex-wrap items-center gap-1.5 sm:pl-16">
-                          {hasActiveWarranty && (
-                            <span aria-label="Warranty active" className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-teal-300/35 bg-teal-400/10 px-2 py-0.5 text-[11px] font-semibold text-teal-200">
-                              <Shield className="h-3 w-3 shrink-0" aria-hidden="true" />Active
-                            </span>
-                          )}
-                          {hasActiveReturn && (
-                            <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold ${returnWindowStatus.status === 'urgent' ? 'border-rose-300/50 bg-rose-400/15 text-rose-200' : 'border-rose-300/35 bg-rose-400/10 text-rose-200'}`}>
-                              <Undo2 className="h-3 w-3 shrink-0" aria-hidden="true" />Return: {returnWindowStatus.message}
-                            </span>
-                          )}
+                          {hasActiveWarranty && <ProtectionBadge kind="warranty">Active</ProtectionBadge>}
+                          {hasActiveReturn && <ProtectionBadge kind="return" urgent={returnWindowStatus.status === 'urgent'}>Return: {returnWindowStatus.message}</ProtectionBadge>}
                         </div>
                       )}
 

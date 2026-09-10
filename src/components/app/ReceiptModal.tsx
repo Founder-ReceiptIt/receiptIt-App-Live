@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Shield, Clock, Trash2, Tag, MapPin, CreditCard, FileText, Undo2, ChevronDown, MoreHorizontal, ImagePlus } from 'lucide-react';
+import { X, Clock, Trash2, Tag, MapPin, CreditCard, FileText, ChevronDown, MoreHorizontal, ImagePlus } from 'lucide-react';
+import { ProtectionCard } from './PurchaseProtection';
 import { Receipt } from './WalletTab';
 import { ReportProblemDialog } from './ReportProblemDialog';
 import { useState, useEffect, useRef } from 'react';
@@ -1320,31 +1321,6 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
                 </div>
               )}
 
-              {(warrantyEndDate || receipt.returnDate) && (
-                <section className="grid gap-3 sm:grid-cols-2">
-                  {warrantyEndDate && (
-                    <div className={`min-w-0 rounded-2xl border p-3.5 ${isWarrantyActive ? 'border-teal-300/35 bg-teal-400/[0.08] shadow-[0_0_24px_rgba(45,212,191,0.07)]' : 'border-white/10 bg-white/[0.035]'}`}>
-                      <div className={`flex items-center gap-2 text-sm font-bold ${isWarrantyActive ? 'text-teal-200' : 'text-gray-400'}`}>
-                        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${isWarrantyActive ? 'bg-teal-400/15' : 'bg-white/5'}`}><Shield className="h-4 w-4" aria-hidden="true" /></span>
-                        <span className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-2 gap-y-0.5"><span>Warranty</span>{isWarrantyActive && <span className="text-xs font-semibold">Active</span>}</span>
-                      </div>
-                      <p className={`mt-1.5 pl-10 text-sm font-medium ${isWarrantyActive ? 'text-white' : 'text-gray-400'}`}>
-                        {isWarrantyActive ? 'Ends ' : 'Ended '}{warrantyEndDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      </p>
-                    </div>
-                  )}
-                  {receipt.returnDate && (
-                    <div className={`min-w-0 rounded-2xl border p-3.5 ${returnWindowStatus.status === 'expired' ? 'border-white/10 bg-white/[0.035]' : returnWindowStatus.status === 'urgent' ? 'border-rose-300/50 bg-rose-400/[0.12] shadow-[0_0_24px_rgba(251,113,133,0.08)]' : 'border-rose-300/35 bg-rose-400/[0.08] shadow-[0_0_24px_rgba(251,113,133,0.07)]'}`}>
-                      <div className={`flex items-center gap-2 text-sm font-bold ${returnWindowStatus.status === 'expired' ? 'text-gray-400' : 'text-rose-200'}`}>
-                        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${returnWindowStatus.status === 'expired' ? 'bg-white/5' : 'bg-rose-400/15'}`}><Undo2 className="h-4 w-4" aria-hidden="true" /></span>Returns
-                      </div>
-                      <p className={`mt-1.5 pl-10 text-sm font-medium ${returnWindowStatus.status === 'expired' ? 'text-gray-400' : 'text-rose-100'}`}>
-                        {returnWindowStatus.status === 'expired' ? `Ended ${new Date(receipt.returnDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : returnWindowStatus.message}
-                      </p>
-                    </div>
-                  )}
-                </section>
-              )}
 
               {/* --- BREAKDOWN SECTION --- */}
               {shouldShowReceiptBreakdown && (
@@ -1525,6 +1501,13 @@ export function ReceiptModal({ receipt, onClose, onDelete, onUpdate, onCaptureAg
                     </div>
                   )}
                 </motion.div>
+              )}
+
+              {(warrantyEndDate || receipt.returnDate) && (
+                <section aria-label="Purchase protection" className="grid items-start gap-3 sm:grid-cols-2">
+                  {warrantyEndDate && <ProtectionCard kind="warranty" active={Boolean(isWarrantyActive)} deadline={warrantyEndDate} daysRemaining={getReturnWindowStatus(receipt.warrantyDate).daysLeft} />}
+                  {receipt.returnDate && <ProtectionCard kind="return" active={returnWindowStatus.status === 'active' || returnWindowStatus.status === 'urgent'} deadline={new Date(receipt.returnDate)} daysRemaining={returnWindowStatus.daysLeft} urgent={returnWindowStatus.status === 'urgent'} />}
+                </section>
               )}
 
                 </>
