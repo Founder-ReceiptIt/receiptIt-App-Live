@@ -111,3 +111,46 @@ actual video/canvas/worker path at Pixel and Samsung viewport sizes, including
 dim-light, blur and cropped variants. All four expected states passed and capture
 remained enabled. Evidence: `output/capture-quality/realistic-local/`.
 The original fixture was not modified, uploaded or sent to an analysis service.
+
+### Production verification — 10 September 2026
+
+Implementation commit `70e5ccf49cfac345f5ec7c73f1feed5e08b5af6a` was pushed to
+production main. Vercel reported successful deployment:
+https://vercel.com/receiptits-projects/receipt-it-app-live/BrigcrgBWh19LtYE1q7yCyx4emXU
+
+The public site serves `index-CVi3VYWd.js` and the local analyser
+`captureQuality.worker-Cf_Jhv_d.js` (HTTP 200, JavaScript MIME type).
+Controlled camera tests ran against that deployed application. All account/API
+state was intercepted; no real receipt/Storage rows were created by these tests.
+
+| Chrome viewport (not physical device) | Guidance/capture result | Steady worker p95 | Main draw/read p95 |
+| --- | --- | --- | --- |
+| 320×568 | PASS | 2.3ms | 2.5ms |
+| 360×640 | PASS | 2.3ms | 0.9ms |
+| Pixel size 393×873 | PASS | 3.0ms | 2.2ms |
+| iPhone size 390×844 | PASS | 4.0ms | 0.9ms |
+| Samsung size 412×915 | PASS | 3.4ms | 1.6ms |
+| Desktop 1280×800 | PASS | 3.4ms | 1.9ms |
+
+One navigation timed out before camera entry after the first four viewport tests;
+the two remaining sizes were retried and passed without application changes.
+The production verification JSON contains that successful two-size continuation;
+screenshots cover all six, and the four earlier PASS results are retained in the
+execution transcript. Do not describe the timeout as a camera failure.
+
+The realistic generated photographic fixture also passed clear/dark/blur/crop
+and silent fallback checks against production at Pixel and Samsung sizes.
+Worker p95 was 5.3ms and 2.0ms respectively; preview readback p95 was 1.5ms and
+2.1ms. Evidence: `output/capture-quality/realistic-production/verification.json`
+and adjacent Ready/dark/blur/cropped screenshots. No physical-device, real Safari,
+heat/battery, live upload/processor or live duplicate acceptance is inferred.
+
+The direct-camera browser suite also passed all six production viewport sizes:
+Wallet and Scan entry, rear-camera preference, audio disabled, full-frame JPEG,
+1/2/3-image review, cancellation, upload-picker separation, denied/missing camera,
+background cleanup and late-permission cleanup. It made no backend writes.
+Screenshots: `output/capture-quality/direct-production/`.
+
+Closure remains pending physical camera testing and a real upload/duplicate
+check. The device-specific action has been requested; no account/security change
+or backend implementation is needed to perform it.
