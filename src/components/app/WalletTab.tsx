@@ -5,6 +5,7 @@ import type { LucideIcon } from 'lucide-react';
 import { Fragment, useState, useEffect, useRef } from 'react';
 import { ReportProblemDialog } from './ReportProblemDialog';
 import { PurchaseProtectionFilter } from './PurchaseProtectionFilter';
+import { getWalletProtection } from '../../lib/walletProtection';
 import {
   confirmReceiptCurrency,
   deleteReceiptRecord,
@@ -519,6 +520,19 @@ export function WalletTab({
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [warrantyFilterActive, setWarrantyFilterActive] = useState(false);
   const [returnFilterActive, setReturnFilterActive] = useState(false);
+  const [protectionNow, setProtectionNow] = useState(Date.now);
+  useEffect(() => {
+    const refresh = () => setProtectionNow(Date.now());
+    refresh();
+    const timer = window.setInterval(refresh, 30_000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, []);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectMode, setSelectMode] = useState(false);
@@ -822,6 +836,7 @@ export function WalletTab({
   }));
 
   const visibleReceipts = filterVisibleWalletReceipts(dedupeWalletReceipts(effectiveReceipts));
+  const protection = getWalletProtection(visibleReceipts, user?.id, protectionNow);
   const finalizedReceipts = visibleReceipts.filter((receipt) => isFinalizedReceiptStatus(receipt.status));
   const analyticsConversionKey = JSON.stringify([
     user?.id || '',
@@ -910,11 +925,8 @@ export function WalletTab({
   const matchesReceiptFilters = (receipt: Receipt) => {
     const matchesSearch = !hasSearchQuery || receipt.searchText.includes(normalizedSearchQuery);
     const matchesCategory = !selectedCategory || selectedCategory === 'All' || receipt.category === selectedCategory;
-    const hasActiveWarranty = receipt.warrantyDate && new Date(receipt.warrantyDate) > new Date();
-    const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
-    const hasActiveReturnWindow = returnWindowStatus.status === 'active' || returnWindowStatus.status === 'urgent';
-    const matchesWarranty = !warrantyFilterActive || hasActiveWarranty;
-    const matchesReturns = !returnFilterActive || hasActiveReturnWindow;
+    const matchesWarranty = !warrantyFilterActive || protection.warranty.has(receipt.id);
+    const matchesReturns = !returnFilterActive || protection.returns.has(receipt.id);
     return matchesSearch && matchesCategory && matchesWarranty && matchesReturns;
   };
 
@@ -971,12 +983,6 @@ export function WalletTab({
         : nextValue;
     });
   }, [receipts]);
-
-  const warrantyReceipts = finalizedReceipts.filter(r => r.warrantyDate && new Date(r.warrantyDate) > new Date());
-  const activeReturnReceipts = finalizedReceipts.filter((receipt) => {
-    const returnStatus = getReturnWindowStatus(receipt.returnDate).status;
-    return returnStatus === 'active' || returnStatus === 'urgent';
-  });
 
   const toggleReceiptSelection = (receiptId: string) => {
     const newSelected = new Set(selectedReceipts);
@@ -1232,14 +1238,14 @@ export function WalletTab({
           <div className="flex min-w-0 items-center justify-between gap-3">
             <h1 className="min-w-0 text-3xl font-bold text-white">Receipts</h1>
             <div className="flex shrink-0 gap-2 md:hidden">
-              <PurchaseProtectionFilter kind="warranty" active={warrantyFilterActive} count={warrantyReceipts.length} onToggle={() => { setWarrantyFilterActive(!warrantyFilterActive); setReturnFilterActive(false); }} />
-              <PurchaseProtectionFilter kind="return" active={returnFilterActive} count={activeReturnReceipts.length} onToggle={() => { setReturnFilterActive(!returnFilterActive); setWarrantyFilterActive(false); }} />
+              <PurchaseProtectionFilter kind="warranty" active={warrantyFilterActive} count={protection.warranty.size} onToggle={() => { setWarrantyFilterActive(!warrantyFilterActive); setReturnFilterActive(false); }} />
+              <PurchaseProtectionFilter kind="return" active={returnFilterActive} count={protection.returns.size} onToggle={() => { setReturnFilterActive(!returnFilterActive); setWarrantyFilterActive(false); }} />
             </div>
           </div>
           <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2 md:max-w-2xl md:grid-cols-[auto_minmax(0,1fr)_auto]">
             <div className="hidden gap-2 md:flex">
-              <PurchaseProtectionFilter kind="warranty" active={warrantyFilterActive} count={warrantyReceipts.length} onToggle={() => { setWarrantyFilterActive(!warrantyFilterActive); setReturnFilterActive(false); }} />
-              <PurchaseProtectionFilter kind="return" active={returnFilterActive} count={activeReturnReceipts.length} onToggle={() => { setReturnFilterActive(!returnFilterActive); setWarrantyFilterActive(false); }} />
+              <PurchaseProtectionFilter kind="warranty" active={warrantyFilterActive} count={protection.warranty.size} onToggle={() => { setWarrantyFilterActive(!warrantyFilterActive); setReturnFilterActive(false); }} />
+              <PurchaseProtectionFilter kind="return" active={returnFilterActive} count={protection.returns.size} onToggle={() => { setReturnFilterActive(!returnFilterActive); setWarrantyFilterActive(false); }} />
             </div>
             <div className="relative min-w-0">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -1447,9 +1453,9 @@ export function WalletTab({
                 const isNonFinalReceipt = isProcessing || isNeedsInput || receipt.status === 'needs_review' || receipt.status === 'rejected' || receipt.status === 'failed' || receipt.status === 'error';
                 const requiresCurrencyConfirmation = needsCurrencyConfirmation(receipt.status, receipt.errorReason);
                 const isConfirmingCurrency = currencyConfirmationState?.receiptId === receipt.id;
-                const returnWindowStatus = getReturnWindowStatus(receipt.returnDate);
-                const hasActiveWarranty = Boolean(receipt.warrantyDate && new Date(receipt.warrantyDate) > new Date());
-                const hasActiveReturn = returnWindowStatus.status === 'active' || returnWindowStatus.status === 'urgent';
+                const returnWindowStatus = getReturnWindowStatus(receipt.returnDate, new Date(protectionNow));
+                const hasActiveWarranty = protection.warranty.has(receipt.id);
+                const hasActiveReturn = protection.returns.has(receipt.id);
                 const receiptFailureDetails = getReceiptFailureDetails({
                   status: receipt.status,
                   errorReason: receipt.errorReason,

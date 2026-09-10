@@ -4,8 +4,8 @@ export interface ReturnWindowStatus {
   message: string;
 }
 
-export function getReturnWindowStatus(returnDateStr?: string): ReturnWindowStatus {
-  if (!returnDateStr) {
+export function getReturnWindowStatus(returnDateStr?: string, now = new Date()): ReturnWindowStatus {
+  if (!returnDateStr || !Number.isFinite(new Date(returnDateStr).getTime())) {
     return {
       status: 'none',
       daysLeft: 0,
@@ -14,7 +14,7 @@ export function getReturnWindowStatus(returnDateStr?: string): ReturnWindowStatu
   }
 
   const returnDate = new Date(returnDateStr);
-  const today = new Date();
+  const today = new Date(now);
 
   // Reset time portion for accurate day calculation
   returnDate.setHours(0, 0, 0, 0);
