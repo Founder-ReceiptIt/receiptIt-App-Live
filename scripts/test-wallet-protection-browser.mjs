@@ -13,6 +13,7 @@ const expiry=Math.floor(Date.now()/1000)+3600;
 const jwt=Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('base64url')+'.'+Buffer.from(JSON.stringify({sub:user.id,aud:'authenticated',role:'authenticated',exp:expiry})).toString('base64url')+'.controlled-browser-fixture';
 const date=days=>new Date(Date.now()+days*86400000).toISOString().slice(0,10);
 const rows=[['Northbridge Tech',365,27],['Warranty only',365,null],['Returns only',null,27],['Neither',null,null],['Urgent return',null,2],['Expired cover',-30,-30]].map(([merchant,w,r],i)=>({id:`00000000-0000-4000-8000-${String(i+10).padStart(12,'0')}`,user_id:user.id,merchant,amount:149.99,amount_gbp:149.99,currency:'GBP',status:'parsed',document_type:'receipt',category:'Technology',card_last_4:'4242',transaction_date:date(-2),created_at:new Date().toISOString(),warranty_date:w===null?null:date(w),return_date:r===null?null:date(r),source:'image',storage_path:user.id+'/isolated-ui-'+i+'.png',reference_number:'NB-'+(20481+i)}));
+rows.forEach((row,i)=>{row.category=['Tech','Other','Tech','Groceries','Transport','Other'][i];});
 async function contextFor(width,height,mobile,intro=false){
  const context=await browser.newContext({viewport:{width,height},isMobile:mobile,hasTouch:mobile});
  await context.route('https://qqfntftbughorckugceu.supabase.co/**',async route=>{
@@ -45,7 +46,7 @@ for(const [name,width,height,mobile] of [['Small',320,568,true],['Android',360,6
  await page.goto(base+'/#wallet');await page.getByRole('heading',{name:'Northbridge Tech',exact:true}).waitFor();await page.waitForTimeout(500);
  await fit(page,name+' Wallet');
  const card=page.getByRole('button').filter({has:page.getByRole('heading',{name:'Northbridge Tech',exact:true})});
- if(phase!=='before'){await card.getByLabel('Warranty active').waitFor();await card.getByText('Return: 27 days left',{exact:true}).waitFor();}
+ if(phase!=='before'){await card.getByLabel('Warranty active').waitFor();await card.getByText('27 days left',{exact:true}).waitFor();}
  console.log('METRICS',phase,name,JSON.stringify(await card.evaluate(el=>({cardHeight:el.parentElement.getBoundingClientRect().height,listTop:el.parentElement.getBoundingClientRect().top+scrollY}))));
  await page.screenshot({path:out+'/wallet-default-'+name+'.png'});
  if(phase!=='before'){
@@ -53,7 +54,17 @@ for(const [name,width,height,mobile] of [['Small',320,568,true],['Android',360,6
   const returns=page.getByRole('button',{name:/^\d+ active return windows?$/});
   assert.equal(await warranty.getAttribute('aria-label'),'2 active warranties');
   assert.equal(await returns.getAttribute('aria-label'),'3 active return windows');
-  assert.equal(await warranty.innerText(),'2');assert.equal(await returns.innerText(),'3');
+  assert.equal((await warranty.innerText()).replaceAll("\n", " "),'Warranty 2');assert.equal((await returns.innerText()).replaceAll("\n", " "),'Returns 3');
+  const categoryRow=page.getByRole('group',{name:'Receipt categories',exact:true});
+  assert.deepEqual(await categoryRow.getByRole('button').allTextContents(),['All','Tech','Groceries','Transport','Other']);
+  const filterRow=page.getByRole('group',{name:'Warranty and return filters',exact:true});
+  assert.equal(await filterRow.getByRole('button').count(),2);
+  const geometry=await Promise.all([categoryRow,warranty,returns,page.getByRole('heading',{name:'Receipts',exact:true}),page.getByRole('button',{name:mobile?'Quick scan':'Scan receipt',exact:true}),page.getByRole('searchbox',{name:'Search receipts',exact:true})].map(el=>el.boundingBox()));
+  const [categoryBox,warrantyBox,returnBox,headingBox,scanBox,searchBox]=geometry;
+  assert.ok(warrantyBox.y>=categoryBox.y+categoryBox.height,'Protection filters below categories');
+  assert.equal(warrantyBox.y,returnBox.y,'Protection filters stay together');
+  assert.ok(returnBox.x+returnBox.width<=width,'Both filters fit viewport');
+  if(mobile){assert.ok(Math.abs(headingBox.y-scanBox.y)<12,'Quick scan beside heading');assert.ok(searchBox.y>=scanBox.y+scanBox.height,'Search on its own row');}
   await warranty.click();assert.equal(await warranty.getAttribute('aria-pressed'),'true');
   assert.equal(await page.getByRole('heading',{name:'Returns only',exact:true}).count(),0);
   await page.getByRole('heading',{name:'2 saved purchases',exact:true}).waitFor();
@@ -65,10 +76,10 @@ for(const [name,width,height,mobile] of [['Small',320,568,true],['Android',360,6
   await returns.click();assert.equal(await returns.getAttribute('aria-pressed'),'false');
   const search=page.getByRole('searchbox',{name:'Search receipts',exact:true});
   await search.fill('Neither');await warranty.click();assert.equal(await page.getByRole('heading',{name:'Northbridge Tech',exact:true}).count(),0);
-  assert.equal(await warranty.innerText(),'2');assert.equal(await returns.innerText(),'3');
+  assert.equal((await warranty.innerText()).replaceAll("\n", " "),'Warranty 2');assert.equal((await returns.innerText()).replaceAll("\n", " "),'Returns 3');
   await search.fill('');await warranty.click();
-  await page.getByRole('button',{name:'Technology',exact:true}).click();await returns.click();assert.equal(await page.getByRole('heading',{name:'Returns only',exact:true}).count(),1);
-  assert.equal(await warranty.innerText(),'2');assert.equal(await returns.innerText(),'3');
+  await page.getByRole('button',{name:'Tech',exact:true}).click();await returns.click();assert.equal(await page.getByRole('heading',{name:'Returns only',exact:true}).count(),1);
+  assert.equal((await warranty.innerText()).replaceAll("\n", " "),'Warranty 2');assert.equal((await returns.innerText()).replaceAll("\n", " "),'Returns 3');
   await returns.click();await page.getByRole('button',{name:'All',exact:true}).click();
  }
  await card.evaluate(el=>el.scrollIntoView({block:'center',behavior:'instant'}));await page.waitForTimeout(300);
@@ -82,7 +93,7 @@ for(const [name,width,height,mobile] of [['Small',320,568,true],['Android',360,6
   if(phase!=='before'){
    const row=page.getByRole('button').filter({has:page.getByRole('heading',{name:merchant,exact:true})});
    assert.equal(await row.getByLabel('Warranty active').count(),w&&merchant!=='Expired cover'?1:0,merchant+' Wallet warranty badge');
-   assert.equal(await row.getByText(/^Return: /).count(),r&&merchant!=='Expired cover'?1:0,merchant+' Wallet return badge');
+   assert.equal(await row.getByText(/^\d+ days left$/).count(),r&&merchant!=='Expired cover'?1:0,merchant+' Wallet return badge');
   }
   await page.getByRole('heading',{name:merchant,exact:true}).click();await page.getByRole('button',{name:'Close receipt',exact:true}).waitFor();
   assert.equal(await protection(page,'Warranty').count(),w?1:0,merchant+' warranty');
@@ -102,8 +113,8 @@ for(const [name,width,height,mobile] of [['Small',320,568,true],['Android',360,6
   const dates=rows.map(r=>[r.warranty_date,r.return_date]);
   rows.forEach(r=>{r.warranty_date=null;r.return_date=null;});
   await page.reload();await page.getByRole('heading',{name:'Northbridge Tech',exact:true}).waitFor();
-  assert.equal(await page.getByRole('button',{name:'0 active warranties',exact:true}).innerText(),'0');
-  assert.equal(await page.getByRole('button',{name:'0 active return windows',exact:true}).innerText(),'0');
+  assert.equal((await page.getByRole('button',{name:'0 active warranties',exact:true}).innerText()).replaceAll('\n',' '),'Warranty 0');
+  assert.equal((await page.getByRole('button',{name:'0 active return windows',exact:true}).innerText()).replaceAll('\n',' '),'Returns 0');
   await page.getByRole('button',{name:/^\d+ active warrant(?:y|ies)$/}).click();await page.getByRole('heading',{name:'No active warranties',exact:true}).waitFor();
   await page.getByRole('button',{name:/^\d+ active return windows?$/}).click();await page.getByRole('heading',{name:'No active return windows',exact:true}).waitFor();
   rows.forEach((r,i)=>{[r.warranty_date,r.return_date]=dates[i];});

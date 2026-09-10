@@ -6,6 +6,7 @@ import { Fragment, useState, useEffect, useRef } from 'react';
 import { ReportProblemDialog } from './ReportProblemDialog';
 import { PurchaseProtectionFilter } from './PurchaseProtectionFilter';
 import { getWalletProtection } from '../../lib/walletProtection';
+import { getWalletCategories } from '../../lib/walletCategories';
 import {
   confirmReceiptCurrency,
   deleteReceiptRecord,
@@ -917,8 +918,7 @@ export function WalletTab({
   const budgetProgress = Math.min(budgetUsed, 100);
   const attentionReceipts = visibleReceipts.filter((receipt) => getWalletReceiptSection(receipt) === 'attention');
 
-  const uniqueCategories = Array.from(new Set(finalizedReceipts.map(r => r.category)));
-  const categories = ['All', ...uniqueCategories];
+  const categories = getWalletCategories(finalizedReceipts.map(r => r.category));
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const hasSearchQuery = normalizedSearchQuery.length > 0;
 
@@ -1234,20 +1234,11 @@ export function WalletTab({
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
-        <div className="mb-5 flex min-w-0 flex-col gap-3 md:flex-row md:items-end md:justify-between md:gap-6">
-          <div className="flex min-w-0 items-center justify-between gap-3">
+        <div className="mb-5 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 md:grid-cols-[auto_minmax(0,1fr)_auto] md:gap-6">
+          <div className="min-w-0">
             <h1 className="min-w-0 text-3xl font-bold text-white">Receipts</h1>
-            <div className="flex shrink-0 gap-2 md:hidden">
-              <PurchaseProtectionFilter kind="warranty" active={warrantyFilterActive} count={protection.warranty.size} onToggle={() => { setWarrantyFilterActive(!warrantyFilterActive); setReturnFilterActive(false); }} />
-              <PurchaseProtectionFilter kind="return" active={returnFilterActive} count={protection.returns.size} onToggle={() => { setReturnFilterActive(!returnFilterActive); setWarrantyFilterActive(false); }} />
-            </div>
           </div>
-          <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2 md:max-w-2xl md:grid-cols-[auto_minmax(0,1fr)_auto]">
-            <div className="hidden gap-2 md:flex">
-              <PurchaseProtectionFilter kind="warranty" active={warrantyFilterActive} count={protection.warranty.size} onToggle={() => { setWarrantyFilterActive(!warrantyFilterActive); setReturnFilterActive(false); }} />
-              <PurchaseProtectionFilter kind="return" active={returnFilterActive} count={protection.returns.size} onToggle={() => { setReturnFilterActive(!returnFilterActive); setWarrantyFilterActive(false); }} />
-            </div>
-            <div className="relative min-w-0">
+            <div className="relative col-span-2 row-start-2 min-w-0 md:col-span-1 md:col-start-2 md:row-start-1 md:ml-auto md:w-full md:max-w-xl">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
                 type="search"
@@ -1272,13 +1263,12 @@ export function WalletTab({
               type="button"
               whileTap={{ scale: 0.98 }}
               onClick={onNavigateToScan}
-              className="inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-teal-400 px-3 text-sm font-bold text-black shadow-[0_10px_30px_rgba(45,212,191,0.12)] transition-colors hover:bg-teal-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-200 focus-visible:ring-offset-2 focus-visible:ring-offset-black sm:gap-2 sm:px-4"
+              className="col-start-2 row-start-1 inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-teal-400 px-3 text-sm font-bold text-black shadow-[0_10px_30px_rgba(45,212,191,0.12)] transition-colors hover:bg-teal-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-200 focus-visible:ring-offset-2 focus-visible:ring-offset-black sm:gap-2 sm:px-4 md:col-start-3"
             >
               <ScanLine className="h-5 w-5" strokeWidth={1.8} />
               <span className="lg:hidden">Quick scan</span>
               <span className="hidden lg:inline">Scan receipt</span>
             </motion.button>
-          </div>
         </div>
 
         {attentionReceipts.length > 0 ? (
@@ -1317,7 +1307,7 @@ export function WalletTab({
 
 
         <div className="mb-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 backdrop-blur-xl sm:mb-4 sm:py-3">
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div role="group" aria-label="Receipt categories" className="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {categories.map((category) => (
               <button
                 key={category}
@@ -1335,11 +1325,10 @@ export function WalletTab({
 
         </div>
 
-        {(warrantyFilterActive || returnFilterActive) && (
-          <p role="status" className={`mb-2 text-xs font-semibold ${warrantyFilterActive ? 'text-teal-200' : 'text-rose-200'}`}>
-            {warrantyFilterActive ? 'Active warranties' : 'Open return windows'}
-          </p>
-        )}
+        <div role="group" aria-label="Warranty and return filters" className="mb-3 flex min-w-0 items-center gap-2 sm:mb-4">
+          <PurchaseProtectionFilter kind="warranty" active={warrantyFilterActive} count={protection.warranty.size} onToggle={() => { setWarrantyFilterActive(!warrantyFilterActive); setReturnFilterActive(false); }} />
+          <PurchaseProtectionFilter kind="return" active={returnFilterActive} count={protection.returns.size} onToggle={() => { setReturnFilterActive(!returnFilterActive); setWarrantyFilterActive(false); }} />
+        </div>
         <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-2 sm:mb-4">
           <h2 className="text-xl font-bold text-white">
             {selectedReceipts.size > 0
@@ -1656,8 +1645,8 @@ export function WalletTab({
 
                       {!isFreshProcessing && !showIssueHeading && (hasActiveWarranty || hasActiveReturn) && (
                         <div className="flex flex-wrap items-center gap-1.5 sm:pl-16">
-                          {hasActiveWarranty && <ProtectionBadge kind="warranty">Active</ProtectionBadge>}
-                          {hasActiveReturn && <ProtectionBadge kind="return" urgent={returnWindowStatus.status === 'urgent'}>Return: {returnWindowStatus.message}</ProtectionBadge>}
+                          {hasActiveWarranty && <ProtectionBadge kind="warranty">Warranty</ProtectionBadge>}
+                          {hasActiveReturn && <ProtectionBadge kind="return" urgent={returnWindowStatus.status === 'urgent'}>{returnWindowStatus.message}</ProtectionBadge>}
                         </div>
                       )}
 

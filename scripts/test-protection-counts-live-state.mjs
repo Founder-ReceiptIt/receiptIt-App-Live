@@ -65,7 +65,7 @@ const t=()=>page.getByRole('button',{name:/^\d+ active return windows?$/});
 async function counts(warranty,returns){
  await page.getByRole('button',{name:`${warranty} active ${warranty===1?'warranty':'warranties'}`,exact:true}).waitFor();
  await page.getByRole('button',{name:`${returns} active return ${returns===1?'window':'windows'}`,exact:true}).waitFor();
- assert.equal(await w().innerText(),String(warranty));assert.equal(await t().innerText(),String(returns));
+ assert.equal((await w().innerText()).replaceAll("\n", " "),'Warranty '+warranty);assert.equal((await t().innerText()).replaceAll("\n", " "),'Returns '+returns);
 }
 await counts(1,1);await fit(page,'one each');
 const second={...rows[0],id:'00000000-0000-4000-8000-000000000022',storage_path:user.id+'/second.png',merchant:'Second purchase'};

@@ -45,7 +45,7 @@ for(const [name,width,height,mobile] of [['Small',320,568,true],['Android',360,6
  await page.goto(base+'/#wallet');await page.getByRole('heading',{name:'Northbridge Tech',exact:true}).waitFor();await page.waitForTimeout(500);
  await fit(page,name+' Wallet');
  const card=page.getByRole('button').filter({has:page.getByRole('heading',{name:'Northbridge Tech',exact:true})});
- if(phase!=='before'){await card.getByLabel('Warranty active').waitFor();await card.getByText('Return: 27 days left',{exact:true}).waitFor();}
+ if(phase!=='before'){await card.getByLabel('Warranty active').waitFor();await card.getByText('27 days left',{exact:true}).waitFor();}
  await card.evaluate(el=>el.scrollIntoView({block:'center',behavior:'instant'}));await page.waitForTimeout(300);
  await page.screenshot({path:out+'/wallet-'+name+'.png'});
  await card.click();await page.getByRole('button',{name:'Close receipt',exact:true}).waitFor();
@@ -56,7 +56,7 @@ for(const [name,width,height,mobile] of [['Small',320,568,true],['Android',360,6
   if(phase!=='before'){
    const row=page.getByRole('button').filter({has:page.getByRole('heading',{name:merchant,exact:true})});
    assert.equal(await row.getByLabel('Warranty active').count(),w&&merchant!=='Expired cover'?1:0,merchant+' Wallet warranty badge');
-   assert.equal(await row.getByText(/^Return: /).count(),r&&merchant!=='Expired cover'?1:0,merchant+' Wallet return badge');
+   assert.equal(await row.getByText(/^\d+ days left$/).count(),r&&merchant!=='Expired cover'?1:0,merchant+' Wallet return badge');
   }
   await page.getByRole('heading',{name:merchant,exact:true}).click();await page.getByRole('button',{name:'Close receipt',exact:true}).waitFor();
   assert.equal(await protection(page,'Warranty').count(),w?1:0,merchant+' warranty');

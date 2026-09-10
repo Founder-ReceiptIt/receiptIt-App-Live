@@ -1,6 +1,6 @@
 # Warranty / Return filter counts
 
-The existing controls now show icon + number, with singular/plural accessible
+The controls show icon + Warranty/Returns + number, with singular/plural accessible
 names and tooltips. Zero remains visible with a subdued inactive treatment.
 The complete control is clickable; selected states are unchanged.
 
@@ -37,3 +37,27 @@ B 0/1 passes, with A's receipt absent. All six viewport sizes and existing respo
 account/session isolation, async review, analytics, Scan and receipt-detail guards pass.
 
 No backend, security-policy, ingestion, processing, duplicate or analytics change.
+
+## Wallet filter clarity — 10 September 2026
+
+Removed both header placements of the special filters. A single labelled group
+now sits directly below the horizontally scrollable category pills. Warranty and
+Returns stay together at every tested width; selected styles and mutual exclusion
+are unchanged. Quick scan sits beside Receipts on mobile, with full-width search
+below. Desktop retains inline search and Scan receipt. Existing summary and
+attention content are retained.
+
+Categories use Tech, Groceries, then the existing canonical category order, with
+Other always last. Legacy/additional values are retained, not rewritten. Receipt
+badges now say Warranty and (for example) 27 days left; detail labels are unchanged.
+
+Local production-build verification: 320×568, 360×640, 393×873, 390×844,
+412×915 and 1280×800. Browser assertions verify category order, one filter pair,
+second-row position, no horizontal overflow, category/search composition, toggles,
+global live counts, zero counts and receipt/detail variants. Realtime insert,
+update, delete, expiry and same-tab account switching also pass with intercepted
+fixtures. Quick scan still opens the existing camera input on mobile and the Scan
+page on desktop; this is browser emulation, not a new physical-phone test.
+
+Evidence: output/wallet-filter-clarity/after (local) and
+output/wallet-filter-clarity/production (deployed frontend).
