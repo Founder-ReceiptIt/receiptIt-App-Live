@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Pause, Play } from 'lucide-react';
 
 type StoryElement = HTMLElement & { readonly paused: boolean; readonly completed: boolean; readonly finale: boolean; readonly beginReady: boolean; play(): void; pause(): void; replay(): void };
-const animationModule = '/intro/revision-06/receiptit-story.js?v=14-app';
+const animationModule = '/intro/revision-06/receiptit-story.js?v=15-app';
 const fallbackDescription = 'How receiptIt works. 1. Make a purchase: shop as normal. 2. receiptIt gives you your receiptIt email; give it to the retailer when they ask where to send your receipt. 3. Your personal inbox stays separate; receiptIt receives and privately saves your receipt. 4. Find your saved, organised purchase and original receipt in your receiptIt Wallet. Give the retailer less of you, while giving you more from your purchases.';
 
 export function ReceiptItIntroAnimation({ onBegin }: { onBegin: () => void }) {
@@ -64,12 +64,13 @@ export function ReceiptItIntroAnimation({ onBegin }: { onBegin: () => void }) {
   }, [reducedMotion]);
 
   const animated = ready && !failed && !reducedMotion;
+  const showFallback = reducedMotion || failed;
   return (
     <div className="mx-auto w-full max-w-[412px]">
-      <div className="relative w-full bg-black">
-        <img src="/intro/revision-06/reduced-motion.png?v=9" alt={animated ? '' : fallbackDescription}
-          aria-hidden={animated || undefined}
-          className={animated ? 'hidden' : 'block h-auto w-full'} />
+      <div className="relative w-full bg-black" aria-busy={!animated && !showFallback}>
+        {showFallback && <img src="/intro/revision-06/reduced-motion.png?v=9" alt={fallbackDescription}
+          className="block h-auto w-full" />}
+        {!animated && !showFallback && <div className="aspect-[390/540] w-full" aria-hidden="true" />}
         <div ref={host} className={animated ? '' : 'hidden'} />
       </div>
       {(reducedMotion || failed) && <div className="flex justify-center py-6"><button type="button" onClick={onBegin} className="min-h-12 rounded-xl bg-teal-400 px-6 py-3 text-sm font-bold text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">Let's begin</button></div>}

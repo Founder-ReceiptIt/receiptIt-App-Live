@@ -38,7 +38,10 @@ export const steps = [
 const brandHTML=value=>value.replaceAll('receiptIt','<span class="brand">receipt<span class="brand-it">It</span></span>');
 const brandSVG=value=>value.replaceAll('receiptIt','<tspan>receipt<tspan fill="#2dd4bf">It</tspan></tspan>');
 // Timings are real seconds, so reading holds can be adjusted independently.
-export const timeline={duration:35.61,steps:[0,1.725,5.325,13.985,20.735],explanationReady:5.825,addressStart:7.325,addressReady:7.935,migrateStart:9.175,migrateEnd:11.025,finale:30.435,beginReady:31.7575};
+export const timeline={duration:36.11,steps:[0,1.725,5.325,13.985,21.235],explanationReady:5.825,addressStart:7.325,addressReady:7.935,migrateStart:9.175,migrateEnd:11.025,finale:30.935,beginReady:32.2575};
+// Hold the fully visible blue inbox for another half-second, preserving all
+// subsequent scene durations and easing in the original animation clock.
+const sceneTime=elapsed=>elapsed<=17.36?elapsed:Math.max(17.36,elapsed-.5);
 const mix=(a,b,v)=>'#'+[1,3,5].map(i=>Math.round(parseInt(a.slice(i,i+2),16)*(1-v)+parseInt(b.slice(i,i+2),16)*v).toString(16).padStart(2,'0')).join('');
 const slogan='Give the retailer less of you, while giving you more from your purchases.';
 class ReceiptItStory extends HTMLElement {
@@ -74,6 +77,7 @@ class ReceiptItStory extends HTMLElement {
    .begin{pointer-events:auto;min-height:48px;min-width:170px;margin-top:26px;padding:12px 24px;background:#2dd4bf;border:0;border-radius:12px;color:#06120f;font:700 14px/1.4 'JetBrains Mono',monospace;cursor:pointer}.begin:focus-visible{outline:2px solid #fff;outline-offset:4px}.begin:disabled{pointer-events:none}:host([hide-action]) .begin{display:none}.wordmark{font-size:40px;font-weight:700;letter-spacing:-.045em;margin-bottom:24px}.signature{font:400 clamp(12px,3.7cqw,15px)/1.7 Arial,Helvetica,sans-serif;color:#edf1ef;width:100%;max-width:380px}
    .replay{display:flex;align-items:center;justify-content:center;pointer-events:auto;width:44px;height:44px;margin-top:8px;border:0;border-radius:50%;background:transparent;color:#9ca3af;cursor:pointer}.replay:hover{color:#5eead4;background:#ffffff08}.replay:focus-visible{outline:2px solid #5eead4;outline-offset:2px}:host([hide-action]) .replay{display:none}
    .replay[hidden]{display:none}
+   .replay[aria-hidden="true"]{visibility:hidden;pointer-events:none}
    .phrase{display:block;white-space:nowrap}.summary{padding:0;margin:0 0 18px;list-style:none}.summary li{position:relative;margin:0 0 15px;padding-left:30px}.summary .dot{position:absolute;left:0;top:1px;border-color:#356858;color:#5eead4}.summary h3{font-size:16px;margin-bottom:4px}.summary p{font-size:14px}.summary .address{display:block;color:#5eead4;font:13px/1.65 'JetBrains Mono',monospace;overflow-wrap:anywhere;margin:3px 0}.summary .from{font-size:13px;color:#b8c3bd}.inbox-note{display:flex;align-items:center;gap:6px;color:#93c5fd;font:13px/1.5 Arial,sans-serif;margin:5px 0}.inbox-note svg{width:14px;height:14px;flex:none}
    .static .finale{position:static;padding:18px 8px 0}.static .wordmark{font-size:28px;margin-bottom:12px}.static .signature{font-size:clamp(12px,3.7cqw,15px)}.static .scene{margin-top:6px}
    @media(max-width:350px){.guide{height:168px}h3{font-size:17px}p{font-size:14px}h2{font-size:23px}.wordmark{font-size:36px}}
@@ -151,10 +155,10 @@ class ReceiptItStory extends HTMLElement {
  </g>`;}
  renderFrame(){
   if(!this._nodes)return;
-  const fixed=this.staticMode,t=fixed?30:this._time,n=this._nodes,op=(key,value)=>n[key]?.setAttribute('opacity',clamp(value));
+  const fixed=this.staticMode,t=fixed?30:sceneTime(this._time),n=this._nodes,op=(key,value)=>n[key]?.setAttribute('opacity',clamp(value));
   const step=t<1.725?0:t<5.325?1:t<13.985?2:t<20.735?3:4;
   if(!fixed&&this._step!==step){this._step=step;const detail=this.shadowRoot.querySelector('.detail');detail.querySelector('h3').innerHTML=brandHTML(steps[Math.max(0,step-1)].heading);detail.querySelector('p').innerHTML=brandHTML(steps[Math.max(0,step-1)].copy);}
-  if(!fixed){const start=timeline.steps[step];this.shadowRoot.querySelector('.detail').style.opacity=String(step?smooth(t,start,start+.5):0);}
+  if(!fixed){const start=sceneTime(timeline.steps[step]);this.shadowRoot.querySelector('.detail').style.opacity=String(step?smooth(t,start,start+.5):0);}
   const ending=fixed?0:smooth(t,30.435,31.1825);
   if(this._finale!==this.finale||this._beginReady!==this.beginReady){this._finale=this.finale;this._beginReady=this.beginReady;this.dispatchEvent(new Event('finalestatechange'));}
   const title=this.shadowRoot.querySelector('h2');title.style.opacity=fixed?'1':String(smooth(t,0,.92)*(1-ending));title.setAttribute('aria-hidden',String(!fixed&&ending===1));
@@ -183,7 +187,7 @@ class ReceiptItStory extends HTMLElement {
   op('countBefore',1-arrive);op('countAfter',arrive);op('cardGlow',.22*arrive);op('added',(fixed?1:smooth(t,26.0075,26.5825))*(1-focus));
   const finale=this.shadowRoot.querySelector('.finale'),reveal=fixed?1:smooth(t,31.1825,31.7575);finale.style.opacity=String(reveal);finale.setAttribute('aria-hidden',String(reveal===0));
   const begin=this.shadowRoot.querySelector('.begin');begin.disabled=!this.beginReady;begin.tabIndex=this.beginReady?0:-1;
-  const replay=this.shadowRoot.querySelector('.replay');replay.hidden=!this.beginReady||fixed;replay.disabled=!this.beginReady||fixed;replay.tabIndex=this.beginReady&&!fixed?0:-1;
+  const replay=this.shadowRoot.querySelector('.replay');replay.hidden=fixed;replay.setAttribute('aria-hidden',String(!this.beginReady||fixed));replay.disabled=!this.beginReady||fixed;replay.tabIndex=this.beginReady&&!fixed?0:-1;
  }
 }
 if(!customElements.get('receiptit-story'))customElements.define('receiptit-story',ReceiptItStory);
