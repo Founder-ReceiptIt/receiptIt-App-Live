@@ -1,4 +1,22 @@
 {
+  "headers": [
+    { "source": "/", "headers": [
+      { "key": "Cache-Control", "value": "no-store, max-age=0" },
+      { "key": "Vercel-CDN-Cache-Control", "value": "no-store" }
+    ] },
+    { "source": "/index.html", "headers": [
+      { "key": "Cache-Control", "value": "no-store, max-age=0" },
+      { "key": "Vercel-CDN-Cache-Control", "value": "no-store" }
+    ] },
+    { "source": "/signin", "headers": [
+      { "key": "Cache-Control", "value": "no-store, max-age=0" },
+      { "key": "Vercel-CDN-Cache-Control", "value": "no-store" }
+    ] },
+    { "source": "/signup", "headers": [
+      { "key": "Cache-Control", "value": "no-store, max-age=0" },
+      { "key": "Vercel-CDN-Cache-Control", "value": "no-store" }
+    ] }
+  ],
   "rewrites": [
     { "source": "/signin", "destination": "/index.html" },
     { "source": "/signup", "destination": "/index.html" }

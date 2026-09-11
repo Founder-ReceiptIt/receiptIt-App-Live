@@ -48,9 +48,9 @@ check(!bottomNav.includes('gap-1 px-4 py-2 group'), 'desktop-width bottom naviga
 check(bottomNav.includes('ri-bottom-safe'), 'bottom navigation must respect the device safe area');
 
 const topNav = files['src/components/app/TopNav.tsx'];
-check(topNav.includes('hidden border-b') && topNav.includes('md:block'), 'top navigation chrome must be removed only below the desktop breakpoint');
+check(topNav.includes('hidden border-b') && topNav.includes('lg:block') && bottomNav.includes('lg:hidden'), 'top and bottom navigation must share the tablet-safe desktop breakpoint');
 check(/\.ri-app-content \{\s*padding-top: var\(--ri-safe-top\)/.test(css), 'mobile app content must start at the safe area without an empty header spacer');
-check(/@media \(min-width: 768px\)[\s\S]*\.ri-app-content \{\s*padding-top: calc\(5rem \+ var\(--ri-safe-top\)\)/.test(css), 'desktop app content must retain space for the desktop header');
+check(/@media \(min-width: 1024px\)[\s\S]*\.ri-app-content \{\s*padding-top: calc\(5rem \+ var\(--ri-safe-top\)\)/.test(css), 'desktop app content must retain space for the desktop header at the tablet-safe breakpoint');
 
 const receiptModal = files['src/components/app/ReceiptModal.tsx'];
 check(receiptModal.includes('overflow-x-hidden overflow-y-auto'), 'receipt details must never require horizontal scrolling');

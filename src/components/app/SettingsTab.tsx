@@ -157,20 +157,20 @@ export function SettingsTab() {
         </section>
         <section className="mt-5 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.045]">
           <div className="flex items-center gap-2 border-b border-white/10 px-5 py-4"><Coins className="h-5 w-5 text-teal-300" strokeWidth={1.7} /><h2 className="font-bold text-white">Currency &amp; budget</h2></div>
-          <div className="grid gap-5 p-5 md:grid-cols-2">
-            <label className="text-xs font-semibold uppercase tracking-[0.13em] text-gray-500">
+          <div className="grid min-w-0 grid-cols-1 gap-5 p-5 md:grid-cols-2">
+            <label className="min-w-0 text-xs font-semibold uppercase tracking-[0.13em] text-gray-500">
               Main currency
               <select
                 aria-label="Main currency"
                 value={currencyDraft}
                 onChange={(event) => void handleCurrencyDraftChange(event.target.value as SupportedCurrencyCode)}
-                className="mt-2 w-full rounded-xl border border-white/10 bg-neutral-950 px-4 py-3 text-sm font-semibold normal-case tracking-normal text-white outline-none focus:border-teal-300/40"
+                className="mt-2 w-full min-w-0 max-w-full rounded-xl border border-white/10 bg-neutral-950 px-4 py-3 text-sm font-semibold normal-case tracking-normal text-white outline-none focus:border-teal-300/40"
               >
                 {BETA_CURRENCIES.map((currency) => <option key={currency.code} value={currency.code}>{currency.symbol} {currency.name} ({currency.code})</option>)}
               </select>
               <span className="mt-2 block text-xs font-normal normal-case tracking-normal text-gray-500">We’ll use this for your spending totals. Each receipt keeps its original currency.</span>
             </label>
-            <label className="text-xs font-semibold uppercase tracking-[0.13em] text-gray-500">
+            <label className="min-w-0 text-xs font-semibold uppercase tracking-[0.13em] text-gray-500">
               Monthly budget
               <span className="mt-2 flex items-center rounded-xl border border-white/10 bg-black/20">
                 <button type="button" aria-label="Decrease monthly budget" onClick={() => changeBudgetBy(-BUDGET_INCREMENT)} className="min-h-12 px-3 text-gray-300 hover:text-white"><Minus className="h-4 w-4" /></button>

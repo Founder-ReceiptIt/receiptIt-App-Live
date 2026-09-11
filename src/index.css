@@ -164,6 +164,12 @@ canvas {
 @media (min-width: 768px) {
   .ri-mobile-page {
     padding-top: 1.5rem !important;
+  }
+}
+
+/* Tablet portrait keeps the bottom navigation until desktop links fit. */
+@media (min-width: 1024px) {
+  .ri-mobile-page {
     padding-bottom: 3rem;
     scroll-padding-bottom: 3rem;
   }

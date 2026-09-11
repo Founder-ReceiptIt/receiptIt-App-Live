@@ -29,7 +29,7 @@ export function TopNav({ activeTab, onTabChange }: TopNavProps) {
       initial={{ y: -100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-      className="ri-top-safe fixed left-0 right-0 top-0 z-50 hidden border-b border-white/10 bg-black/50 backdrop-blur-xl md:block"
+      className="ri-top-safe fixed left-0 right-0 top-0 z-50 hidden border-b border-white/10 bg-black/50 backdrop-blur-xl lg:block"
     >
       <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6">
         <div className="flex min-w-0 items-center justify-between">
@@ -43,14 +43,14 @@ export function TopNav({ activeTab, onTabChange }: TopNavProps) {
           </motion.div>
 
           {/* Desktop Navigation Links - Right Side */}
-          <div className="hidden md:flex items-center gap-6">
+          <div className="hidden lg:flex items-center gap-2 xl:gap-6">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}
                 className="relative group"
               >
-                <div className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors">
+                <div className="flex items-center gap-2 px-2 py-2 rounded-lg transition-colors xl:px-4">
                   <tab.icon
                     className={`w-5 h-5 transition-colors ${
                       activeTab === tab.id ? 'text-teal-400' : 'text-gray-400 group-hover:text-white'
@@ -93,7 +93,7 @@ export function TopNav({ activeTab, onTabChange }: TopNavProps) {
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             aria-label={isMobileMenuOpen ? 'Close navigation' : 'Open navigation'}
-            className="md:hidden p-2 rounded-lg text-gray-400 hover:bg-white/5 hover:text-white transition-colors"
+            className="lg:hidden p-2 rounded-lg text-gray-400 hover:bg-white/5 hover:text-white transition-colors"
           >
             {isMobileMenuOpen ? (
               <X className="w-6 h-6" strokeWidth={1.5} />
@@ -111,7 +111,7 @@ export function TopNav({ activeTab, onTabChange }: TopNavProps) {
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.3 }}
-              className="md:hidden overflow-hidden"
+              className="lg:hidden overflow-hidden"
             >
               <div className="pt-4 pb-2 space-y-2">
                 {tabs.map((tab) => (

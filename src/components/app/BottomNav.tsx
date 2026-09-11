@@ -20,7 +20,7 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
       initial={{ y: 100 }}
       animate={{ y: 0 }}
       transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-      className="fixed bottom-0 left-0 right-0 z-50 min-w-0 md:hidden"
+      className="fixed bottom-0 left-0 right-0 z-50 min-w-0 lg:hidden"
     >
       <div className="ri-bottom-safe mx-auto w-full min-w-0 max-w-2xl px-2 sm:px-6">
         <div className="w-full min-w-0 rounded-2xl border border-white/10 bg-white/5 px-1 py-2 shadow-[0_0_40px_rgba(0,0,0,0.5)] backdrop-blur-xl sm:p-4">

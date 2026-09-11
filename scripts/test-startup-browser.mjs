@@ -23,7 +23,7 @@ for(const [name,width,height,mobile] of [['Small',320,568,true],['Pixel',393,873
   localStorage.setItem('receiptit_authorised_intro_v2_complete','true');
  },{user,jwt,expiry});
  const page=await context.newPage();await page.goto(base+'/#wallet');
- const button=page.getByRole('button',{name:mobile?'Quick scan':'Scan receipt',exact:true});
+ const button=page.getByRole('button',{name:'Quick scan',exact:true});
  await button.waitFor({timeout:15000});
  let chooserCount=0;page.on('filechooser',()=>chooserCount++);
  await button.click();
