@@ -1,77 +1,45 @@
-// Actual app UI with isolated access-grant responses. No real signup or upload.
+// Actual onboarding UI; external account endpoints are isolated, never real signup.
 import assert from 'node:assert/strict';
 import {mkdir,writeFile} from 'node:fs/promises';
 const {chromium}=await import(process.env.RECEIPTIT_BROWSER_MODULE||'playwright');
 const base=process.env.TEST_URL||'http://127.0.0.1:4174';
-const phase=process.env.QA_PHASE||'after';
-const out=`output/intro-animation/${phase}`;await mkdir(out,{recursive:true});
-const browser=await chromium.launch({headless:true,channel:'chrome'});
-const results=[];
+const out=`output/intro-animation/revision-14/${process.env.QA_PHASE||'integrated'}`;await mkdir(out,{recursive:true});
+const browser=await chromium.launch({headless:true,channel:'chrome',args:['--disable-gpu']});const results=[];
 async function open(width,height,{reduced=false,fail=false}={}){
  const context=await browser.newContext({viewport:{width,height},isMobile:width<768,hasTouch:width<768,reducedMotion:reduced?'reduce':'no-preference'});
- await context.route('https://qqfntftbughorckugceu.supabase.co/**',async route=>{
-  const path=new URL(route.request().url()).pathname;
-  const value=path.endsWith('/verify-access-code')?{valid:true,deviceAuthorization:'isolated-intro-grant',signupAuthorization:'isolated-signup-grant'}:path.endsWith('/user')?null:[];
-  await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(value)});
- });
- if(fail)await context.route('**/intro/revision-05/receiptit-story.js*',route=>route.abort());
+ await context.route(/^https:\/\/(?:qqfntftbughorckugceu\.supabase\.co|receiptit-onboarding\.invalid)\//,async route=>{const path=new URL(route.request().url()).pathname;await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(path.endsWith('/verify-access-code')?{valid:true,deviceAuthorization:'isolated-intro-grant',signupAuthorization:'isolated-signup-grant'}:path.endsWith('/user')?null:[])});});
+ if(fail)await context.route('**/intro/revision-06/receiptit-story.js*',route=>route.abort());
  await context.addInitScript(()=>localStorage.setItem('receiptit_beta_device_grant_v1','isolated-intro-grant'));
- const page=await context.newPage();await page.goto(base+'/signup');await page.getByRole('button',{name:'Continue',exact:true}).waitFor();
- return {context,page};
+ const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(base+'/signup');await page.bringToFront();await page.locator('receiptit-story, img[src*="reduced-motion"]').first().waitFor({state:'attached'});return{context,page,errors};
 }
-async function fit(page){
- assert.ok(await page.locator('main').evaluate(el=>el.scrollWidth<=el.clientWidth),'Intro fits horizontally');
- const c=await page.getByRole('button',{name:'Continue',exact:true}).boundingBox();
- assert.ok(c.x>=0&&c.y>=0&&c.x+c.width<=page.viewportSize().width&&c.y+c.height<=page.viewportSize().height,'Continue is reachable without waiting for animation');
-}
-async function continueToSignup(page){
- await page.getByRole('button',{name:'Continue',exact:true}).click();await page.getByRole('button',{name:'Create account',exact:true}).waitFor();
- assert.equal(await page.evaluate(()=>localStorage.getItem('receiptit_authorised_intro_v2_complete')),'true');
- assert.equal(await page.locator('receiptit-story').count(),0,'Animation removed after continuing');
-}
+async function fit(page){assert.ok(await page.locator('main').evaluate(el=>el.scrollWidth<=el.clientWidth),'No horizontal overflow');assert.equal(await page.getByRole('button',{name:'Continue',exact:true}).count(),0);const action=page.getByRole('button',{name:"Let's begin",exact:true});if(await action.isVisible()&&await action.isEnabled()){await action.scrollIntoViewIfNeeded();const c=await action.boundingBox();assert.ok(c.x>=0&&c.y>=0&&c.x+c.width<=page.viewportSize().width+.5&&c.y+c.height<=page.viewportSize().height+.5,'Begin fits viewport');}}
+async function continueToSignup(page){await page.getByRole('button',{name:"Let's begin",exact:true}).click();await page.getByRole('button',{name:'Create account',exact:true}).waitFor();assert.equal(await page.evaluate(()=>localStorage.getItem('receiptit_authorised_intro_v2_complete')),'true');assert.equal(await page.locator('receiptit-story').count(),0);}
+const states=[['step-1',3.5,1],['step-2-text',6.3,2],['step-2',8.5,2],['step-2-transfer',10.1,2],['step-3-blue',16.7,3],['step-3-save',19.5,3],['wallet-before',22.5,4],['wallet-added',27.0,4],['step-4',30.0,4],['complete',35.61,4]];
 try{
- for(const [name,width,height] of [['Desktop',1280,800],['Small',320,568],['Android',360,640],['Pixel',393,873],['iPhone',390,844],['Samsung',412,915]]){
-  if(process.env.QA_ONLY&&!process.env.QA_ONLY.split(',').includes(name))continue;
-  const {page,context}=await open(width,height);if(phase!=='before')await fit(page);
-  if(phase==='before'){
-   await page.getByRole('heading',{name:/Everything after the purchase/}).waitFor();
-   await page.screenshot({path:`${out}/${name}.png`});
-  }else{
-   await page.getByRole('heading',{name:'receiptIt',exact:true}).waitFor();
-   assert.equal(await page.getByText(/Everything after the purchase|Your purchases are yours|We organise it/).count(),0);
-   const story=page.locator('receiptit-story');await page.waitForFunction(()=>document.querySelector('receiptit-story')?.currentTime>0.05);
-   assert.equal(await story.getAttribute('layout'),'signup');assert.equal(await story.getAttribute('variant'),'full');
-   const top=await page.getByRole('heading',{name:'receiptIt',exact:true}).boundingBox(),art=await story.boundingBox();assert.ok(top.y+top.height<=art.y,'Wordmark above the full visual');
-   await page.getByRole('button',{name:'Pause animation',exact:true}).click();
-   const stopped=await story.evaluate(el=>el.currentTime);await page.waitForTimeout(200);assert.equal(await story.evaluate(el=>el.currentTime),stopped);
-   await page.getByRole('button',{name:'Play animation',exact:true}).click();await page.waitForTimeout(200);assert.ok(await story.evaluate(el=>!el.paused&&el.currentTime>0));
-   assert.equal(await story.evaluate(el=>el.duration),15.5);
-   for(const [time,first,second] of [[9.7,0,0],[10.35,1,0],[11.3,1,1],[15.2,1,1]]){
-    await story.evaluate((el,t)=>el.seek(t),time);
-    assert.equal(Number(await story.locator('[data-anim="signatureFirst"]').getAttribute('opacity')),first);
-    assert.equal(Number(await story.locator('[data-anim="signatureSecond"]').getAttribute('opacity')),second);
-   }
-   for(const [label,time] of [['checkout',0],['private-email',5.8],['complete',12]]){
-    await story.evaluate((el,t)=>el.seek(t),time);await page.waitForTimeout(80);await fit(page);
-    if(name==='Pixel'||label==='complete')await page.screenshot({path:`${out}/${name}-${label}.png`});
-   }
-   assert.equal(await story.locator('[data-anim="emailUser"]').textContent(),'username@');
-   assert.equal(await story.locator('[data-anim="emailDomain"]').textContent(),'in.receiptit.app');
-   assert.equal(await story.locator('[data-anim="signature"]').getAttribute('opacity'),'1');
-   assert.ok(await story.locator('[data-anim="signatureSecond"]').evaluate(el=>{const b=el.getBBox();return b.x>=0&&b.x+b.width<=390;}),'Larger closing text fits the artwork');
-   await page.locator('main').evaluate(el=>el.scrollTo({top:el.scrollHeight,behavior:'instant'}));
-   const lower=await story.boundingBox(),cta=await page.getByRole('button',{name:'Continue',exact:true}).boundingBox();assert.ok(lower.y+lower.height<=cta.y,'Entire story scrolls clear of Continue');
-   await continueToSignup(page);
+ for(const[name,width,height]of[['Desktop',1280,800],['Small',320,568],['Android',360,640],['Pixel',393,873],['iPhone',390,844],['Samsung',412,915]]){
+  if(process.env.RECEIPTIT_QA_VIEWPORT&&process.env.RECEIPTIT_QA_VIEWPORT!==name)continue;
+  const{page,context,errors}=await open(width,height),story=page.locator('receiptit-story');await story.waitFor({state:'visible'});await story.scrollIntoViewIfNeeded();await page.bringToFront();await fit(page);
+  assert.equal(await story.evaluate(e=>e.duration),35.61);assert.equal(await story.locator('.progress').count(),0);
+  await story.evaluate(e=>e.seek(2));await page.getByRole('button',{name:'Play animation',exact:true}).click();await page.waitForFunction(()=>document.querySelector('receiptit-story').currentTime>2.05);await page.getByRole('button',{name:'Pause animation',exact:true}).click();const stopped=await story.evaluate(e=>e.currentTime);await page.waitForTimeout(100);assert.equal(await story.evaluate(e=>e.currentTime),stopped);
+  const anchors=[];
+  for(const[label,time,step]of states){await story.evaluate((e,t)=>e.seek(t),time);await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));assert.equal(await story.evaluate(e=>e._step),step);await fit(page);
+   const geometry=await story.evaluate(e=>{const r=e.shadowRoot,b=e.getBoundingClientRect(),title=r.querySelector('h2'),d=r.querySelector('.detail'),db=d.getBoundingClientRect(),scene=r.querySelector('.scene'),sb=scene.getBoundingClientRect(),issues=[];for(const item of r.querySelectorAll('h2,h3,p,.phrase')){const q=item.getBoundingClientRect();if(q.left<b.left-.5||q.right>b.right+.5||item.scrollWidth>item.clientWidth+1)issues.push(item.textContent);}for(const item of scene.querySelectorAll('text')){let visible=true;for(let p=item;p&&p!==scene;p=p.parentElement)if(p.getAttribute('opacity')==='0')visible=false;if(visible){const q=item.getBoundingClientRect();if(q.left<sb.left-.5||q.right>sb.right+.5||q.top<sb.top-.5||q.bottom>sb.bottom+.5)issues.push(item.textContent);}}return{issues,center:Math.abs((db.left+db.right)/2-(b.left+b.right)/2),bottom:db.bottom-b.top,sceneTop:sb.top-b.top,height:b.height,textAlign:getComputedStyle(d).textAlign,titleWeight:getComputedStyle(title).fontWeight,brandWeight:getComputedStyle(title.querySelector('.brand')).fontWeight,titleOffset:getComputedStyle(title).top};});
+   assert.deepEqual(geometry.issues,[]);assert.ok(geometry.center<.5);assert.ok(geometry.bottom<geometry.sceneTop);assert.equal(geometry.textAlign,'center');assert.equal(geometry.titleWeight,'400');assert.equal(geometry.brandWeight,'700');assert.equal(geometry.titleOffset,'12px');anchors.push(geometry);
+   if(name==='Pixel'||label==='complete'||(name==='Small'&&label==='step-2')){const capture=await open(width,height);await capture.page.waitForFunction(()=>document.querySelector('receiptit-story')?.shadowRoot?.querySelector('.detail'));await capture.page.locator('receiptit-story').evaluate((e,t)=>e.seek(t),time);await capture.page.waitForTimeout(550);await capture.page.screenshot({path:`${out}/${name}-${label}.png`});await capture.context.close();await page.bringToFront();}
   }
-  await context.close();results.push({name,width,height,result:'PASS'});console.log('PASS',phase,name);
+  assert.ok(anchors.every(a=>Math.abs(a.bottom-anchors[0].bottom)<.5&&Math.abs(a.height-anchors[0].height)<.5),'Stable layout');
+  const opacity=key=>story.locator(`[data-anim="${key}"]`).getAttribute('opacity');
+  await story.evaluate(e=>e.seek(5.825));assert.equal(await story.locator('.detail').evaluate(e=>getComputedStyle(e).opacity),'1');await story.evaluate(e=>e.seek(7.324));assert.equal(await opacity('assigned'),'0');await story.evaluate(e=>e.seek(7.935));assert.equal(await opacity('assigned'),'1');await story.evaluate(e=>e.seek(9.0));assert.equal(await opacity('assignedAddress'),'1');assert.equal(await opacity('transferred'),'0');
+  await story.evaluate(e=>e.seek(10.1));assert.equal(await opacity('assignedAddress'),'0');assert.equal(await opacity('transferred'),'1');assert.equal(await opacity('email'),'0');assert.equal(await story.locator('[data-anim="transferAddress"]').textContent(),'yourname@in.receiptit.app');
+  await story.evaluate(e=>e.seek(11.025));assert.equal(await story.locator('[data-anim="transferred"]').getAttribute('transform'),'translate(38 195)');assert.equal(await story.locator('[data-anim="transferSurface"]').getAttribute('width'),'314');assert.equal(await story.locator('[data-anim="transferSurface"]').getAttribute('height'),'42');assert.equal(await story.locator('[data-anim="transferSurface"]').getAttribute('rx'),'7');
+  await story.evaluate(e=>e.seek(11.15));assert.equal(await opacity('transferred'),'0');assert.equal(await opacity('email'),'1');assert.equal(await opacity('fieldGlow'),'1');assert.equal(await opacity('sent'),'0');
+  await story.evaluate(e=>e.seek(17.35));assert.equal(await opacity('separate'),'1');assert.equal(await opacity('paper'),'0');await story.evaluate(e=>e.seek(20.4));assert.equal(await opacity('receives'),'1');assert.equal(await story.locator('[data-anim="receives"] > text').count(),1);assert.equal((await story.locator('[data-anim="receives"] > text').textContent()).trim(),'receiptIt receives and privately saves your receipt');
+  await story.evaluate(e=>e.seek(23.0));assert.equal(await opacity('card'),'0');assert.equal(await story.locator('.existing-receipt').count(),2);await story.evaluate(e=>e.seek(27.3));assert.equal(await opacity('card'),'1');assert.equal(await opacity('added'),'1');assert.equal(await opacity('existing'),'1');assert.equal(await opacity('walletContext'),'1');await story.evaluate(e=>e.seek(29.5));assert.equal(await opacity('existing'),'0');assert.equal(await opacity('walletContext'),'0');assert.equal(await opacity('paper'),'0');
+  await story.evaluate(e=>{e.seek(35.45);e.play();});await page.waitForFunction(()=>document.querySelector('receiptit-story').completed);assert.equal(await story.evaluate(e=>e.currentTime),35.61);await page.waitForTimeout(100);assert.equal(await story.evaluate(e=>e.currentTime),35.61);
+  const beginBox=await page.getByRole('button',{name:"Let's begin",exact:true}).boundingBox(),replayBox=await page.getByRole('button',{name:'Replay animation',exact:true}).boundingBox();assert.ok(replayBox.y>=beginBox.y+beginBox.height,'Replay below Begin');assert.ok(Math.abs(replayBox.x+replayBox.width/2-beginBox.x-beginBox.width/2)<1,'Replay centred below Begin');assert.equal(await page.locator('main h1').count(),0,'No separate wordmark');
+  assert.equal(await story.locator('.signature').getAttribute('aria-label'),'Give the retailer less of you, while giving you more from your purchases.');assert.equal(await page.getByRole('button',{name:'Continue',exact:true}).isVisible(),false);assert.equal(await page.getByRole('button',{name:"Let's begin",exact:true}).isEnabled(),true);
+  await page.getByRole('button',{name:'Replay animation'}).click();assert.ok(await story.evaluate(e=>!e.paused&&e.currentTime<1));await page.waitForFunction(()=>document.querySelector('main').scrollTop<1);await story.evaluate(e=>e.seek(35.61));await continueToSignup(page,true);assert.deepEqual(errors,[]);await context.close();results.push({name,width,height,result:'PASS',height:anchors[0].height});console.log('PASS',name);
  }
- if(phase!=='before'){
-  for(const [name,options] of [['reduced-motion',{reduced:true}],['module-failure',{fail:true}]]){
-   const {page,context}=await open(393,873,options);
-   const fallback=page.getByRole('img',{name:/Illustration: use a receiptIt email/});await fallback.waitFor();
-   await page.waitForFunction(()=>document.querySelector('img[src*="signup-slot-static"]')?.naturalWidth>0);
-   await page.getByRole('button',{name:'Pause animation',exact:true}).waitFor({state:'hidden'});
-   assert.equal(await page.locator('receiptit-story').count(),0);await fit(page);await page.screenshot({path:`${out}/${name}.png`});await continueToSignup(page);await context.close();console.log('PASS',name);results.push({name,result:'PASS'});
-  }
- }
-}finally{await browser.close();await writeFile(`${out}/results.json`,JSON.stringify(results,null,2));}
+ for(const[name,options]of[['reduced-motion',{reduced:true}],['module-failure',{fail:true}]]){const{page,context}=await open(393,873,options);await page.getByRole('img',{name:/How receiptIt works/}).waitFor();await page.waitForFunction(()=>document.querySelector('img[src*="reduced-motion"]')?.naturalWidth>0);await page.getByRole('button',{name:'Pause animation'}).waitFor({state:'hidden'});assert.equal(await page.locator('receiptit-story').count(),0);await fit(page);await page.screenshot({path:`${out}/${name}.png`});await continueToSignup(page,true);await context.close();results.push({name,result:'PASS'});console.log('PASS',name);}
+ const{page,context}=await open(390,844);await page.waitForFunction(()=>document.querySelector('receiptit-story')?.completed,{},{timeout:45000});await continueToSignup(page);await context.close();results.push({name:'full-natural-playback-and-begin',result:'PASS'});console.log('PASS full natural playback and Begin');
+}finally{await browser.close();await writeFile(out+'/results.json',JSON.stringify(results,null,2));}

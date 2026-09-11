@@ -94,8 +94,8 @@ check(topNav.includes("label: 'Insights'"), 'the navigation tab must remain labe
 
 const productIntro = files['src/components/auth/ProductIntro.tsx'];
 const gatekeeper = files['src/components/auth/AlphaGatekeeper.tsx'];
-check(productIntro.includes('<ReceiptItIntroAnimation />') && !productIntro.includes('Everything after the purchase,'), 'first-open introduction must use the approved full animation instead of the old slogan');
-check(productIntro.includes('<ReceiptItWordmark') && productIntro.indexOf('<ReceiptItWordmark') < productIntro.indexOf('<ReceiptItIntroAnimation'), 'first-open introduction must place the canonical wordmark above the animation');
+check(/<ReceiptItIntroAnimation\b/.test(productIntro) && !productIntro.includes('Everything after the purchase,'), 'first-open introduction must use the approved full animation instead of the old slogan');
+check(!productIntro.includes('ReceiptItWordmark') && productIntro.includes('How receiptIt works'), 'first-open introduction must use the animation heading without a second wordmark');
 check(!productIntro.includes('setTimeout') && !productIntro.includes('auto-advance'), 'first-open introduction must remain user-controlled');
 check(gatekeeper.includes('AUTHORISED_INTRO_COMPLETE_KEY'), 'authorised intro completion must use a non-sensitive session preference');
 check(gatekeeper.indexOf('if (session)') < gatekeeper.indexOf("if (gateState === 'authorised' && !hasCompletedAuthorisedIntro"), 'existing users must bypass the new-user introduction');

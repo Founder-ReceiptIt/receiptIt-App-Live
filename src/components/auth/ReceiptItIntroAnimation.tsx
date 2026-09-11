@@ -1,17 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pause, Play } from 'lucide-react';
 
-type StoryElement = HTMLElement & { readonly paused: boolean; play(): void; pause(): void };
-const animationModule = '/intro/revision-05/receiptit-story.js?v=6';
-const fallbackDescription = 'Illustration: use a receiptIt email at checkout instead of your personal email. The purchase and original receipt are saved in receiptIt.';
+type StoryElement = HTMLElement & { readonly paused: boolean; readonly completed: boolean; readonly finale: boolean; readonly beginReady: boolean; play(): void; pause(): void; replay(): void };
+const animationModule = '/intro/revision-06/receiptit-story.js?v=14-app';
+const fallbackDescription = 'How receiptIt works. 1. Make a purchase: shop as normal. 2. receiptIt gives you your receiptIt email; give it to the retailer when they ask where to send your receipt. 3. Your personal inbox stays separate; receiptIt receives and privately saves your receipt. 4. Find your saved, organised purchase and original receipt in your receiptIt Wallet. Give the retailer less of you, while giving you more from your purchases.';
 
-export function ReceiptItIntroAnimation() {
+export function ReceiptItIntroAnimation({ onBegin }: { onBegin: () => void }) {
   const host = useRef<HTMLDivElement>(null);
+  const beginAction = useRef(onBegin);
+  useEffect(() => { beginAction.current = onBegin; }, [onBegin]);
   const story = useRef<StoryElement | null>(null);
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [beginReady, setBeginReady] = useState(false);
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -21,6 +24,7 @@ export function ReceiptItIntroAnimation() {
   }, []);
 
   useEffect(() => {
+    setBeginReady(false);
     if (reducedMotion) return;
     let disposed = false;
     let release = () => {};
@@ -28,21 +32,28 @@ export function ReceiptItIntroAnimation() {
     setFailed(false);
 
     // Self-hosted supplied artwork; never depend on the local review server.
-    void import(/* @vite-ignore */ animationModule).then(async ({ fontsReady }) => {
+    // An absolute same-origin URL also keeps Vite from treating the public file as source.
+    const moduleUrl = new URL(animationModule, window.location.origin).href;
+    void import(/* @vite-ignore */ moduleUrl).then(async ({ fontsReady }) => {
       await fontsReady;
       if (disposed || !host.current) return;
       const element = document.createElement('receiptit-story') as StoryElement;
       element.setAttribute('variant', 'full');
       element.setAttribute('layout', 'signup');
       element.setAttribute('mode', 'animated');
-      const updateState = () => setPaused(element.paused);
+      const updateState = () => { setPaused(element.paused); setBeginReady(element.beginReady); };
       element.addEventListener('playstatechange', updateState);
+      element.addEventListener('finalestatechange', updateState);
+      const handleBegin = () => beginAction.current();
+      element.addEventListener('begin', handleBegin);
       host.current.appendChild(element);
       story.current = element;
       updateState();
       setReady(true);
       release = () => {
         element.removeEventListener('playstatechange', updateState);
+        element.removeEventListener('finalestatechange', updateState);
+        element.removeEventListener('begin', handleBegin);
         // Removal cancels the supplied element's animation and observers.
         element.remove();
         story.current = null;
@@ -55,19 +66,24 @@ export function ReceiptItIntroAnimation() {
   const animated = ready && !failed && !reducedMotion;
   return (
     <div className="mx-auto w-full max-w-[412px]">
-      <div className="relative aspect-[390/540] w-full bg-black">
-        <img src="/intro/revision-05/signup-slot-static-v6.png" alt={animated ? '' : fallbackDescription}
-          aria-hidden={animated || undefined} width={780} height={1080}
-          className={`absolute inset-0 h-full w-full object-contain ${animated ? 'invisible' : ''}`} />
-        <div ref={host} className="absolute inset-0" />
+      <div className="relative w-full bg-black">
+        <img src="/intro/revision-06/reduced-motion.png?v=9" alt={animated ? '' : fallbackDescription}
+          aria-hidden={animated || undefined}
+          className={animated ? 'hidden' : 'block h-auto w-full'} />
+        <div ref={host} className={animated ? '' : 'hidden'} />
       </div>
+      {(reducedMotion || failed) && <div className="flex justify-center py-6"><button type="button" onClick={onBegin} className="min-h-12 rounded-xl bg-teal-400 px-6 py-3 text-sm font-bold text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">Let's begin</button></div>}
       {!reducedMotion && !failed && (
-        <div className="mt-1 flex h-11 justify-end">
+        <div className={`mt-1 flex h-11 justify-end ${beginReady ? 'invisible' : ''}`}>
           <button type="button" disabled={!ready}
             aria-label={paused ? 'Play animation' : 'Pause animation'}
             title={paused ? 'Play animation' : 'Pause animation'}
-            onClick={() => story.current?.paused ? story.current.play() : story.current?.pause()}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 transition-colors hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-300 disabled:opacity-0">
+            onClick={() => {
+              if (!story.current) return;
+              if (story.current.paused) story.current.play();
+              else story.current.pause();
+            }}
+            className="inline-flex h-11 min-w-11 items-center justify-center gap-2 rounded-xl px-3 text-sm text-gray-400 transition-colors hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-300 disabled:opacity-0">
             {paused ? <Play className="h-4 w-4" aria-hidden="true" /> : <Pause className="h-4 w-4" aria-hidden="true" />}
           </button>
         </div>

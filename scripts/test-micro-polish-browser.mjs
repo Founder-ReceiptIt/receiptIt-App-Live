@@ -80,8 +80,9 @@ for(const [name,width,height,mobile] of [['Small',320,568,true],['Android',360,6
   await intro.getByRole('heading',{name:/Everything after the purchase/}).waitFor();
   await intro.getByText('Use it later',{exact:true}).scrollIntoViewIfNeeded();
  }else{
-  await intro.getByRole('heading',{name:'receiptIt',exact:true}).waitFor();
-  await intro.getByRole('button',{name:'Continue',exact:true}).waitFor();
+  await intro.getByRole('heading',{name:'How receiptIt works',exact:true}).waitFor();
+  await intro.locator('receiptit-story').evaluate(el=>el.seek(el.duration));
+  await intro.getByRole('button',{name:"Let's begin",exact:true}).waitFor();
   assert.equal(await intro.getByText(/Everything after the purchase/).count(),0);
  }
  await intro.waitForTimeout(300);await fit(intro,name+' Intro');
