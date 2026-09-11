@@ -20,14 +20,18 @@ try{
  assert.equal(flashed,before,'Static explanatory copy must not flash while loading');
  await page.screenshot({path:`${out}/loading.png`});release();
  await page.waitForFunction(()=>document.querySelector('receiptit-story')?.currentTime>0);
- const story=page.locator('receiptit-story'),offset=before?0:.5,positions=[];
+ const story=page.locator('receiptit-story'),offset=before?0:1.5,positions=[];
  for(const time of [31.3,31.7,31.7575,32.0,35.61]){
   await story.evaluate((e,t)=>e.seek(t),time+offset);await page.waitForTimeout(60);
   positions.push({time:time+offset,y:(await story.locator('.wordmark').boundingBox()).y});
  }
  const jump=Math.max(...positions.map(p=>p.y))-Math.min(...positions.map(p=>p.y));
  if(before)assert.ok(jump>20,'Reproduce ending layout shift');else assert.ok(jump<.5,'Ending must stay in place');
- if(!before){for(const time of [17.36,17.6,17.85]){await story.evaluate((e,t)=>e.seek(t),time);assert.equal(await story.locator('[data-anim="separate"]').getAttribute('opacity'),'1');assert.equal(await story.locator('[data-anim="separate"]').getAttribute('transform'),'translate(0 0)');}}
+ if(!before){
+  for(const time of [5.825,7.325,8.324]){await story.evaluate((e,t)=>e.seek(t),time);assert.equal(await story.locator('.detail').evaluate(e=>getComputedStyle(e).opacity),'1');assert.equal(await story.locator('[data-anim="assigned"]').getAttribute('opacity'),'0');}
+  await story.evaluate(e=>e.seek(8.936));assert.equal(await story.locator('[data-anim="assigned"]').getAttribute('opacity'),'1');
+  for(const time of [18.36,18.6,18.85]){await story.evaluate((e,t)=>e.seek(t),time);assert.equal(await story.locator('[data-anim="separate"]').getAttribute('opacity'),'1');assert.equal(await story.locator('[data-anim="separate"]').getAttribute('transform'),'translate(0 0)');}
+ }
  await story.evaluate(e=>e.seek(e.duration));await page.screenshot({path:`${out}/ending.png`});
  await page.getByRole('button',{name:'Replay animation'}).click();assert.ok(await story.evaluate(e=>!e.paused&&e.currentTime<1));
  await story.evaluate(e=>e.seek(e.duration));await page.getByRole('button',{name:"Let's begin"}).click();await page.getByRole('button',{name:'Create account',exact:true}).waitFor();

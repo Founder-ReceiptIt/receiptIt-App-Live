@@ -33,3 +33,13 @@ The existing six-viewport browser suite checks the new timing, full natural
 playback, layout, pause/play, replay, signup continuation, reduced-motion and
 module-failure fallback. TypeScript, lint, responsive, auth/gate and account
 isolation guards are unchanged and run for this patch.
+
+## Additional Step 2 reading hold
+
+The subsequent requested refinement adds one further second before the private
+email address appears: the heading and paragraph are fully visible at 5.825s,
+and the address now starts at 8.325s (a 2.5-second reading hold). The address
+reveal still takes 0.61s. All later scenes move one second later; the blue-box
+hold and stable ending are retained. Total playback is 37.11s and the live
+module version is `v=16-app`. Transition tests explicitly assert that the
+paragraph is fully visible and the address absent throughout this longer hold.

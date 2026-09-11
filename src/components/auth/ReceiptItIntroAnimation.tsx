@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Pause, Play } from 'lucide-react';
 
 type StoryElement = HTMLElement & { readonly paused: boolean; readonly completed: boolean; readonly finale: boolean; readonly beginReady: boolean; play(): void; pause(): void; replay(): void };
-const animationModule = '/intro/revision-06/receiptit-story.js?v=15-app';
+const animationModule = '/intro/revision-06/receiptit-story.js?v=16-app';
 const fallbackDescription = 'How receiptIt works. 1. Make a purchase: shop as normal. 2. receiptIt gives you your receiptIt email; give it to the retailer when they ask where to send your receipt. 3. Your personal inbox stays separate; receiptIt receives and privately saves your receipt. 4. Find your saved, organised purchase and original receipt in your receiptIt Wallet. Give the retailer less of you, while giving you more from your purchases.';
 
 export function ReceiptItIntroAnimation({ onBegin }: { onBegin: () => void }) {

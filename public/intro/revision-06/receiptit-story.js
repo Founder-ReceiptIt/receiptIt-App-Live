@@ -38,10 +38,13 @@ export const steps = [
 const brandHTML=value=>value.replaceAll('receiptIt','<span class="brand">receipt<span class="brand-it">It</span></span>');
 const brandSVG=value=>value.replaceAll('receiptIt','<tspan>receipt<tspan fill="#2dd4bf">It</tspan></tspan>');
 // Timings are real seconds, so reading holds can be adjusted independently.
-export const timeline={duration:36.11,steps:[0,1.725,5.325,13.985,21.235],explanationReady:5.825,addressStart:7.325,addressReady:7.935,migrateStart:9.175,migrateEnd:11.025,finale:30.935,beginReady:32.2575};
-// Hold the fully visible blue inbox for another half-second, preserving all
-// subsequent scene durations and easing in the original animation clock.
-const sceneTime=elapsed=>elapsed<=17.36?elapsed:Math.max(17.36,elapsed-.5);
+export const timeline={duration:37.11,steps:[0,1.725,5.325,14.985,22.235],explanationReady:5.825,addressStart:8.325,addressReady:8.935,migrateStart:10.175,migrateEnd:12.025,finale:31.935,beginReady:33.2575};
+// Give Step 2 another second of reading time before revealing the address,
+// then retain the extra half-second blue-inbox hold. Scene easing is unchanged.
+const sceneTime=elapsed=>{
+ const reading=elapsed<=7.325?elapsed:Math.max(7.325,elapsed-1);
+ return reading<=17.36?reading:Math.max(17.36,reading-.5);
+};
 const mix=(a,b,v)=>'#'+[1,3,5].map(i=>Math.round(parseInt(a.slice(i,i+2),16)*(1-v)+parseInt(b.slice(i,i+2),16)*v).toString(16).padStart(2,'0')).join('');
 const slogan='Give the retailer less of you, while giving you more from your purchases.';
 class ReceiptItStory extends HTMLElement {
@@ -164,10 +167,10 @@ class ReceiptItStory extends HTMLElement {
   const title=this.shadowRoot.querySelector('h2');title.style.opacity=fixed?'1':String(smooth(t,0,.92)*(1-ending));title.setAttribute('aria-hidden',String(!fixed&&ending===1));
   const journey=this.shadowRoot.querySelector('.journey');journey.style.opacity=String(1-ending);journey.style.filter=ending===0?'none':`blur(${2*ending}px)`;journey.setAttribute('aria-hidden',String(!fixed&&ending===1));
   op('checkout',smooth(t,1.725,2.175)*(1-smooth(t,13.985,14.675)));n.checkout.setAttribute('transform',`translate(0 ${-12*smooth(t,13.985,14.675)})`);
-  op('assigned',smooth(t,timeline.addressStart,timeline.addressReady)*(1-smooth(t,13.73833,14.445)));
+  op('assigned',smooth(t,sceneTime(timeline.addressStart),sceneTime(timeline.addressReady))*(1-smooth(t,13.73833,14.445)));
   op('copyLabel',1-smooth(t,8.68167,9.05167));op('copiedLabel',smooth(t,8.68167,9.05167));
   // Lift the original address, then morph its rounded capsule exactly into the field.
-  const transfer=smooth(t,timeline.migrateStart,timeline.migrateEnd),lift=smooth(t,9.055,9.175),land=smooth(t,11.025,11.145);
+  const transfer=smooth(t,sceneTime(timeline.migrateStart),sceneTime(timeline.migrateEnd)),lift=smooth(t,9.055,9.175),land=smooth(t,11.025,11.145);
   op('assignedAddress',1-lift);op('transferred',lift*(1-land));
   n.transferred.setAttribute('transform',`translate(${26+12*transfer} ${25+170*transfer})`);
   n.transferSurface.setAttribute('width',250+64*transfer);n.transferSurface.setAttribute('height',28+14*transfer);n.transferSurface.setAttribute('rx',10-3*transfer);
