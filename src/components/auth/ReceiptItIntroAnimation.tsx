@@ -5,7 +5,7 @@ type StoryElement = HTMLElement & { readonly paused: boolean; readonly completed
 const animationModule = '/intro/revision-06/receiptit-story.js?v=16-app';
 const fallbackDescription = 'How receiptIt works. 1. Make a purchase: shop as normal. 2. receiptIt gives you your receiptIt email; give it to the retailer when they ask where to send your receipt. 3. Your personal inbox stays separate; receiptIt receives and privately saves your receipt. 4. Find your saved, organised purchase and original receipt in your receiptIt Wallet. Give the retailer less of you, while giving you more from your purchases.';
 
-export function ReceiptItIntroAnimation({ onBegin }: { onBegin: () => void }) {
+export function ReceiptItIntroAnimation({ onBegin }: { onBegin: (method: 'completed' | 'skipped') => void }) {
   const host = useRef<HTMLDivElement>(null);
   const beginAction = useRef(onBegin);
   useEffect(() => { beginAction.current = onBegin; }, [onBegin]);
@@ -44,7 +44,7 @@ export function ReceiptItIntroAnimation({ onBegin }: { onBegin: () => void }) {
       const updateState = () => { setPaused(element.paused); setBeginReady(element.beginReady); };
       element.addEventListener('playstatechange', updateState);
       element.addEventListener('finalestatechange', updateState);
-      const handleBegin = () => beginAction.current();
+      const handleBegin = () => beginAction.current(element.beginReady ? 'completed' : 'skipped');
       element.addEventListener('begin', handleBegin);
       host.current.appendChild(element);
       story.current = element;
@@ -73,7 +73,7 @@ export function ReceiptItIntroAnimation({ onBegin }: { onBegin: () => void }) {
         {!animated && !showFallback && <div className="aspect-[390/540] w-full" aria-hidden="true" />}
         <div ref={host} className={animated ? '' : 'hidden'} />
       </div>
-      {(reducedMotion || failed) && <div className="flex justify-center py-6"><button type="button" onClick={onBegin} className="min-h-12 rounded-xl bg-teal-400 px-6 py-3 text-sm font-bold text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">Let's begin</button></div>}
+      {(reducedMotion || failed) && <div className="flex justify-center py-6"><button type="button" onClick={() => onBegin('skipped')} className="min-h-12 rounded-xl bg-teal-400 px-6 py-3 text-sm font-bold text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">Let's begin</button></div>}
       {!reducedMotion && !failed && (
         <div className={`mt-1 flex h-11 justify-end ${beginReady ? 'invisible' : ''}`}>
           <button type="button" disabled={!ready}

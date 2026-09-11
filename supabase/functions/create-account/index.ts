@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { bestEffort, readJourney, writeJourneyEvent } from '../_shared/access-code-telemetry.ts';
 import {
   corsHeadersFor,
   isRateLimitAllowed,
@@ -15,6 +16,7 @@ interface CreateAccountRequest {
   fullName?: unknown;
   signupAuthorization?: unknown;
   aliasLocalPart?: unknown;
+  journeyToken?: unknown;
 }
 
 const jsonResponse = (request: Request, body: Record<string, unknown>, status: number) =>
@@ -140,6 +142,8 @@ Deno.serve(async (request: Request) => {
     return jsonResponse(request, { error: "That private address is unavailable. Choose another." }, 409);
   }
 
+  const journey = await readJourney(body.journeyToken, serviceRoleKey);
+  if (journey) bestEffort(writeJourneyEvent(supabaseUrl, serviceRoleKey, journey, 'signup_started'));
   const { data: createdAccount, error: createUserError } = await supabaseAdmin.auth.admin.createUser({
     email,
     password,
@@ -183,5 +187,6 @@ Deno.serve(async (request: Request) => {
     );
   }
 
+  if (journey) bestEffort(writeJourneyEvent(supabaseUrl, serviceRoleKey, journey, 'signup_completed', userId));
   return jsonResponse(request, { success: true, email, friendlyAddress }, 200);
 });

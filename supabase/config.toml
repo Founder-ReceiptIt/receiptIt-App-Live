@@ -8,6 +8,11 @@ verify_jwt = false
 # Scheduled cleanup has a separate narrow credential and cannot delete rows.
 verify_jwt = false
 
+[functions.access-code-event]
+# The existing public project JWT plus a signed telemetry token allow intro events.
+# Wallet events additionally verify the user's JWT with Auth.getUser.
+verify_jwt = true
+
 [auth]
 # Password recovery and other Auth links must return to the live ReceiptIt app.
 site_url = "https://www.receiptit.app"

@@ -16,6 +16,7 @@ import { clearShareTargetInbox } from '../lib/shareTargetInbox';
 import { BETA_DEVICE_GRANT_KEY, prepareSignedOutRoute, SIGNUP_AUTHORIZATION_KEY } from '../lib/authRouting';
 import { restoreBetaDevice } from '../lib/betaAccess';
 import { recordStartup } from '../lib/startupDiagnostics';
+import { accessJourneyToken, clearAccessJourney } from '../lib/accessCodeTelemetry';
 
 interface NotificationPreferences {
   receiptCaptured: boolean;
@@ -717,6 +718,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           fullName,
           aliasLocalPart,
           signupAuthorization: sessionStorage.getItem(SIGNUP_AUTHORIZATION_KEY),
+          journeyToken: accessJourneyToken(),
         },
       });
 
@@ -959,6 +961,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    clearAccessJourney();
     if (!localStorage.getItem(BETA_DEVICE_GRANT_KEY) && session?.access_token) {
       try { await restoreBetaDevice(session.access_token); } catch { /* Sign out must still complete during an outage. */ }
     }

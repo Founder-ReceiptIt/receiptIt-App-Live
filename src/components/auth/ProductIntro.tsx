@@ -1,7 +1,7 @@
 import { ReceiptItIntroAnimation } from './ReceiptItIntroAnimation';
 
 interface ProductIntroProps {
-  onContinue: () => void;
+  onContinue: (method: 'completed' | 'skipped') => void;
 }
 
 export function ProductIntro({ onContinue }: ProductIntroProps) {

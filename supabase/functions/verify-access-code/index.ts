@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { issueBetaDeviceGrant, verifyBetaDeviceGrant } from "../_shared/beta-device-grant.ts";
+import { bestEffort, issueJourney, validJourneyId, writeJourneyEvent } from '../_shared/access-code-telemetry.ts';
 import {
   corsHeadersFor,
   isRateLimitAllowed,
@@ -39,8 +40,10 @@ Deno.serve(async (request: Request) => {
   let signupAuthorization = "";
   let deviceAuthorization = "";
   let mode = "";
+  let journeyId = '';
   try {
-    const body = await request.json() as { accessCode?: unknown; signupAuthorization?: unknown; deviceAuthorization?: unknown; mode?: unknown };
+    const body = await request.json() as { accessCode?: unknown; signupAuthorization?: unknown; deviceAuthorization?: unknown; mode?: unknown; journeyId?: unknown };
+    journeyId = validJourneyId(body.journeyId) ? body.journeyId : crypto.randomUUID();
     deviceAuthorization = typeof body.deviceAuthorization === 'string' ? body.deviceAuthorization.slice(0, 1025) : '';
     mode = typeof body.mode === 'string' ? body.mode : '';
     accessCode = typeof body.accessCode === "string" ? body.accessCode.trim().toUpperCase() : "";
@@ -127,8 +130,11 @@ Deno.serve(async (request: Request) => {
   }
 
   if (!data) {
+    bestEffort(writeJourneyEvent(supabaseUrl, serviceRoleKey, { session_id: journeyId, code_label: 'unknown_code' }, 'code_submitted'));
     return jsonResponse(request, { valid: false }, 200);
   }
+
+  bestEffort(writeJourneyEvent(supabaseUrl, serviceRoleKey, { session_id: journeyId, code_label: accessCode }, 'code_submitted'));
 
   const rawAuthorization = crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "");
   const authorizationHash = await valueHash(rawAuthorization);
@@ -144,5 +150,11 @@ Deno.serve(async (request: Request) => {
     return jsonResponse(request, { error: "Verification is temporarily unavailable" }, 503);
   }
 
-  return jsonResponse(request, { valid: true, signupAuthorization: rawAuthorization, deviceAuthorization: await issueBetaDeviceGrant(serviceRoleKey, epoch) }, 200);
+  let journeyToken: string | undefined;
+  try {
+    const issued = await issueJourney(journeyId, accessCode, serviceRoleKey);
+    journeyToken = issued.token;
+    bestEffort(writeJourneyEvent(supabaseUrl, serviceRoleKey, issued.journey, 'code_accepted'));
+  } catch { console.warn('[access-telemetry] unavailable'); }
+  return jsonResponse(request, { valid: true, signupAuthorization: rawAuthorization, deviceAuthorization: await issueBetaDeviceGrant(serviceRoleKey, epoch), journeyToken }, 200);
 });

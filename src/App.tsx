@@ -21,6 +21,7 @@ import { ToastProvider } from './contexts/ToastContext';
 import { useAuth } from './contexts/AuthContext';
 import { requestReceiptSectionCapture } from './lib/receiptCaptureUtils';
 import { getShareTargetIntentId, recordShareTargetEvent } from './lib/shareTargetInbox';
+import { trackAccessJourney } from './lib/accessCodeTelemetry';
 
 const APP_TABS = ['wallet', 'alias', 'scan', 'insights', 'activity', 'settings'] as const;
 type AppTab = typeof APP_TABS[number];
@@ -49,6 +50,13 @@ function App() {
   const recordedShareAuthInterruptionRef = useRef<string | null>(null);
   const isAuthenticated = Boolean(user && session);
   const shouldShowBootSplash = authLoading || profileLoading;
+
+  useEffect(() => {
+    if (user && session && !shouldShowBootSplash && !needsAliasSetup && !needsCurrencySetup
+      && !needsProfileRecovery && !passwordRecoveryActive && activeTab === 'wallet') {
+      trackAccessJourney('wallet_reached', session.access_token);
+    }
+  }, [user, session, shouldShowBootSplash, needsAliasSetup, needsCurrencySetup, needsProfileRecovery, passwordRecoveryActive, activeTab]);
 
   const handleTabChange = useCallback((tab: string) => {
     if (!APP_TABS.includes(tab as AppTab)) return;

@@ -1,5 +1,6 @@
 import { BETA_DEVICE_GRANT_KEY, SIGNUP_AUTHORIZATION_KEY } from './authRouting';
 import { startupFetch } from './startupNetwork';
+import { acceptAccessJourney } from './accessCodeTelemetry';
 
 export async function verifyBetaAccess(body: Record<string, string>, accessToken?: string) {
   // Independent of Supabase's session lock: the public gate must remain usable
@@ -13,6 +14,7 @@ export async function verifyBetaAccess(body: Record<string, string>, accessToken
   if (!response.ok) throw new Error('Beta access verification unavailable');
   const result = await response.json();
   if (result.valid === true && typeof result.deviceAuthorization === 'string') {
+    if (body.journeyId) acceptAccessJourney(body.journeyId, result.journeyToken);
     localStorage.setItem(BETA_DEVICE_GRANT_KEY, result.deviceAuthorization);
     if (typeof result.signupAuthorization === 'string') sessionStorage.setItem(SIGNUP_AUTHORIZATION_KEY, result.signupAuthorization);
     return true;

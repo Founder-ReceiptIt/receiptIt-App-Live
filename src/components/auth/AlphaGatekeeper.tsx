@@ -13,6 +13,7 @@ import {
 } from '../../lib/authRouting';
 import { restoreBetaDevice, verifyBetaAccess } from '../../lib/betaAccess';
 import { recordStartup } from '../../lib/startupDiagnostics';
+import { startAccessJourney, trackAccessJourney } from '../../lib/accessCodeTelemetry';
 
 export default function AlphaGatekeeper({ children }: { children: React.ReactNode }) {
   const { session, loading: authLoading, startupError } = useAuth();
@@ -85,7 +86,7 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
         return;
       }
 
-      const valid = await verifyBetaAccess({ accessCode: trimmedCode });
+      const valid = await verifyBetaAccess({ accessCode: trimmedCode, journeyId: startAccessJourney() });
       if (!valid) {
         console.error('Access-code verification failed');
         setError('That access code didn’t work. Please request access from the team.');
@@ -131,7 +132,8 @@ export default function AlphaGatekeeper({ children }: { children: React.ReactNod
     recordStartup({ destination: 'INTRO', introRequired: true });
     return (
       <ProductIntro
-        onContinue={() => {
+        onContinue={(method) => {
+          trackAccessJourney('intro_completed', undefined, method);
           localStorage.setItem(AUTHORISED_INTRO_COMPLETE_KEY, 'true');
           window.history.replaceState({ authRoute: 'signup' }, '', '/signup');
           setRouteRevision((revision) => revision + 1);
